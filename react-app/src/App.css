@@ -124,10 +124,16 @@ a {
 
 .page-content {
   min-height: 100vh;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .topbar-mobile {
   padding: 0.85rem 0;
+  padding-top: calc(0.85rem + env(safe-area-inset-top));
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
   background: linear-gradient(135deg, rgba(168, 139, 212, 0.97), rgba(127, 90, 180, 0.97));
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 10px 26px rgba(112, 87, 154, 0.2);
@@ -164,6 +170,9 @@ a {
   width: 292px;
   min-height: 100vh;
   padding: 2rem 1.35rem;
+  padding-top: calc(2rem + env(safe-area-inset-top));
+  padding-left: calc(1.35rem + env(safe-area-inset-left));
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom));
   background:
     radial-gradient(circle at top left, rgba(241, 184, 216, 0.24), transparent 26%),
     linear-gradient(180deg, rgba(143, 112, 192, 0.99), rgba(102, 75, 148, 0.99));
@@ -1241,11 +1250,17 @@ textarea.form-control {
 @media (min-width: 768px) {
   .app-shell {
     display: grid;
-    grid-template-columns: 292px minmax(0, 1fr);
+    grid-template-columns: calc(292px + env(safe-area-inset-left)) minmax(0, 1fr);
+  }
+
+  .sidebar-desktop {
+    width: 100%;
   }
 
   .page-content {
     padding: 1.6rem 1.85rem 2.1rem;
+    padding-right: calc(1.85rem + env(safe-area-inset-right));
+    padding-bottom: calc(2.1rem + env(safe-area-inset-bottom));
   }
 
   .page-content > .container-fluid {
@@ -1257,7 +1272,7 @@ textarea.form-control {
 
 @media (max-width: 767.98px) {
   .page-content {
-    padding-bottom: 1.5rem;
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
   }
 
   .page-header {
