@@ -32,6 +32,10 @@
   --bs-body-bg: transparent;
   --bs-link-color: var(--brand-forest);
   --bs-link-hover-color: var(--brand-forest-deep);
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
 }
 
 :root[data-theme="dark"] {
@@ -120,10 +124,17 @@ a {
 
 .app-shell {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .page-content {
   min-height: 100vh;
+  min-height: 100dvh;
+  padding:
+    max(1rem, var(--safe-area-top))
+    max(1rem, var(--safe-area-right))
+    max(1rem, var(--safe-area-bottom))
+    max(1rem, var(--safe-area-left));
 }
 
 .topbar-mobile {
@@ -131,6 +142,11 @@ a {
   background: linear-gradient(135deg, rgba(168, 139, 212, 0.97), rgba(127, 90, 180, 0.97));
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 10px 26px rgba(112, 87, 154, 0.2);
+}
+
+.topbar-mobile > .container-fluid {
+  padding-left: max(var(--bs-gutter-x, 0.75rem), var(--safe-area-left));
+  padding-right: max(var(--bs-gutter-x, 0.75rem), var(--safe-area-right));
 }
 
 .topbar-brand {
@@ -1245,7 +1261,11 @@ textarea.form-control {
   }
 
   .page-content {
-    padding: 1.6rem 1.85rem 2.1rem;
+    padding:
+      max(1.6rem, var(--safe-area-top))
+      max(1.85rem, var(--safe-area-right))
+      max(2.1rem, var(--safe-area-bottom))
+      max(1.85rem, var(--safe-area-left));
   }
 
   .page-content > .container-fluid {
@@ -1257,7 +1277,7 @@ textarea.form-control {
 
 @media (max-width: 767.98px) {
   .page-content {
-    padding-bottom: 1.5rem;
+    padding-bottom: max(1.5rem, var(--safe-area-bottom));
   }
 
   .page-header {
