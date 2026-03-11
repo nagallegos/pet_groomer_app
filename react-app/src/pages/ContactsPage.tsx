@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { Button, Card, Form } from "react-bootstrap";
 import { useAppToast } from "../components/common/AppToastProvider";
+import PageLoader from "../components/common/PageLoader";
 import ClientGrid from "../components/clients/ClientGrid";
 import ClientQuickViewModal from "../components/clients/ClientQuickViewModal";
 import ClientFormModal from "../components/clients/ClientFormModal";
 import { mockAppointments, mockOwners, mockPets } from "../data/mockData";
+import useInitialLoading from "../hooks/useInitialLoading";
 import type { Owner } from "../types/models";
 
 type SortField = "firstName" | "lastName";
@@ -13,6 +15,7 @@ type ClientViewMode = "card" | "list";
 
 export default function ContactsPage() {
   const { showToast } = useAppToast();
+  const isLoading = useInitialLoading();
   const [selectedClient, setSelectedClient] = useState<Owner | null>(null);
   const [owners, setOwners] = useState<Owner[]>(mockOwners);
   const [showAddClientModal, setShowAddClientModal] = useState(false);
@@ -103,6 +106,10 @@ export default function ContactsPage() {
       (appt) => appt.ownerId === selectedClient.id,
     );
   }, [selectedClient]);
+
+  if (isLoading) {
+    return <PageLoader label="Loading clients..." />;
+  }
 
   return (
     <>

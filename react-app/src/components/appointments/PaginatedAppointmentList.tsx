@@ -8,8 +8,6 @@ interface PaginatedAppointmentListProps {
   owners: Owner[];
   pets: Pet[];
   onAppointmentClick: (appointment: Appointment) => void;
-  onArchiveAppointment: (appointment: Appointment) => void;
-  onDeleteAppointment: (appointment: Appointment) => void;
   pageSize?: number;
 }
 
@@ -34,8 +32,6 @@ export default function PaginatedAppointmentList({
   owners,
   pets,
   onAppointmentClick,
-  onArchiveAppointment,
-  onDeleteAppointment,
   pageSize = 8,
 }: PaginatedAppointmentListProps) {
   const [page, setPage] = useState(1);
@@ -116,29 +112,13 @@ export default function PaginatedAppointmentList({
                       </div>
                       <Button
                         size="sm"
-                        variant="warning"
-                        className="action-button-wide"
+                        variant="outline-primary"
                         onClick={(event) => {
                           event.stopPropagation();
-                          onArchiveAppointment(appointment);
+                          onAppointmentClick(appointment);
                         }}
                       >
-                        Archive
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline-danger"
-                        className="icon-action-button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onDeleteAppointment(appointment);
-                        }}
-                        aria-label="Delete appointment"
-                        title="Delete appointment"
-                      >
-                        <svg aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" width="16" height="16">
-                          <path d="M6.5 1h3l.5 1H13a.5.5 0 0 1 0 1h-.6l-.7 9.1A2 2 0 0 1 9.7 14H6.3a2 2 0 0 1-2-1.9L3.6 3H3a.5.5 0 0 1 0-1h3zm-1.2 2 .7 9.1a1 1 0 0 0 1 .9h3.4a1 1 0 0 0 1-.9L10.7 3zM6 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 6 5m4.5.5v5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 1 0M8 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 8 5" />
-                        </svg>
+                        Edit
                       </Button>
                     </div>
                   </div>

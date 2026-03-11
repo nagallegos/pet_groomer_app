@@ -2,16 +2,20 @@ import { useEffect, useMemo, useState } from "react";
 import { Button, Card, ListGroup } from "react-bootstrap";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import AppointmentFormModal from "../components/appointments/AppointmentFormModal";
+import AppointmentDetailsModal from "../components/appointments/AppointmentDetailsModal";
 import { useAppToast } from "../components/common/AppToastProvider";
 import ConfirmDeleteModal from "../components/common/ConfirmDeleteModal";
+import PageLoader from "../components/common/PageLoader";
 import PetFormModal from "../components/pets/PetFormModal";
 import { mockAppointments, mockOwners, mockPets } from "../data/mockData";
+import useInitialLoading from "../hooks/useInitialLoading";
 import { archivePet, deletePet } from "../lib/crmApi";
-import type { Pet } from "../types/models";
+import type { Appointment, Pet } from "../types/models";
 
 export default function PetDetailsPage() {
   const navigate = useNavigate();
   const { showToast } = useAppToast();
+  const isLoading = useInitialLoading();
   const { petId } = useParams();
 
   const initialPet = useMemo(
@@ -24,6 +28,11 @@ export default function PetDetailsPage() {
   const [showDeletePetModal, setShowDeletePetModal] = useState(false);
   const [showArchivePetModal, setShowArchivePetModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [petAppointments, setPetAppointments] = useState<Appointment[]>([]);
+  const [selectedAppointment, setSelectedAppointment] =
+    useState<Appointment | null>(null);
+  const [showAppointmentDetailsModal, setShowAppointmentDetailsModal] =
+    useState(false);
 
   useEffect(() => {
     setPet(initialPet);
@@ -38,6 +47,14 @@ export default function PetDetailsPage() {
     () => mockAppointments.filter((appt) => appt.petId === petId),
     [petId],
   );
+
+  useEffect(() => {
+    setPetAppointments(appointments);
+  }, [appointments]);
+
+  if (isLoading) {
+    return <PageLoader label="Loading pet profile..." />;
+  }
 
   if (!pet || !owner) {
     return <div>Pet not found.</div>;
@@ -127,12 +144,19 @@ export default function PetDetailsPage() {
       <Card className="shadow-sm">
         <Card.Body>
           <Card.Title>Pet Appointment History</Card.Title>
-          {appointments.length === 0 ? (
+          {petAppointments.length === 0 ? (
             <p className="text-muted mb-0">No appointment history.</p>
           ) : (
             <ListGroup>
-              {appointments.map((appt) => (
-                <ListGroup.Item key={appt.id}>
+              {petAppointments.map((appt) => (
+                <ListGroup.Item
+                  key={appt.id}
+                  action
+                  onClick={() => {
+                    setSelectedAppointment(appt);
+                    setShowAppointmentDetailsModal(true);
+                  }}
+                >
                   {new Date(appt.start).toLocaleString()} — {appt.status}
                 </ListGroup.Item>
               ))}
@@ -170,6 +194,47 @@ export default function PetDetailsPage() {
             body: "The appointment was created and is ready for backend persistence.",
             variant: "success",
           });
+        }}
+      />
+
+      <AppointmentDetailsModal
+        show={showAppointmentDetailsModal}
+        onHide={() => {
+          setShowAppointmentDetailsModal(false);
+          setSelectedAppointment(null);
+        }}
+        appointment={selectedAppointment}
+        owners={mockOwners}
+        pets={mockPets}
+        onUpdated={(updatedAppointment) => {
+          if (updatedAppointment.isArchived) {
+            setPetAppointments((currentAppointments) =>
+              currentAppointments.filter(
+                (appointment) => appointment.id !== updatedAppointment.id,
+              ),
+            );
+            setSelectedAppointment(null);
+            setShowAppointmentDetailsModal(false);
+            return;
+          }
+
+          setPetAppointments((currentAppointments) =>
+            currentAppointments.map((appointment) =>
+              appointment.id === updatedAppointment.id
+                ? updatedAppointment
+                : appointment,
+            ),
+          );
+          setSelectedAppointment(updatedAppointment);
+        }}
+        onDeleted={(appointmentId) => {
+          setPetAppointments((currentAppointments) =>
+            currentAppointments.filter(
+              (appointment) => appointment.id !== appointmentId,
+            ),
+          );
+          setSelectedAppointment(null);
+          setShowAppointmentDetailsModal(false);
         }}
       />
 

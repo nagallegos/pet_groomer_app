@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button, Card } from "react-bootstrap";
+import { Link } from "react-router-dom";
 import {
   Calendar,
   dateFnsLocalizer,
@@ -19,7 +20,9 @@ import ThreeDayView from "../components/calendar/ThreeDayView";
 import TuesdaySaturdayWorkWeekView from "../components/calendar/TuesdaySaturdayWeekView";
 import { useAppToast } from "../components/common/AppToastProvider";
 import ConfirmDeleteModal from "../components/common/ConfirmDeleteModal";
+import PageLoader from "../components/common/PageLoader";
 import { mockAppointments, mockOwners, mockPets } from "../data/mockData";
+import useInitialLoading from "../hooks/useInitialLoading";
 import { formatAppointmentServices } from "../lib/appointmentServices";
 import { archiveAppointment, deleteAppointment } from "../lib/crmApi";
 import type { Appointment } from "../types/models";
@@ -131,6 +134,7 @@ function MobileAgendaStyleEvent({
 
 export default function SchedulePage() {
   const { showToast } = useAppToast();
+  const isLoading = useInitialLoading();
 
   const getInitialView = (): CalendarViewName =>
     window.innerWidth < MOBILE_BREAKPOINT ? Views.DAY : Views.MONTH;
@@ -299,6 +303,10 @@ export default function SchedulePage() {
         day: true,
       } as const);
 
+  if (isLoading) {
+    return <PageLoader label="Loading schedule..." />;
+  }
+
   return (
     <>
       <div className="page-header d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
@@ -371,15 +379,17 @@ export default function SchedulePage() {
         </Card.Body>
       </Card>
 
+      <div className="d-flex justify-content-end mb-3">
+        <Link className="btn btn-outline-primary" to="/appointments/history">
+          View Appointment History
+        </Link>
+      </div>
+
       <PaginatedAppointmentList
         appointments={appointments}
         owners={mockOwners}
         pets={mockPets}
         onAppointmentClick={handleOpenAppointment}
-        onArchiveAppointment={(appointment) =>
-          setAppointmentPendingArchive(appointment)
-        }
-        onDeleteAppointment={(appointment) => setAppointmentPendingDelete(appointment)}
       />
 
       <AppointmentFormModal

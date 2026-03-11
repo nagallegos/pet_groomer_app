@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { Button, Card, Form } from "react-bootstrap";
 import { useAppToast } from "../components/common/AppToastProvider";
+import PageLoader from "../components/common/PageLoader";
 import PetFormModal from "../components/pets/PetFormModal";
 import PetGrid from "../components/pets/PetGrid";
 import PetQuickViewModal from "../components/pets/PetQuickViewModal";
 import { mockAppointments, mockOwners, mockPets } from "../data/mockData";
+import useInitialLoading from "../hooks/useInitialLoading";
 import type { Owner, Pet } from "../types/models";
 
 type SortField = "name" | "breed" | "species" | "owner";
@@ -13,6 +15,7 @@ type PetViewMode = "card" | "list";
 
 export default function PetsPage() {
   const { showToast } = useAppToast();
+  const isLoading = useInitialLoading();
   const [selectedPet, setSelectedPet] = useState<Pet | null>(null);
   const [pets, setPets] = useState<Pet[]>(mockPets);
   const [searchInput, setSearchInput] = useState("");
@@ -118,6 +121,10 @@ export default function PetsPage() {
     if (!selectedPet) return [];
     return mockAppointments.filter((appointment) => appointment.petId === selectedPet.id);
   }, [selectedPet]);
+
+  if (isLoading) {
+    return <PageLoader label="Loading pets..." />;
+  }
 
   return (
     <>

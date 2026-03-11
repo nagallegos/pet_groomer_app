@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Badge, Button, Form, Modal } from "react-bootstrap";
+import { Alert, Badge, Button, Form, Modal, Spinner } from "react-bootstrap";
+import { useNavigate } from "react-router-dom";
 import {
   APPOINTMENT_SERVICE_OPTIONS,
   derivePrimaryServiceType,
@@ -29,6 +30,8 @@ interface AppointmentDetailsModalProps {
   pets: Pet[];
   onUpdated?: (appointment: Appointment) => void;
   onDeleted?: (appointmentId: string) => void;
+  editingWarning?: string;
+  allowPastEditing?: boolean;
 }
 
 export default function AppointmentDetailsModal({
@@ -39,7 +42,10 @@ export default function AppointmentDetailsModal({
   pets,
   onUpdated,
   onDeleted,
+  editingWarning,
+  allowPastEditing = false,
 }: AppointmentDetailsModalProps) {
+  const navigate = useNavigate();
   const { showToast } = useAppToast();
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -54,6 +60,8 @@ export default function AppointmentDetailsModal({
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showPastEditConfirmModal, setShowPastEditConfirmModal] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
     if (appointment && show) {
@@ -68,6 +76,7 @@ export default function AppointmentDetailsModal({
       setStatus(appointment.status);
       setNotes(appointment.notes.map((note) => note.text).join("\n"));
       setSaveError(null);
+      setIsEditing(false);
     }
   }, [appointment, show]);
 
@@ -91,7 +100,15 @@ export default function AppointmentDetailsModal({
     return pets.find((item) => item.id === appointment.petId) ?? null;
   }, [appointment, pets]);
 
+  const isPastAppointment = useMemo(() => {
+    if (!appointment) return false;
+    return new Date(appointment.end) < new Date();
+  }, [appointment]);
+
   if (!appointment || !owner || !pet) return null;
+
+  const canEditPastAppointment = isPastAppointment && allowPastEditing;
+  const showEditableFields = isEditing;
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -245,6 +262,12 @@ export default function AppointmentDetailsModal({
             </Alert>
           )}
 
+          {editingWarning && isEditing && (
+            <Alert variant="warning" className="mb-3">
+              {editingWarning}
+            </Alert>
+          )}
+
           <div className="d-flex justify-content-between align-items-start mb-3">
             <div>
               <h5 className="mb-1">{pet.name}</h5>
@@ -271,105 +294,128 @@ export default function AppointmentDetailsModal({
             </div>
           </div>
 
-          <Form.Group className="mb-3">
-            <Form.Label>Date</Form.Label>
-            <Form.Control
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              required
-            />
-          </Form.Group>
-
-          <div className="row g-3 mb-3">
-            <div className="col-sm-6">
-              <Form.Group>
-                <Form.Label>Start Time</Form.Label>
+          {showEditableFields ? (
+            <>
+              <Form.Group className="mb-3">
+                <Form.Label>Date</Form.Label>
                 <Form.Control
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
                   required
                 />
               </Form.Group>
-            </div>
-            <div className="col-sm-6">
-              <Form.Group>
-                <Form.Label>End Time</Form.Label>
+
+              <div className="row g-3 mb-3">
+                <div className="col-sm-6">
+                  <Form.Group>
+                    <Form.Label>Start Time</Form.Label>
+                    <Form.Control
+                      type="time"
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      required
+                    />
+                  </Form.Group>
+                </div>
+                <div className="col-sm-6">
+                  <Form.Group>
+                    <Form.Label>End Time</Form.Label>
+                    <Form.Control
+                      type="time"
+                      value={endTime}
+                      onChange={(e) => setEndTime(e.target.value)}
+                      required
+                    />
+                  </Form.Group>
+                </div>
+              </div>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Services</Form.Label>
+                <div className="service-option-grid">
+                  {APPOINTMENT_SERVICE_OPTIONS.map((service) => (
+                    <Form.Check
+                      key={service}
+                      type="checkbox"
+                      id={`details-service-${service}`}
+                      label={service}
+                      checked={selectedServices.includes(service)}
+                      onChange={() => toggleService(service)}
+                    />
+                  ))}
+                </div>
+              </Form.Group>
+
+              {customSelected && (
+                <Form.Group className="mb-3">
+                  <Form.Label>Custom Service</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={customServiceType}
+                    onChange={(e) => setCustomServiceType(e.target.value)}
+                    placeholder="Describe the custom service"
+                  />
+                </Form.Group>
+              )}
+
+              <Form.Group className="mb-3">
+                <Form.Label>Status</Form.Label>
+                <Form.Select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as AppointmentStatus)}
+                >
+                  <option value="scheduled">Scheduled</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="no-show">No Show</option>
+                </Form.Select>
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Cost</Form.Label>
                 <Form.Control
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  required
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={cost}
+                  onChange={(e) => setCost(e.target.value)}
+                  placeholder="85.00"
                 />
               </Form.Group>
-            </div>
-          </div>
 
-          <Form.Group className="mb-3">
-            <Form.Label>Services</Form.Label>
-            <div className="service-option-grid">
-              {APPOINTMENT_SERVICE_OPTIONS.map((service) => (
-                <Form.Check
-                  key={service}
-                  type="checkbox"
-                  id={`details-service-${service}`}
-                  label={service}
-                  checked={selectedServices.includes(service)}
-                  onChange={() => toggleService(service)}
+              <Form.Group className="mb-3">
+                <Form.Label>Notes</Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={5}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Add notes about this appointment..."
                 />
-              ))}
+              </Form.Group>
+            </>
+          ) : (
+            <div className="appointment-detail-summary mb-3">
+              <div><strong>Date:</strong> {new Date(appointment.start).toLocaleDateString()}</div>
+              <div>
+                <strong>Time:</strong>{" "}
+                {new Date(appointment.start).toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}{" "}
+                to{" "}
+                {new Date(appointment.end).toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </div>
+              <div><strong>Status:</strong> {status}</div>
+              <div><strong>Projected Cost:</strong> ${Number(cost || appointment.cost).toFixed(2)}</div>
+              <div><strong>Notes:</strong> {notes || "No notes recorded."}</div>
             </div>
-          </Form.Group>
-
-          {customSelected && (
-            <Form.Group className="mb-3">
-              <Form.Label>Custom Service</Form.Label>
-              <Form.Control
-                type="text"
-                value={customServiceType}
-                onChange={(e) => setCustomServiceType(e.target.value)}
-                placeholder="Describe the custom service"
-              />
-            </Form.Group>
           )}
-
-          <Form.Group className="mb-3">
-            <Form.Label>Status</Form.Label>
-            <Form.Select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as AppointmentStatus)}
-            >
-              <option value="scheduled">Scheduled</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="no-show">No Show</option>
-            </Form.Select>
-          </Form.Group>
-
-          <Form.Group className="mb-3">
-            <Form.Label>Cost</Form.Label>
-            <Form.Control
-              type="number"
-              min="0"
-              step="0.01"
-              value={cost}
-              onChange={(e) => setCost(e.target.value)}
-              placeholder="85.00"
-            />
-          </Form.Group>
-
-          <Form.Group className="mb-3">
-            <Form.Label>Notes</Form.Label>
-            <Form.Control
-              as="textarea"
-              rows={5}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add notes about this appointment..."
-            />
-          </Form.Group>
 
           <div className="border rounded p-3 bg-light">
             <div className="fw-semibold mb-2">Client Contact Info</div>
@@ -384,66 +430,114 @@ export default function AppointmentDetailsModal({
 
           <Modal.Footer className="justify-content-between">
             <div className="d-flex gap-2 flex-wrap">
-              <Button
-                variant="outline-success"
-                onClick={() => handleStatusUpdate("confirmed")}
-                disabled={isSaving}
-              >
-                Mark Confirmed
-              </Button>
-              <Button
-                variant="outline-secondary"
-                onClick={() => handleStatusUpdate("completed")}
-                disabled={isSaving}
-              >
-                Mark Completed
-              </Button>
-              <Button
-                variant="warning"
-                className="action-button-wide"
-                onClick={() => setShowArchiveModal(true)}
-                disabled={isSaving}
-              >
-                Archive Appointment
-              </Button>
-              <Button
-                variant="outline-danger"
-                onClick={() => setShowCancelModal(true)}
-                disabled={isSaving}
-              >
-                Cancel Appointment
-              </Button>
-              <Button
-                variant="outline-danger"
-                className="icon-action-button"
-                onClick={() => setShowDeleteModal(true)}
-                disabled={isSaving}
-                aria-label="Delete appointment"
-                title="Delete appointment"
-              >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 16 16"
-                  fill="currentColor"
-                  width="16"
-                  height="16"
+              {isPastAppointment && !canEditPastAppointment ? (
+                <Button
+                  variant="outline-primary"
+                  onClick={() => {
+                    onHide();
+                    navigate(`/appointments/history?appointmentId=${appointment.id}`);
+                  }}
                 >
-                  <path d="M6.5 1h3l.5 1H13a.5.5 0 0 1 0 1h-.6l-.7 9.1A2 2 0 0 1 9.7 14H6.3a2 2 0 0 1-2-1.9L3.6 3H3a.5.5 0 0 1 0-1h3zm-1.2 2 .7 9.1a1 1 0 0 0 1 .9h3.4a1 1 0 0 0 1-.9L10.7 3zM6 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 6 5m4.5.5v5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 1 0M8 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 8 5" />
-                </svg>
-              </Button>
+                  View on Appointment History
+                </Button>
+              ) : !showEditableFields ? (
+                <Button
+                  variant="outline-primary"
+                  onClick={() => {
+                    if (isPastAppointment) {
+                      setShowPastEditConfirmModal(true);
+                      return;
+                    }
+
+                    setIsEditing(true);
+                  }}
+                >
+                  Edit Appointment
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="outline-success"
+                    onClick={() => handleStatusUpdate("confirmed")}
+                    disabled={isSaving}
+                  >
+                    Mark Confirmed
+                  </Button>
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() => handleStatusUpdate("completed")}
+                    disabled={isSaving}
+                  >
+                    Mark Completed
+                  </Button>
+                  <Button
+                    variant="warning"
+                    className="action-button-wide"
+                    onClick={() => setShowArchiveModal(true)}
+                    disabled={isSaving}
+                  >
+                    Archive Appointment
+                  </Button>
+                  <Button
+                    variant="outline-danger"
+                    onClick={() => setShowCancelModal(true)}
+                    disabled={isSaving}
+                  >
+                    Cancel Appointment
+                  </Button>
+                  <Button
+                    variant="outline-danger"
+                    className="icon-action-button"
+                    onClick={() => setShowDeleteModal(true)}
+                    disabled={isSaving}
+                    aria-label="Delete appointment"
+                    title="Delete appointment"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 16 16"
+                      fill="currentColor"
+                      width="16"
+                      height="16"
+                    >
+                      <path d="M6.5 1h3l.5 1H13a.5.5 0 0 1 0 1h-.6l-.7 9.1A2 2 0 0 1 9.7 14H6.3a2 2 0 0 1-2-1.9L3.6 3H3a.5.5 0 0 1 0-1h3zm-1.2 2 .7 9.1a1 1 0 0 0 1 .9h3.4a1 1 0 0 0 1-.9L10.7 3zM6 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 6 5m4.5.5v5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 1 0M8 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 8 5" />
+                    </svg>
+                  </Button>
+                </>
+              )}
             </div>
 
             <div className="d-flex gap-2">
               <Button variant="secondary" onClick={onHide}>
                 Close
               </Button>
-              <Button type="submit" variant="primary" disabled={isSaving}>
-                Save Changes
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={isSaving || !showEditableFields}
+              >
+                {isSaving && (
+                  <Spinner animation="border" size="sm" className="me-2" />
+                )}
+                {showEditableFields ? "Save Changes" : "View Mode"}
               </Button>
             </div>
           </Modal.Footer>
         </Form>
       </Modal>
+      <ConfirmDeleteModal
+        show={showPastEditConfirmModal}
+        title="Edit Past Appointment"
+        body="You are editing a past event. This should only be done if information was incorrect before the appointment was completed."
+        note="Proceed only if you need to correct the historical record."
+        confirmLabel="Proceed to Edit"
+        confirmVariant="warning"
+        onCancel={() => setShowPastEditConfirmModal(false)}
+        onConfirm={() => {
+          setShowPastEditConfirmModal(false);
+          setIsEditing(true);
+        }}
+      />
       <ConfirmDeleteModal
         show={showArchiveModal}
         title="Archive Appointment"

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Form, Modal } from "react-bootstrap";
+import { Alert, Button, Form, Modal, Spinner } from "react-bootstrap";
 import { isBackendConfigured, savePet, type PetUpsertInput } from "../../lib/crmApi";
 import type { Owner, Pet, Species } from "../../types/models";
 
@@ -192,7 +192,10 @@ export default function PetFormModal({
             Cancel
           </Button>
           <Button type="submit" variant="primary" disabled={isSaving}>
-            {isSaving ? "Saving..." : initialPet ? "Save Pet Changes" : "Save Pet"}
+            {isSaving && (
+              <Spinner animation="border" size="sm" className="me-2" />
+            )}
+            {initialPet ? "Save Pet Changes" : "Save Pet"}
           </Button>
         </Modal.Footer>
       </Form>

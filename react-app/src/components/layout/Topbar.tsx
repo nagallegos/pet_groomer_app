@@ -1,4 +1,5 @@
 import { Button, Navbar, Container } from "react-bootstrap";
+import SettingsMenu from "./SettingsMenu";
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -12,8 +13,10 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
           Menu
         </Button>
         <Navbar.Brand className="topbar-brand mb-0">
-          Barks, Bubbles, and Love
+          <span className="d-block">Barks Bubbles & Love</span>
+          <small className="d-block topbar-subtitle">Dog Grooming CRM</small>
         </Navbar.Brand>
+        <SettingsMenu mobile />
       </Container>
     </Navbar>
   );

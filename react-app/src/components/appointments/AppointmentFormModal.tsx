@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Form, Modal } from "react-bootstrap";
+import { Alert, Button, Form, Modal, Spinner } from "react-bootstrap";
 import { useAppToast } from "../common/AppToastProvider";
 import {
   APPOINTMENT_SERVICE_OPTIONS,
@@ -291,6 +291,9 @@ export default function AppointmentFormModal({
             Cancel
           </Button>
           <Button type="submit" variant="primary" disabled={isSaving}>
+            {isSaving && (
+              <Spinner animation="border" size="sm" className="me-2" />
+            )}
             Save Appointment
           </Button>
         </Modal.Footer>

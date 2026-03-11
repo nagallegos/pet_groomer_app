@@ -252,6 +252,22 @@ export async function archiveOwner(owner: Owner): Promise<SaveResult<Owner>> {
   return { data, mode: "api" };
 }
 
+export async function unarchiveOwner(owner: Owner): Promise<SaveResult<Owner>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...owner,
+        isArchived: false,
+        archivedAt: undefined,
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Owner>(`/owners/${owner.id}/unarchive`, "POST", {});
+  return { data, mode: "api" };
+}
+
 export async function archivePet(pet: Pet): Promise<SaveResult<Pet>> {
   if (!isBackendConfigured()) {
     return {
@@ -265,6 +281,22 @@ export async function archivePet(pet: Pet): Promise<SaveResult<Pet>> {
   }
 
   const data = await request<Pet>(`/pets/${pet.id}/archive`, "POST", {});
+  return { data, mode: "api" };
+}
+
+export async function unarchivePet(pet: Pet): Promise<SaveResult<Pet>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...pet,
+        isArchived: false,
+        archivedAt: undefined,
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Pet>(`/pets/${pet.id}/unarchive`, "POST", {});
   return { data, mode: "api" };
 }
 
@@ -308,6 +340,28 @@ export async function archiveAppointment(
 
   const data = await request<Appointment>(
     `/appointments/${appointment.id}/archive`,
+    "POST",
+    {},
+  );
+  return { data, mode: "api" };
+}
+
+export async function unarchiveAppointment(
+  appointment: Appointment,
+): Promise<SaveResult<Appointment>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...appointment,
+        isArchived: false,
+        archivedAt: undefined,
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Appointment>(
+    `/appointments/${appointment.id}/unarchive`,
     "POST",
     {},
   );

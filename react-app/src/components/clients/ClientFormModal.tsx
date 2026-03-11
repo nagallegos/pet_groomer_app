@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Form, Modal } from "react-bootstrap";
+import { Alert, Button, Form, Modal, Spinner } from "react-bootstrap";
 import { isBackendConfigured, saveOwner, type OwnerUpsertInput } from "../../lib/crmApi";
 import type { ContactMethod, Owner } from "../../types/models";
 
@@ -166,11 +166,10 @@ export default function ClientFormModal({
           </Button>
 
           <Button type="submit" variant="primary" disabled={isSaving}>
-            {isSaving
-              ? "Saving..."
-              : initialOwner
-                ? "Save Client Changes"
-                : "Save Client"}
+            {isSaving && (
+              <Spinner animation="border" size="sm" className="me-2" />
+            )}
+            {initialOwner ? "Save Client Changes" : "Save Client"}
           </Button>
         </Modal.Footer>
       </Form>

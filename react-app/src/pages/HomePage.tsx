@@ -1,7 +1,9 @@
 import { Card, Col, Row } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import UpcomingAppointments from "../components/appointments/UpcomingAppointments";
+import PageLoader from "../components/common/PageLoader";
 import { mockAppointments, mockOwners, mockPets } from "../data/mockData";
+import useInitialLoading from "../hooks/useInitialLoading";
 
 const now = new Date();
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -94,6 +96,12 @@ const dashboardStats = [
 ];
 
 export default function HomePage() {
+  const isLoading = useInitialLoading();
+
+  if (isLoading) {
+    return <PageLoader label="Loading studio overview..." />;
+  }
+
   return (
     <>
       <div className="page-header d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
@@ -142,6 +150,9 @@ export default function HomePage() {
                 </Link>
                 <Link className="btn btn-outline-primary" to="/contacts">
                   Browse Clients
+                </Link>
+                <Link className="btn btn-outline-primary" to="/analysis">
+                  View Analysis
                 </Link>
                 <Link className="btn btn-outline-primary" to="/pets">
                   Browse Pets
