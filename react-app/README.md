@@ -1,73 +1,54 @@
-# React + TypeScript + Vite
+# Barks Bubbles & Love
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Dog Grooming CRM built with React, TypeScript, Vite, React Bootstrap, and React Big Calendar.
 
-Currently, two official plugins are available:
+## Local Development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Install dependencies and start the Vite dev server:
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Production Build
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Create a production build with:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run build
 ```
+
+## Netlify Deployment
+
+This repo already includes:
+
+- [netlify.toml](../netlify.toml)
+- [public/_redirects](./public/_redirects)
+
+Those files handle the build configuration and React Router SPA redirects.
+
+### Netlify Site Settings
+
+Use these values in Netlify:
+
+- Base directory: `react-app`
+- Build command: `npm run build`
+- Publish directory: `dist`
+
+### Why `_redirects` Is Needed
+
+This app uses client-side routing. Without the redirect rule, refreshing a deep link such as `/pets/pet-3` or `/appointments/history` would return a `404` on Netlify.
+
+### Environment Variables
+
+If you connect a real backend later, add this in Netlify:
+
+- `VITE_API_BASE_URL`
+
+Without `VITE_API_BASE_URL`, the app stays in mock/local mode.
+
+## Notes
+
+- The current app is designed to work without a backend using mock data.
+- Some local Windows environments may hit an `esbuild spawn EPERM` issue during `vite build`; that is an environment/process-launch issue and not part of the Netlify configuration itself.
