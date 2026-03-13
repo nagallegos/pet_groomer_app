@@ -1,5 +1,11 @@
 {
+  "private": true,
+  "workspaces": [
+    "react-app"
+  ],
   "scripts": {
+    "build": "npm run build --workspace react-app",
+    "lint": "npm run lint --workspace react-app",
     "netlify:dev": "npx netlify dev"
   },
   "dependencies": {
