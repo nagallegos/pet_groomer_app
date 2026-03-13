@@ -80,7 +80,7 @@ type SaveResult<T> = {
 };
 
 export function getApiBaseUrl() {
-  return import.meta.env.VITE_API_BASE_URL?.trim() || "/api";
+  return import.meta.env.VITE_API_BASE_URL?.trim() || "/.netlify/functions/api";
 }
 
 const API_BASE_URL = getApiBaseUrl();

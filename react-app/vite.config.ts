@@ -14,6 +14,10 @@ export default defineConfig(({ mode }) => {
           target: apiProxyTarget,
           changeOrigin: true,
         },
+        "/.netlify/functions/api": {
+          target: apiProxyTarget,
+          changeOrigin: true,
+        },
       },
     },
   };
