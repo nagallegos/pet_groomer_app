@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button, Card, ListGroup } from "react-bootstrap";
+import { Alert, Button, Card, Dropdown, Form, ListGroup, Row, Spinner } from "react-bootstrap";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import AppointmentFormModal from "../components/appointments/AppointmentFormModal";
 import AppointmentDetailsModal from "../components/appointments/AppointmentDetailsModal";
 import { useAppToast } from "../components/common/AppToastProvider";
+import ClientContactActions from "../components/common/ClientContactActions";
 import ConfirmDeleteModal from "../components/common/ConfirmDeleteModal";
 import PageLoader from "../components/common/PageLoader";
-import PetFormModal from "../components/pets/PetFormModal";
 import { mockAppointments, mockOwners, mockPets } from "../data/mockData";
 import useInitialLoading from "../hooks/useInitialLoading";
-import { archivePet, deletePet } from "../lib/crmApi";
-import type { Appointment, Pet } from "../types/models";
+import {
+  archivePet,
+  deletePet,
+  isBackendConfigured,
+  savePet,
+  type PetUpsertInput,
+} from "../lib/crmApi";
+import type { Appointment, Pet, Species } from "../types/models";
 
 export default function PetDetailsPage() {
   const navigate = useNavigate();
@@ -24,7 +30,6 @@ export default function PetDetailsPage() {
   );
 
   const [pet, setPet] = useState<Pet | null>(initialPet);
-  const [showEditPetModal, setShowEditPetModal] = useState(false);
   const [showDeletePetModal, setShowDeletePetModal] = useState(false);
   const [showArchivePetModal, setShowArchivePetModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -33,6 +38,16 @@ export default function PetDetailsPage() {
     useState<Appointment | null>(null);
   const [showAppointmentDetailsModal, setShowAppointmentDetailsModal] =
     useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [name, setName] = useState("");
+  const [species, setSpecies] = useState<Species>("dog");
+  const [breed, setBreed] = useState("");
+  const [weightLbs, setWeightLbs] = useState("");
+  const [ageYears, setAgeYears] = useState("");
+  const [color, setColor] = useState("");
+  const [notes, setNotes] = useState("");
+  const [isSavingPet, setIsSavingPet] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     setPet(initialPet);
@@ -52,6 +67,21 @@ export default function PetDetailsPage() {
     setPetAppointments(appointments);
   }, [appointments]);
 
+  useEffect(() => {
+    if (!pet) {
+      return;
+    }
+
+    setName(pet.name);
+    setSpecies(pet.species);
+    setBreed(pet.breed);
+    setWeightLbs(pet.weightLbs?.toString() ?? "");
+    setAgeYears(pet.ageYears?.toString() ?? "");
+    setColor(pet.color ?? "");
+    setNotes(pet.notes.map((note) => note.text).join("\n"));
+    setSaveError(null);
+  }, [pet]);
+
   if (isLoading) {
     return <PageLoader label="Loading pet profile..." />;
   }
@@ -59,6 +89,54 @@ export default function PetDetailsPage() {
   if (!pet || !owner) {
     return <div>Pet not found.</div>;
   }
+
+  const handleSavePet = async () => {
+    setIsSavingPet(true);
+    setSaveError(null);
+
+    const payload: PetUpsertInput = {
+      ownerId: pet.ownerId,
+      name,
+      species,
+      breed,
+      weightLbs: weightLbs ? Number(weightLbs) : undefined,
+      ageYears: ageYears ? Number(ageYears) : undefined,
+      color,
+      notes,
+    };
+
+    try {
+      const result = await savePet(payload, pet);
+      setPet(result.data);
+      showToast({
+        title: "Pet Updated",
+        body:
+          result.mode === "api"
+            ? "Pet updated in backend."
+            : "Pet changes saved in mock mode.",
+        variant: "success",
+      });
+      setIsEditMode(false);
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : "Unable to save pet changes.",
+      );
+    } finally {
+      setIsSavingPet(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setName(pet.name);
+    setSpecies(pet.species);
+    setBreed(pet.breed);
+    setWeightLbs(pet.weightLbs?.toString() ?? "");
+    setAgeYears(pet.ageYears?.toString() ?? "");
+    setColor(pet.color ?? "");
+    setNotes(pet.notes.map((note) => note.text).join("\n"));
+    setSaveError(null);
+    setIsEditMode(false);
+  };
 
   return (
     <div>
@@ -74,112 +152,224 @@ export default function PetDetailsPage() {
           </p>
         </div>
 
-        <div className="page-actions d-flex gap-2 flex-wrap">
-          <Button
-            variant="outline-secondary"
-            onClick={() => setShowEditPetModal(true)}
-          >
-            Edit Pet
-          </Button>
-          <Button
-            variant="warning"
-            className="action-button-wide"
-            onClick={() => setShowArchivePetModal(true)}
-          >
-            Archive Pet
-          </Button>
-          <Button
-            variant="outline-danger"
-            className="icon-action-button"
-            onClick={() => setShowDeletePetModal(true)}
-            aria-label="Delete pet"
-            title="Delete pet"
-          >
-            <svg aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" width="16" height="16">
-              <path d="M6.5 1h3l.5 1H13a.5.5 0 0 1 0 1h-.6l-.7 9.1A2 2 0 0 1 9.7 14H6.3a2 2 0 0 1-2-1.9L3.6 3H3a.5.5 0 0 1 0-1h3zm-1.2 2 .7 9.1a1 1 0 0 0 1 .9h3.4a1 1 0 0 0 1-.9L10.7 3zM6 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 6 5m4.5.5v5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 1 0M8 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 8 5" />
-            </svg>
-          </Button>
-          <Button variant="primary" onClick={() => setShowScheduleModal(true)}>
-            Schedule Appointment
-          </Button>
+        <div className="page-actions d-flex gap-2 flex-wrap align-items-center">
+          <span className={`mode-indicator${isEditMode ? " mode-indicator-edit" : ""}`}>
+            {isEditMode ? "Edit Mode" : "View Mode"}
+          </span>
+
+          {isEditMode ? (
+            <>
+              <Button
+                variant="outline-secondary"
+                onClick={handleCancelEdit}
+                disabled={isSavingPet}
+              >
+                Cancel Edit
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => void handleSavePet()}
+                disabled={isSavingPet}
+              >
+                {isSavingPet && (
+                  <Spinner animation="border" size="sm" className="me-2" />
+                )}
+                Save Pet
+              </Button>
+            </>
+          ) : (
+            <Dropdown align="end">
+              <Dropdown.Toggle variant="outline-secondary">
+                Actions
+              </Dropdown.Toggle>
+              <Dropdown.Menu>
+                <Dropdown.Item onClick={() => setIsEditMode(true)}>
+                  Edit Pet
+                </Dropdown.Item>
+                <Dropdown.Item onClick={() => setShowScheduleModal(true)}>
+                  Schedule Appointment
+                </Dropdown.Item>
+                <Dropdown.Divider />
+                <Dropdown.Item onClick={() => setShowArchivePetModal(true)}>
+                  Archive Pet
+                </Dropdown.Item>
+                <Dropdown.Item
+                  className="text-danger"
+                  onClick={() => setShowDeletePetModal(true)}
+                >
+                  Delete Pet
+                </Dropdown.Item>
+              </Dropdown.Menu>
+            </Dropdown>
+          )}
         </div>
       </div>
 
-      <Card className="shadow-sm mb-4">
-        <Card.Body>
-          <Card.Title>Pet Information</Card.Title>
-          <p className="mb-1">
-            <strong>Species:</strong> {pet.species}
-          </p>
-          <p className="mb-1">
-            <strong>Breed:</strong> {pet.breed}
-          </p>
-          <p className="mb-1">
-            <strong>Weight:</strong> {pet.weightLbs ?? "—"} lbs
-          </p>
-          <p className="mb-1">
-            <strong>Age:</strong> {pet.ageYears ?? "—"} years
-          </p>
-          <p className="mb-0">
-            <strong>Color:</strong> {pet.color ?? "—"}
-          </p>
-        </Card.Body>
-      </Card>
+      <Row className="g-4">
+        <div className="col-lg-5">
+          <Card className="shadow-sm">
+            <Card.Body>
+              <Card.Title>Pet Information</Card.Title>
 
-      <Card className="shadow-sm mb-4">
-        <Card.Body>
-          <Card.Title>Owner Information</Card.Title>
-          <p className="mb-1">
-            <strong>Name:</strong> {owner.firstName} {owner.lastName}
-          </p>
-          <p className="mb-1">
-            <strong>Phone:</strong> {owner.phone}
-          </p>
-          <p className="mb-1">
-            <strong>Email:</strong> {owner.email}
-          </p>
-        </Card.Body>
-      </Card>
+              {isEditMode ? (
+                <>
+                  {!isBackendConfigured() && (
+                    <Alert variant="info" className="mb-3">
+                      MongoDB backend not configured yet. Saves are currently local UI previews only.
+                    </Alert>
+                  )}
 
-      <Card className="shadow-sm">
-        <Card.Body>
-          <Card.Title>Pet Appointment History</Card.Title>
-          {petAppointments.length === 0 ? (
-            <p className="text-muted mb-0">No appointment history.</p>
-          ) : (
-            <ListGroup>
-              {petAppointments.map((appt) => (
-                <ListGroup.Item
-                  key={appt.id}
-                  action
-                  onClick={() => {
-                    setSelectedAppointment(appt);
-                    setShowAppointmentDetailsModal(true);
-                  }}
-                >
-                  {new Date(appt.start).toLocaleString()} — {appt.status}
-                </ListGroup.Item>
-              ))}
-            </ListGroup>
-          )}
-        </Card.Body>
-      </Card>
+                  {saveError && (
+                    <Alert variant="danger" className="mb-3">
+                      {saveError}
+                    </Alert>
+                  )}
 
-      <PetFormModal
-        show={showEditPetModal}
-        onHide={() => setShowEditPetModal(false)}
-        owners={mockOwners}
-        initialPet={pet}
-        onSaved={(updatedPet) => {
-          setPet(updatedPet);
-          showToast({
-            title: "Pet Updated",
-            body: "Pet changes saved and ready for backend persistence.",
-            variant: "success",
-          });
-          setShowEditPetModal(false);
-        }}
-      />
+                  <Form.Group className="mb-3">
+                    <Form.Label>Pet Name</Form.Label>
+                    <Form.Control
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                    />
+                  </Form.Group>
+
+                  <Form.Group className="mb-3">
+                    <Form.Label>Species</Form.Label>
+                    <Form.Select
+                      value={species}
+                      onChange={(event) => setSpecies(event.target.value as Species)}
+                    >
+                      <option value="dog">Dog</option>
+                      <option value="cat">Cat</option>
+                    </Form.Select>
+                  </Form.Group>
+
+                  <Form.Group className="mb-3">
+                    <Form.Label>Breed</Form.Label>
+                    <Form.Control
+                      value={breed}
+                      onChange={(event) => setBreed(event.target.value)}
+                    />
+                  </Form.Group>
+
+                  <div className="row g-3">
+                    <div className="col-sm-6">
+                      <Form.Group>
+                        <Form.Label>Weight (lbs)</Form.Label>
+                        <Form.Control
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={weightLbs}
+                          onChange={(event) => setWeightLbs(event.target.value)}
+                        />
+                      </Form.Group>
+                    </div>
+                    <div className="col-sm-6">
+                      <Form.Group>
+                        <Form.Label>Age (years)</Form.Label>
+                        <Form.Control
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={ageYears}
+                          onChange={(event) => setAgeYears(event.target.value)}
+                        />
+                      </Form.Group>
+                    </div>
+                  </div>
+
+                  <Form.Group className="mt-3 mb-3">
+                    <Form.Label>Color</Form.Label>
+                    <Form.Control
+                      value={color}
+                      onChange={(event) => setColor(event.target.value)}
+                    />
+                  </Form.Group>
+
+                  <Form.Group>
+                    <Form.Label>Pet Notes</Form.Label>
+                    <Form.Control
+                      as="textarea"
+                      rows={5}
+                      value={notes}
+                      onChange={(event) => setNotes(event.target.value)}
+                    />
+                  </Form.Group>
+                </>
+              ) : (
+                <>
+                  <p className="mb-1">
+                    <strong>Species:</strong> {pet.species}
+                  </p>
+                  <p className="mb-1">
+                    <strong>Breed:</strong> {pet.breed}
+                  </p>
+                  <p className="mb-1">
+                    <strong>Weight:</strong> {pet.weightLbs ?? "—"} lbs
+                  </p>
+                  <p className="mb-1">
+                    <strong>Age:</strong> {pet.ageYears ?? "—"} years
+                  </p>
+                  <p className="mb-3">
+                    <strong>Color:</strong> {pet.color ?? "—"}
+                  </p>
+
+                  <h6>Notes</h6>
+                  {pet.notes.length === 0 ? (
+                    <p className="text-muted mb-0">No pet notes.</p>
+                  ) : (
+                    <ListGroup>
+                      {pet.notes.map((note) => (
+                        <ListGroup.Item key={note.id}>{note.text}</ListGroup.Item>
+                      ))}
+                    </ListGroup>
+                  )}
+                </>
+              )}
+            </Card.Body>
+          </Card>
+        </div>
+
+        <div className="col-lg-7">
+          <Card className="shadow-sm mb-4">
+            <Card.Body>
+              <Card.Title>Owner Information</Card.Title>
+              <p className="mb-1">
+                <strong>Name:</strong> {owner.firstName} {owner.lastName}
+              </p>
+              <p className="mb-1">
+                <strong>Contact:</strong>
+              </p>
+              <ClientContactActions phone={owner.phone} email={owner.email} stacked />
+            </Card.Body>
+          </Card>
+
+          <Card className="shadow-sm">
+            <Card.Body>
+              <Card.Title>Pet Appointment History</Card.Title>
+              {petAppointments.length === 0 ? (
+                <p className="text-muted mb-0">No appointment history.</p>
+              ) : (
+                <ListGroup>
+                  {petAppointments.map((appt) => (
+                    <ListGroup.Item
+                      key={appt.id}
+                      action
+                      onClick={() => {
+                        setSelectedAppointment(appt);
+                        setShowAppointmentDetailsModal(true);
+                      }}
+                    >
+                      {new Date(appt.start).toLocaleString()} — {appt.status}
+                    </ListGroup.Item>
+                  ))}
+                </ListGroup>
+              )}
+            </Card.Body>
+          </Card>
+        </div>
+      </Row>
 
       <AppointmentFormModal
         show={showScheduleModal}

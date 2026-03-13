@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Badge, Button, Card, Form, ListGroup } from "react-bootstrap";
+import { Alert, Badge, Button, Card, Collapse, Form, ListGroup } from "react-bootstrap";
 import { useSearchParams } from "react-router-dom";
 import AppointmentDetailsModal from "../components/appointments/AppointmentDetailsModal";
 import PageLoader from "../components/common/PageLoader";
@@ -9,6 +9,9 @@ import { formatAppointmentServices } from "../lib/appointmentServices";
 import type { Appointment } from "../types/models";
 
 type HistoryStatusFilter = "all" | Appointment["status"];
+type HistorySortField = "date" | "client" | "pet" | "cost";
+type HistorySortDirection = "asc" | "desc";
+type HistoryGroupMode = "month" | "status" | "client";
 
 const PAGE_SIZE = 12;
 
@@ -35,9 +38,13 @@ export default function AppointmentHistoryPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<HistoryStatusFilter>("all");
   const [serviceFilter, setServiceFilter] = useState("all");
+  const [sortField, setSortField] = useState<HistorySortField>("date");
+  const [sortDirection, setSortDirection] = useState<HistorySortDirection>("desc");
+  const [groupMode, setGroupMode] = useState<HistoryGroupMode>("month");
   const [page, setPage] = useState(1);
   const [selectedAppointment, setSelectedAppointment] =
     useState<Appointment | null>(null);
+  const [showControls, setShowControls] = useState(false);
 
   const now = useMemo(() => new Date(), []);
 
@@ -91,8 +98,38 @@ export default function AppointmentHistoryPage() {
 
         return haystack.includes(normalizedSearchTerm);
       })
-      .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
-  }, [appointments, now, searchTerm, serviceFilter, statusFilter]);
+      .sort((a, b) => {
+        const aOwner = mockOwners.find((item) => item.id === a.ownerId);
+        const bOwner = mockOwners.find((item) => item.id === b.ownerId);
+        const aPet = mockPets.find((item) => item.id === a.petId);
+        const bPet = mockPets.find((item) => item.id === b.petId);
+        const direction = sortDirection === "asc" ? 1 : -1;
+
+        if (sortField === "date") {
+          return (
+            (new Date(a.start).getTime() - new Date(b.start).getTime()) * direction
+          );
+        }
+
+        if (sortField === "cost") {
+          return (a.cost - b.cost) * direction;
+        }
+
+        const aValue =
+          sortField === "client"
+            ? `${aOwner?.lastName ?? ""} ${aOwner?.firstName ?? ""}`.trim()
+            : aPet?.name ?? "";
+        const bValue =
+          sortField === "client"
+            ? `${bOwner?.lastName ?? ""} ${bOwner?.firstName ?? ""}`.trim()
+            : bPet?.name ?? "";
+
+        return (
+          aValue.localeCompare(bValue, undefined, { sensitivity: "base" }) *
+          direction
+        );
+      });
+  }, [appointments, now, searchTerm, serviceFilter, sortDirection, sortField, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAppointments.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -101,23 +138,51 @@ export default function AppointmentHistoryPage() {
     safePage * PAGE_SIZE,
   );
 
+  const groupedAppointments = useMemo(() => {
+    const groups = new Map<string, Appointment[]>();
+
+    pagedAppointments.forEach((appointment) => {
+      const owner = mockOwners.find((item) => item.id === appointment.ownerId);
+      const label =
+        groupMode === "status"
+          ? appointment.status
+          : groupMode === "client"
+            ? `${owner?.lastName ?? ""}${owner?.lastName ? ", " : ""}${owner?.firstName ?? ""}`.trim() ||
+              "Unknown Client"
+            : new Date(appointment.start).toLocaleString(undefined, {
+                month: "long",
+                year: "numeric",
+              });
+
+      const currentGroup = groups.get(label) ?? [];
+      currentGroup.push(appointment);
+      groups.set(label, currentGroup);
+    });
+
+    return Array.from(groups.entries()).map(([label, items]) => ({
+      label,
+      items,
+    }));
+  }, [groupMode, pagedAppointments]);
+
+  const searchParamAppointmentId = searchParams.get("appointmentId");
+  const searchedAppointment = useMemo(
+    () =>
+      searchParamAppointmentId
+        ? appointments.find(
+            (appointment) =>
+              appointment.id === searchParamAppointmentId &&
+              !appointment.isArchived &&
+              new Date(appointment.end) < now,
+          ) ?? null
+        : null,
+    [appointments, now, searchParamAppointmentId],
+  );
+  const activeSelectedAppointment = selectedAppointment ?? searchedAppointment;
+
   useEffect(() => {
-    const appointmentId = searchParams.get("appointmentId");
-
-    if (!appointmentId) {
+    if (!searchParamAppointmentId) {
       return;
-    }
-
-    const matchingAppointment =
-      appointments.find(
-        (appointment) =>
-          appointment.id === appointmentId &&
-          !appointment.isArchived &&
-          new Date(appointment.end) < now,
-      ) ?? null;
-
-    if (matchingAppointment) {
-      setSelectedAppointment(matchingAppointment);
     }
 
     setSearchParams((currentParams) => {
@@ -125,7 +190,7 @@ export default function AppointmentHistoryPage() {
       nextParams.delete("appointmentId");
       return nextParams;
     });
-  }, [appointments, now, searchParams, setSearchParams]);
+  }, [searchParamAppointmentId, setSearchParams]);
 
   if (isLoading) {
     return <PageLoader label="Loading appointment history..." />;
@@ -148,55 +213,129 @@ export default function AppointmentHistoryPage() {
       </Alert>
 
       <Card className="shadow-sm mb-4">
-        <Card.Body>
-          <div className="d-flex flex-column flex-lg-row gap-3 align-items-stretch align-items-lg-end">
-            <Form.Group className="flex-grow-1">
-              <Form.Label>Search Appointment History</Form.Label>
-              <Form.Control
-                type="search"
-                value={searchTerm}
-                onChange={(event) => {
-                  setSearchTerm(event.target.value);
-                  setPage(1);
-                }}
-                placeholder="Search by client, pet, service, status, or date"
-              />
-            </Form.Group>
+        <Card.Body className="search-panel-card">
+          <div className="search-panel-header">
+            <Form
+              className="search-panel-main"
+              onSubmit={(event) => event.preventDefault()}
+            >
+              <Form.Group>
+                <Form.Label>Search Appointment History</Form.Label>
+                <div className="search-panel-input-row">
+                  <Form.Control
+                    type="search"
+                    value={searchTerm}
+                    onChange={(event) => {
+                      setSearchTerm(event.target.value);
+                      setPage(1);
+                    }}
+                    placeholder="Search by client, pet, service, status, or date"
+                  />
+                  <Button type="submit" variant="primary" aria-label="Search appointment history">
+                    <span aria-hidden="true" className="search-panel-icon">
+                      ⌕
+                    </span>
+                  </Button>
+                </div>
+              </Form.Group>
+            </Form>
+          </div>
 
-            <Form.Group className="client-sort-group">
-              <Form.Label>Status</Form.Label>
-              <Form.Select
-                value={statusFilter}
-                onChange={(event) => {
-                  setStatusFilter(event.target.value as HistoryStatusFilter);
-                  setPage(1);
-                }}
-              >
-                <option value="all">All Statuses</option>
-                <option value="completed">Completed</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="scheduled">Scheduled</option>
-                <option value="cancelled">Cancelled</option>
-                <option value="no-show">No Show</option>
-              </Form.Select>
-            </Form.Group>
+          <Collapse in={showControls}>
+            <div id="history-search-controls" className="search-panel-controls">
+              <div className="search-panel-control-grid">
+                <Form.Group className="client-sort-group">
+                  <Form.Label>Status</Form.Label>
+                  <Form.Select
+                    value={statusFilter}
+                    onChange={(event) => {
+                      setStatusFilter(event.target.value as HistoryStatusFilter);
+                      setPage(1);
+                    }}
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="completed">Completed</option>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="no-show">No Show</option>
+                  </Form.Select>
+                </Form.Group>
 
-            <Form.Group className="client-sort-group">
-              <Form.Label>Service</Form.Label>
-              <Form.Select
-                value={serviceFilter}
-                onChange={(event) => {
-                  setServiceFilter(event.target.value);
-                  setPage(1);
-                }}
+                <Form.Group className="client-sort-group">
+                  <Form.Label>Service</Form.Label>
+                  <Form.Select
+                    value={serviceFilter}
+                    onChange={(event) => {
+                      setServiceFilter(event.target.value);
+                      setPage(1);
+                    }}
+                  >
+                    {serviceOptions.map((service) => (
+                      <option key={service} value={service}>
+                        {service === "all" ? "All Services" : service}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+
+                <Form.Group className="client-sort-group">
+                  <Form.Label>Sort Field</Form.Label>
+                  <Form.Select
+                    value={sortField}
+                    onChange={(event) => setSortField(event.target.value as HistorySortField)}
+                  >
+                    <option value="date">Date</option>
+                    <option value="client">Client</option>
+                    <option value="pet">Pet</option>
+                    <option value="cost">Cost</option>
+                  </Form.Select>
+                </Form.Group>
+
+                <Form.Group className="client-sort-group">
+                  <Form.Label>Sort Order</Form.Label>
+                  <Form.Select
+                    value={sortDirection}
+                    onChange={(event) =>
+                      setSortDirection(event.target.value as HistorySortDirection)
+                    }
+                  >
+                    <option value="desc">Descending</option>
+                    <option value="asc">Ascending</option>
+                  </Form.Select>
+                </Form.Group>
+
+                <Form.Group className="client-sort-group">
+                  <Form.Label>Group By</Form.Label>
+                  <Form.Select
+                    value={groupMode}
+                    onChange={(event) => setGroupMode(event.target.value as HistoryGroupMode)}
+                  >
+                    <option value="month">Month</option>
+                    <option value="status">Status</option>
+                    <option value="client">Client</option>
+                  </Form.Select>
+                </Form.Group>
+              </div>
+            </div>
+          </Collapse>
+
+          <div className="search-panel-corner">
+            <Button
+              variant={showControls ? "primary" : "outline-secondary"}
+              className="search-panel-toggle"
+              onClick={() => setShowControls((current) => !current)}
+              aria-expanded={showControls}
+              aria-controls="history-search-controls"
+              aria-label={showControls ? "Hide filters and sort" : "Show filters and sort"}
+            >
+              <span
+                aria-hidden="true"
+                className={`search-panel-caret${showControls ? " search-panel-caret-open" : ""}`}
               >
-                {serviceOptions.map((service) => (
-                  <option key={service} value={service}>
-                    {service === "all" ? "All Services" : service}
-                  </option>
-                ))}
-              </Form.Select>
-            </Form.Group>
+                ▾
+              </span>
+            </Button>
           </div>
         </Card.Body>
       </Card>
@@ -208,7 +347,7 @@ export default function AppointmentHistoryPage() {
               <Card.Title className="mb-1">Past Appointments</Card.Title>
               <p className="text-muted small mb-0">
                 Showing {filteredAppointments.length} historical appointment
-                {filteredAppointments.length === 1 ? "" : "s"}.
+                {filteredAppointments.length === 1 ? "" : "s"}, sorted by {sortField} and grouped by {groupMode}.
               </p>
             </div>
             <div className="text-muted small">
@@ -221,8 +360,12 @@ export default function AppointmentHistoryPage() {
               No past appointments match the current search and filters.
             </p>
           ) : (
-            <ListGroup variant="flush" className="appointment-list-group">
-              {pagedAppointments.map((appointment) => {
+            <div className="directory-group-stack">
+              {groupedAppointments.map((group) => (
+                <section key={group.label} className="directory-group-section">
+                  <div className="directory-group-heading">{group.label}</div>
+                  <ListGroup variant="flush" className="appointment-list-group">
+                    {group.items.map((appointment) => {
                 const owner = mockOwners.find((item) => item.id === appointment.ownerId);
                 const pet = mockPets.find((item) => item.id === appointment.petId);
 
@@ -277,8 +420,11 @@ export default function AppointmentHistoryPage() {
                     </div>
                   </ListGroup.Item>
                 );
-              })}
-            </ListGroup>
+                    })}
+                  </ListGroup>
+                </section>
+              ))}
+            </div>
           )}
 
           <div className="d-flex justify-content-between align-items-center gap-2 mt-3">
@@ -303,9 +449,9 @@ export default function AppointmentHistoryPage() {
       </Card>
 
       <AppointmentDetailsModal
-        show={!!selectedAppointment}
+        show={!!activeSelectedAppointment}
         onHide={() => setSelectedAppointment(null)}
-        appointment={selectedAppointment}
+        appointment={activeSelectedAppointment}
         owners={mockOwners}
         pets={mockPets}
         allowPastEditing

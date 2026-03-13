@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Badge, Button, Form, Modal, Spinner } from "react-bootstrap";
+import { Alert, Badge, Button, Dropdown, Form, Modal, Spinner } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 import {
   APPOINTMENT_SERVICE_OPTIONS,
@@ -10,10 +10,12 @@ import {
 import {
   archiveAppointment,
   deleteAppointment,
+  isBackendConfigured,
   saveAppointment,
   updateAppointmentStatus,
 } from "../../lib/crmApi";
 import { useAppToast } from "../common/AppToastProvider";
+import ClientContactActions from "../common/ClientContactActions";
 import ConfirmDeleteModal from "../common/ConfirmDeleteModal";
 import type {
   Appointment,
@@ -61,6 +63,8 @@ export default function AppointmentDetailsModal({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showPastEditConfirmModal, setShowPastEditConfirmModal] = useState(false);
+  const [pendingLateStatusAction, setPendingLateStatusAction] =
+    useState<AppointmentStatus | null>(null);
   const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
@@ -105,10 +109,37 @@ export default function AppointmentDetailsModal({
     return new Date(appointment.end) < new Date();
   }, [appointment]);
 
+  const isMoreThan24HoursPast = useMemo(() => {
+    if (!appointment) return false;
+    return Date.now() - new Date(appointment.end).getTime() >= 24 * 60 * 60 * 1000;
+  }, [appointment]);
+
+  const isMoreThan24HoursPastStart = useMemo(() => {
+    if (!appointment) return false;
+    return Date.now() - new Date(appointment.start).getTime() >= 24 * 60 * 60 * 1000;
+  }, [appointment]);
+
+  const isEligibleForNoShow = useMemo(() => {
+    if (!appointment) return false;
+    return Date.now() - new Date(appointment.start).getTime() >= 10 * 60 * 1000;
+  }, [appointment]);
+
   if (!appointment || !owner || !pet) return null;
 
   const canEditPastAppointment = isPastAppointment && allowPastEditing;
   const showEditableFields = isEditing;
+  const canMarkConfirmed =
+    appointment.status === "scheduled" && !isMoreThan24HoursPast;
+  const canMarkCompleted =
+    appointment.status === "scheduled" || appointment.status === "confirmed";
+  const canCancelAppointment =
+    appointment.status === "scheduled" || appointment.status === "confirmed";
+  const canMarkNoShow =
+    isEligibleForNoShow &&
+    (appointment.status === "scheduled" || appointment.status === "confirmed");
+  const requiresLateStatusWarning =
+    isMoreThan24HoursPastStart &&
+    (appointment.status === "scheduled" || appointment.status === "confirmed");
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -180,6 +211,49 @@ export default function AppointmentDetailsModal({
     }
   };
 
+  const triggerStatusUpdate = (nextStatus: AppointmentStatus) => {
+    if (
+      requiresLateStatusWarning &&
+      (nextStatus === "completed" || nextStatus === "cancelled" || nextStatus === "no-show")
+    ) {
+      setPendingLateStatusAction(nextStatus);
+      return;
+    }
+
+    void handleStatusUpdate(nextStatus);
+  };
+
+  const lateStatusWarningContent = (() => {
+    switch (pendingLateStatusAction) {
+      case "completed":
+        return {
+          title: "Mark Completed Late",
+          body: "This appointment is still marked scheduled or confirmed even though it started more than 24 hours ago. Only mark it completed if the grooming appointment actually happened and this update is correcting the record.",
+          note: "Use this only to fix the historical appointment outcome, not as a routine late update.",
+          confirmLabel: "Mark Completed",
+          confirmVariant: "secondary",
+        };
+      case "cancelled":
+        return {
+          title: "Cancel Appointment Late",
+          body: "This appointment started more than 24 hours ago. Only mark it cancelled if the appointment did not happen and the record was never updated at the time.",
+          note: "If the client missed the appointment without cancelling ahead of time, marking it as No Show may be more accurate.",
+          confirmLabel: "Mark Cancelled",
+          confirmVariant: "danger",
+        };
+      case "no-show":
+        return {
+          title: "Mark No Show Late",
+          body: "This appointment started more than 24 hours ago. Only mark it as no show if the client failed to arrive and this record is being corrected after the fact.",
+          note: "Use this when the appointment did not happen and should be recorded as missed rather than completed or cancelled.",
+          confirmLabel: "Mark No Show",
+          confirmVariant: "warning",
+        };
+      default:
+        return null;
+    }
+  })();
+
   const handleDelete = async () => {
     setIsSaving(true);
     setSaveError(null);
@@ -249,13 +323,111 @@ export default function AppointmentDetailsModal({
 
   return (
     <>
-      <Modal show={show} onHide={onHide} centered size="lg">
-        <Form onSubmit={handleSave}>
+      <Modal show={show} onHide={onHide} centered size="lg" fullscreen="sm-down">
+        <Form onSubmit={handleSave} className="modal-form-shell">
           <Modal.Header closeButton>
-            <Modal.Title>Appointment Details</Modal.Title>
+            <div className="w-100 d-flex justify-content-between align-items-start gap-3">
+              <div>
+                <Modal.Title>
+                  {showEditableFields ? "Edit Appointment" : "Appointment Details"}
+                </Modal.Title>
+                <span className={`mode-indicator${isEditing ? " mode-indicator-edit" : ""}`}>
+                  {isEditing ? "Edit Mode" : "View Mode"}
+                </span>
+              </div>
+
+              {!showEditableFields && (
+                <Dropdown align="end">
+                  <Dropdown.Toggle variant="outline-secondary" size="sm">
+                    Actions
+                  </Dropdown.Toggle>
+                  <Dropdown.Menu>
+                    {isPastAppointment && !canEditPastAppointment ? (
+                      <Dropdown.Item
+                        onClick={() => {
+                          onHide();
+                          navigate(`/appointments/history?appointmentId=${appointment.id}`);
+                        }}
+                      >
+                        Appointment History
+                      </Dropdown.Item>
+                    ) : (
+                      <Dropdown.Item
+                        onClick={() => {
+                          if (isPastAppointment) {
+                            setShowPastEditConfirmModal(true);
+                            return;
+                          }
+
+                          setIsEditing(true);
+                        }}
+                      >
+                        Edit Appointment
+                      </Dropdown.Item>
+                    )}
+                    <Dropdown.Divider />
+                    {canMarkConfirmed && (
+                      <Dropdown.Item
+                        onClick={() => triggerStatusUpdate("confirmed")}
+                        disabled={isSaving}
+                      >
+                        Mark Confirmed
+                      </Dropdown.Item>
+                    )}
+                    {canMarkCompleted && (
+                      <Dropdown.Item
+                        onClick={() => triggerStatusUpdate("completed")}
+                        disabled={isSaving}
+                      >
+                        Mark Completed
+                      </Dropdown.Item>
+                    )}
+                    {canMarkNoShow && (
+                      <Dropdown.Item
+                        onClick={() => triggerStatusUpdate("no-show")}
+                        disabled={isSaving}
+                      >
+                        Mark No Show
+                      </Dropdown.Item>
+                    )}
+                    <Dropdown.Item onClick={() => setShowArchiveModal(true)} disabled={isSaving}>
+                      Archive Appointment
+                    </Dropdown.Item>
+                    {canCancelAppointment && (
+                      <Dropdown.Item
+                        onClick={() => {
+                          if (requiresLateStatusWarning) {
+                            setPendingLateStatusAction("cancelled");
+                            return;
+                          }
+
+                          setShowCancelModal(true);
+                        }}
+                        disabled={isSaving}
+                      >
+                        Cancel Appointment
+                      </Dropdown.Item>
+                    )}
+                    <Dropdown.Item
+                      className="text-danger"
+                      onClick={() => setShowDeleteModal(true)}
+                      disabled={isSaving}
+                    >
+                      Delete Appointment
+                    </Dropdown.Item>
+                  </Dropdown.Menu>
+                </Dropdown>
+              )}
+            </div>
           </Modal.Header>
 
           <Modal.Body>
+          {showEditableFields && !isBackendConfigured() && (
+            <Alert variant="info" className="mb-3">
+              MongoDB backend not configured yet. Saves are currently local UI previews only.
+            </Alert>
+          )}
+
           {saveError && (
             <Alert variant="danger" className="mb-3">
               {saveError}
@@ -419,112 +591,60 @@ export default function AppointmentDetailsModal({
 
           <div className="border rounded p-3 bg-light">
             <div className="fw-semibold mb-2">Client Contact Info</div>
-            <div>
-              <strong>Phone:</strong> {owner.phone}
-            </div>
-            <div>
-              <strong>Email:</strong> {owner.email}
-            </div>
+            <ClientContactActions phone={owner.phone} email={owner.email} stacked />
           </div>
           </Modal.Body>
 
-          <Modal.Footer className="justify-content-between">
-            <div className="d-flex gap-2 flex-wrap">
-              {isPastAppointment && !canEditPastAppointment ? (
+          <Modal.Footer>
+            {showEditableFields ? (
+              <>
                 <Button
-                  variant="outline-primary"
+                  variant="outline-secondary"
                   onClick={() => {
-                    onHide();
-                    navigate(`/appointments/history?appointmentId=${appointment.id}`);
+                    setSaveError(null);
+                    setIsEditing(false);
                   }}
+                  disabled={isSaving}
                 >
-                  View on Appointment History
+                  Cancel
                 </Button>
-              ) : !showEditableFields ? (
                 <Button
-                  variant="outline-primary"
-                  onClick={() => {
-                    if (isPastAppointment) {
-                      setShowPastEditConfirmModal(true);
-                      return;
-                    }
-
-                    setIsEditing(true);
-                  }}
+                  type="submit"
+                  variant="primary"
+                  disabled={isSaving}
                 >
-                  Edit Appointment
+                  {isSaving && (
+                    <Spinner animation="border" size="sm" className="me-2" />
+                  )}
+                  Save
                 </Button>
-              ) : (
-                <>
-                  <Button
-                    variant="outline-success"
-                    onClick={() => handleStatusUpdate("confirmed")}
-                    disabled={isSaving}
-                  >
-                    Mark Confirmed
-                  </Button>
-                  <Button
-                    variant="outline-secondary"
-                    onClick={() => handleStatusUpdate("completed")}
-                    disabled={isSaving}
-                  >
-                    Mark Completed
-                  </Button>
-                  <Button
-                    variant="warning"
-                    className="action-button-wide"
-                    onClick={() => setShowArchiveModal(true)}
-                    disabled={isSaving}
-                  >
-                    Archive Appointment
-                  </Button>
-                  <Button
-                    variant="outline-danger"
-                    onClick={() => setShowCancelModal(true)}
-                    disabled={isSaving}
-                  >
-                    Cancel Appointment
-                  </Button>
-                  <Button
-                    variant="outline-danger"
-                    className="icon-action-button"
-                    onClick={() => setShowDeleteModal(true)}
-                    disabled={isSaving}
-                    aria-label="Delete appointment"
-                    title="Delete appointment"
-                  >
-                    <svg
-                      aria-hidden="true"
-                      viewBox="0 0 16 16"
-                      fill="currentColor"
-                      width="16"
-                      height="16"
-                    >
-                      <path d="M6.5 1h3l.5 1H13a.5.5 0 0 1 0 1h-.6l-.7 9.1A2 2 0 0 1 9.7 14H6.3a2 2 0 0 1-2-1.9L3.6 3H3a.5.5 0 0 1 0-1h3zm-1.2 2 .7 9.1a1 1 0 0 0 1 .9h3.4a1 1 0 0 0 1-.9L10.7 3zM6 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 6 5m4.5.5v5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 1 0M8 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 8 5" />
-                    </svg>
-                  </Button>
-                </>
-              )}
-            </div>
-
-            <div className="d-flex gap-2">
+              </>
+            ) : (
               <Button variant="secondary" onClick={onHide}>
                 Close
               </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={isSaving || !showEditableFields}
-              >
-                {isSaving && (
-                  <Spinner animation="border" size="sm" className="me-2" />
-                )}
-                {showEditableFields ? "Save Changes" : "View Mode"}
-              </Button>
-            </div>
+            )}
           </Modal.Footer>
         </Form>
       </Modal>
+      <ConfirmDeleteModal
+        show={!!pendingLateStatusAction && !!lateStatusWarningContent}
+        title={lateStatusWarningContent?.title ?? "Update Appointment Status"}
+        body={lateStatusWarningContent?.body ?? ""}
+        note={lateStatusWarningContent?.note}
+        confirmLabel={lateStatusWarningContent?.confirmLabel}
+        confirmVariant={lateStatusWarningContent?.confirmVariant}
+        onCancel={() => setPendingLateStatusAction(null)}
+        onConfirm={() => {
+          if (!pendingLateStatusAction) {
+            return;
+          }
+
+          const nextStatus = pendingLateStatusAction;
+          setPendingLateStatusAction(null);
+          void handleStatusUpdate(nextStatus);
+        }}
+      />
       <ConfirmDeleteModal
         show={showPastEditConfirmModal}
         title="Edit Past Appointment"

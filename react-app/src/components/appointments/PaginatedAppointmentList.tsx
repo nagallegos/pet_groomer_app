@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button, Card, ListGroup } from "react-bootstrap";
+import { Link } from "react-router-dom";
 import { formatAppointmentServices } from "../../lib/appointmentServices";
 import type { Appointment, Owner, Pet } from "../../types/models";
 
@@ -27,6 +28,14 @@ function getStatusDotClass(status: Appointment["status"]) {
   }
 }
 
+function isSameDay(left: Date, right: Date) {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
 export default function PaginatedAppointmentList({
   appointments,
   owners,
@@ -35,21 +44,30 @@ export default function PaginatedAppointmentList({
   pageSize = 8,
 }: PaginatedAppointmentListProps) {
   const [page, setPage] = useState(1);
+  const now = new Date();
+  const startOfToday = useMemo(() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }, []);
 
   const sortedAppointments = useMemo(
     () =>
-      [...appointments].sort(
-        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
-      ),
-    [appointments],
+      [...appointments]
+        .filter((appointment) => new Date(appointment.start) >= startOfToday)
+        .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime()),
+    [appointments, startOfToday],
   );
 
   const totalPages = Math.max(1, Math.ceil(sortedAppointments.length / pageSize));
   const safePage = Math.min(page, totalPages);
+  const pageStartIndex = (safePage - 1) * pageSize;
   const pageAppointments = sortedAppointments.slice(
-    (safePage - 1) * pageSize,
+    pageStartIndex,
     safePage * pageSize,
   );
+  const visibleRangeStart = sortedAppointments.length === 0 ? 0 : pageStartIndex + 1;
+  const visibleRangeEnd = pageStartIndex + pageAppointments.length;
 
   return (
     <Card className="shadow-sm">
@@ -58,27 +76,30 @@ export default function PaginatedAppointmentList({
           <div>
             <Card.Title className="mb-1">Appointment List</Card.Title>
             <p className="text-muted small mb-0">
-              Tap any appointment row to open full details and editing tools.
+              Showing today&apos;s appointments and all upcoming bookings.
             </p>
           </div>
-          <div className="text-muted small">
-            Page {safePage} of {totalPages}
-          </div>
+          <Link to="/appointments/history" className="btn btn-outline-primary btn-sm">
+            Appointment History
+          </Link>
         </div>
 
         {pageAppointments.length === 0 ? (
-          <p className="text-muted mb-0">No appointments available.</p>
+          <p className="text-muted mb-0">No appointments remaining for today or upcoming days.</p>
         ) : (
           <ListGroup variant="flush" className="appointment-list-group">
             {pageAppointments.map((appointment) => {
               const owner = owners.find((item) => item.id === appointment.ownerId);
               const pet = pets.find((item) => item.id === appointment.petId);
+              const appointmentDate = new Date(appointment.start);
+              const isPastToday =
+                appointmentDate < now && isSameDay(appointmentDate, now);
 
               return (
                 <ListGroup.Item
                   key={appointment.id}
                   action
-                  className="appointment-list-item"
+                  className={`appointment-list-item${isPastToday ? " appointment-list-item-past" : ""}`}
                   onClick={() => onAppointmentClick(appointment)}
                 >
                   <div className="appointment-list-row">
@@ -95,8 +116,8 @@ export default function PaginatedAppointmentList({
                           {owner?.lastName ?? ""}
                         </div>
                         <div className="appointment-list-meta">
-                          {new Date(appointment.start).toLocaleDateString()} •{" "}
-                          {new Date(appointment.start).toLocaleTimeString([], {
+                          {appointmentDate.toLocaleDateString()} •{" "}
+                          {appointmentDate.toLocaleTimeString([], {
                             hour: "numeric",
                             minute: "2-digit",
                           })}{" "}
@@ -129,22 +150,31 @@ export default function PaginatedAppointmentList({
         )}
 
         <div className="d-flex justify-content-between align-items-center gap-2 mt-3">
-          <Button
-            variant="outline-secondary"
-            disabled={safePage === 1}
-            onClick={() => setPage((current) => Math.max(1, current - 1))}
-          >
-            Previous
-          </Button>
-          <Button
-            variant="outline-secondary"
-            disabled={safePage === totalPages}
-            onClick={() =>
-              setPage((current) => Math.min(totalPages, current + 1))
-            }
-          >
-            Next
-          </Button>
+          <div className="text-muted small">
+            {visibleRangeStart}-{visibleRangeEnd} of {sortedAppointments.length}
+          </div>
+          <div className="appointment-list-pagination">
+            <Button
+              variant="outline-secondary"
+              className="appointment-list-page-btn"
+              disabled={safePage === 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              aria-label="Previous appointments"
+            >
+              <span aria-hidden="true">‹</span>
+            </Button>
+            <Button
+              variant="outline-secondary"
+              className="appointment-list-page-btn"
+              disabled={safePage === totalPages}
+              onClick={() =>
+                setPage((current) => Math.min(totalPages, current + 1))
+              }
+              aria-label="Next appointments"
+            >
+              <span aria-hidden="true">›</span>
+            </Button>
+          </div>
         </div>
       </Card.Body>
     </Card>

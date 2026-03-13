@@ -73,10 +73,10 @@ function isRangeValid(start: string, end: string) {
 
 export default function AnalysisPage() {
   const isLoading = useInitialLoading();
-  const now = new Date();
-  const today = startOfDay(now);
+  const now = useMemo(() => new Date(), []);
+  const today = useMemo(() => startOfDay(now), [now]);
   const currentYear = today.getFullYear();
-  const yearStart = startOfYear(today);
+  const yearStart = useMemo(() => startOfYear(today), [today]);
   const [selectedRevenueYear, setSelectedRevenueYear] = useState(currentYear);
   const [selectedAppointmentsYear, setSelectedAppointmentsYear] =
     useState(currentYear);

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert, Button, Card, Form, ListGroup } from "react-bootstrap";
+import { Alert, Button, Card, Collapse, Form, ListGroup } from "react-bootstrap";
 import { useParams } from "react-router-dom";
 import ConfirmDeleteModal from "../components/common/ConfirmDeleteModal";
 import PageLoader from "../components/common/PageLoader";
@@ -27,9 +27,13 @@ export default function ArchivePage() {
   const [appointments, setAppointments] = useState<Appointment[]>(mockAppointments);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterValue, setFilterValue] = useState("all");
+  const [sortValue, setSortValue] = useState("name");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [groupValue, setGroupValue] = useState("letter");
   const [page, setPage] = useState(1);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [showUnarchiveModal, setShowUnarchiveModal] = useState(false);
+  const [showControls, setShowControls] = useState(false);
 
   const validArchiveType: ArchiveType =
     archiveType === "clients" ||
@@ -49,6 +53,16 @@ export default function ArchivePage() {
           searchPlaceholder: "Search by pet, breed, species, or owner",
           filterLabel: "Species",
           filterOptions: ["all", "dog", "cat"],
+          sortOptions: [
+            { value: "name", label: "Pet Name" },
+            { value: "owner", label: "Owner" },
+            { value: "breed", label: "Breed" },
+          ],
+          groupOptions: [
+            { value: "letter", label: "Alphabet" },
+            { value: "species", label: "Species" },
+            { value: "owner", label: "Owner" },
+          ],
         };
       case "appointments":
         return {
@@ -57,6 +71,16 @@ export default function ArchivePage() {
           searchPlaceholder: "Search by client, pet, service, or status",
           filterLabel: "Status",
           filterOptions: ["all", "scheduled", "confirmed", "completed", "cancelled", "no-show"],
+          sortOptions: [
+            { value: "date", label: "Appointment Date" },
+            { value: "client", label: "Client" },
+            { value: "pet", label: "Pet" },
+          ],
+          groupOptions: [
+            { value: "month", label: "Month" },
+            { value: "status", label: "Status" },
+            { value: "client", label: "Client" },
+          ],
         };
       case "clients":
       default:
@@ -66,6 +90,15 @@ export default function ArchivePage() {
           searchPlaceholder: "Search by first name, last name, email, or phone",
           filterLabel: "Preferred Contact",
           filterOptions: ["all", "text", "email"],
+          sortOptions: [
+            { value: "name", label: "Client Name" },
+            { value: "lastName", label: "Last Name" },
+            { value: "email", label: "Email" },
+          ],
+          groupOptions: [
+            { value: "letter", label: "Alphabet" },
+            { value: "preferredContactMethod", label: "Preferred Contact" },
+          ],
         };
     }
   }, [validArchiveType]);
@@ -88,6 +121,22 @@ export default function ArchivePage() {
             .join(" ")
             .toLowerCase()
             .includes(normalizedSearchTerm);
+        })
+        .sort((a, b) => {
+          const aValue =
+            sortValue === "lastName"
+              ? a.lastName
+              : sortValue === "email"
+                ? a.email
+                : `${a.firstName} ${a.lastName}`;
+          const bValue =
+            sortValue === "lastName"
+              ? b.lastName
+              : sortValue === "email"
+                ? b.email
+                : `${b.firstName} ${b.lastName}`;
+          const direction = sortDirection === "asc" ? 1 : -1;
+          return aValue.localeCompare(bValue, undefined, { sensitivity: "base" }) * direction;
         });
     }
 
@@ -107,6 +156,24 @@ export default function ArchivePage() {
             .join(" ")
             .toLowerCase()
             .includes(normalizedSearchTerm);
+        })
+        .sort((a, b) => {
+          const aOwner = owners.find((owner) => owner.id === a.ownerId);
+          const bOwner = owners.find((owner) => owner.id === b.ownerId);
+          const aValue =
+            sortValue === "owner"
+              ? `${aOwner?.lastName ?? ""} ${aOwner?.firstName ?? ""}`.trim()
+              : sortValue === "breed"
+                ? a.breed
+                : a.name;
+          const bValue =
+            sortValue === "owner"
+              ? `${bOwner?.lastName ?? ""} ${bOwner?.firstName ?? ""}`.trim()
+              : sortValue === "breed"
+                ? b.breed
+                : b.name;
+          const direction = sortDirection === "asc" ? 1 : -1;
+          return aValue.localeCompare(bValue, undefined, { sensitivity: "base" }) * direction;
         });
     }
 
@@ -128,8 +195,30 @@ export default function ArchivePage() {
           .join(" ")
           .toLowerCase()
           .includes(normalizedSearchTerm);
+      })
+      .sort((a, b) => {
+        const aOwner = owners.find((record) => record.id === a.ownerId);
+        const bOwner = owners.find((record) => record.id === b.ownerId);
+        const aPet = pets.find((record) => record.id === a.petId);
+        const bPet = pets.find((record) => record.id === b.petId);
+        const direction = sortDirection === "asc" ? 1 : -1;
+
+        if (sortValue === "date") {
+          return (new Date(a.start).getTime() - new Date(b.start).getTime()) * direction;
+        }
+
+        const aValue =
+          sortValue === "client"
+            ? `${aOwner?.lastName ?? ""} ${aOwner?.firstName ?? ""}`.trim()
+            : aPet?.name ?? "";
+        const bValue =
+          sortValue === "client"
+            ? `${bOwner?.lastName ?? ""} ${bOwner?.firstName ?? ""}`.trim()
+            : bPet?.name ?? "";
+
+        return aValue.localeCompare(bValue, undefined, { sensitivity: "base" }) * direction;
       });
-  }, [appointments, filterValue, normalizedSearchTerm, owners, pets, validArchiveType]);
+  }, [appointments, filterValue, normalizedSearchTerm, owners, pets, sortDirection, sortValue, validArchiveType]);
 
   const totalPages = Math.max(1, Math.ceil(archivedItems.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -137,6 +226,63 @@ export default function ArchivePage() {
     (safePage - 1) * PAGE_SIZE,
     safePage * PAGE_SIZE,
   );
+
+  const groupedItems = useMemo(() => {
+    const groups = new Map<string, Array<Owner | Pet | Appointment>>();
+
+    pagedItems.forEach((item) => {
+      let label = "Other";
+
+      if (validArchiveType === "clients") {
+        const owner = item as Owner;
+        label =
+          groupValue === "preferredContactMethod"
+            ? owner.preferredContactMethod === "text"
+              ? "Text"
+              : "Email"
+            : (sortValue === "lastName" ? owner.lastName : owner.firstName)
+                .charAt(0)
+                .toUpperCase() || "#";
+      } else if (validArchiveType === "pets") {
+        const pet = item as Pet;
+        const owner = owners.find((record) => record.id === pet.ownerId);
+        label =
+          groupValue === "species"
+            ? pet.species.charAt(0).toUpperCase() + pet.species.slice(1)
+            : groupValue === "owner"
+              ? `${owner?.firstName ?? ""} ${owner?.lastName ?? ""}`.trim() || "Unknown Owner"
+              : (sortValue === "owner"
+                  ? owner?.lastName ?? ""
+                  : sortValue === "breed"
+                    ? pet.breed
+                    : pet.name)
+                  .charAt(0)
+                  .toUpperCase() || "#";
+      } else {
+        const appointment = item as Appointment;
+        const owner = owners.find((record) => record.id === appointment.ownerId);
+        label =
+          groupValue === "status"
+            ? appointment.status
+            : groupValue === "client"
+              ? `${owner?.lastName ?? ""}${owner?.lastName ? ", " : ""}${owner?.firstName ?? ""}`.trim() ||
+                "Unknown Client"
+              : new Date(appointment.start).toLocaleString(undefined, {
+                  month: "long",
+                  year: "numeric",
+                });
+      }
+
+      const currentGroup = groups.get(label) ?? [];
+      currentGroup.push(item);
+      groups.set(label, currentGroup);
+    });
+
+    return Array.from(groups.entries()).map(([label, items]) => ({
+      label,
+      items,
+    }));
+  }, [groupValue, owners, pagedItems, sortValue, validArchiveType]);
 
   const selectedItem = useMemo(() => {
     if (!selectedItemId) return null;
@@ -246,37 +392,114 @@ export default function ArchivePage() {
       </div>
 
       <Card className="shadow-sm mb-4">
-        <Card.Body>
-          <div className="d-flex flex-column flex-lg-row gap-3 align-items-stretch align-items-lg-end">
-            <Form.Group className="flex-grow-1">
-              <Form.Label>{pageConfig.searchLabel}</Form.Label>
-              <Form.Control
-                type="search"
-                value={searchTerm}
-                onChange={(event) => {
-                  setSearchTerm(event.target.value);
-                  setPage(1);
-                }}
-                placeholder={pageConfig.searchPlaceholder}
-              />
-            </Form.Group>
+        <Card.Body className="search-panel-card">
+          <div className="search-panel-header">
+            <Form
+              className="search-panel-main"
+              onSubmit={(event) => event.preventDefault()}
+            >
+              <Form.Group>
+                <Form.Label>{pageConfig.searchLabel}</Form.Label>
+                <div className="search-panel-input-row">
+                  <Form.Control
+                    type="search"
+                    value={searchTerm}
+                    onChange={(event) => {
+                      setSearchTerm(event.target.value);
+                      setPage(1);
+                    }}
+                    placeholder={pageConfig.searchPlaceholder}
+                  />
+                  <Button type="submit" variant="primary" aria-label="Search archives">
+                    <span aria-hidden="true" className="search-panel-icon">
+                      ⌕
+                    </span>
+                  </Button>
+                </div>
+              </Form.Group>
+            </Form>
+          </div>
 
-            <Form.Group className="client-sort-group">
-              <Form.Label>{pageConfig.filterLabel}</Form.Label>
-              <Form.Select
-                value={filterValue}
-                onChange={(event) => {
-                  setFilterValue(event.target.value);
-                  setPage(1);
-                }}
+          <Collapse in={showControls}>
+            <div id="archive-search-controls" className="search-panel-controls">
+              <div className="search-panel-control-grid">
+                <Form.Group className="client-sort-group">
+                  <Form.Label>{pageConfig.filterLabel}</Form.Label>
+                  <Form.Select
+                    value={filterValue}
+                    onChange={(event) => {
+                      setFilterValue(event.target.value);
+                      setPage(1);
+                    }}
+                  >
+                    {pageConfig.filterOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option === "all" ? `All ${pageConfig.filterLabel}` : option}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+
+                <Form.Group className="client-sort-group">
+                  <Form.Label>Sort Field</Form.Label>
+                  <Form.Select
+                    value={sortValue}
+                    onChange={(event) => setSortValue(event.target.value)}
+                  >
+                    {pageConfig.sortOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+
+                <Form.Group className="client-sort-group">
+                  <Form.Label>Sort Order</Form.Label>
+                  <Form.Select
+                    value={sortDirection}
+                    onChange={(event) =>
+                      setSortDirection(event.target.value as "asc" | "desc")
+                    }
+                  >
+                    <option value="asc">Ascending</option>
+                    <option value="desc">Descending</option>
+                  </Form.Select>
+                </Form.Group>
+
+                <Form.Group className="client-sort-group">
+                  <Form.Label>Group By</Form.Label>
+                  <Form.Select
+                    value={groupValue}
+                    onChange={(event) => setGroupValue(event.target.value)}
+                  >
+                    {pageConfig.groupOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              </div>
+            </div>
+          </Collapse>
+
+          <div className="search-panel-corner">
+            <Button
+              variant={showControls ? "primary" : "outline-secondary"}
+              className="search-panel-toggle"
+              onClick={() => setShowControls((current) => !current)}
+              aria-expanded={showControls}
+              aria-controls="archive-search-controls"
+              aria-label={showControls ? "Hide filters and sort" : "Show filters and sort"}
+            >
+              <span
+                aria-hidden="true"
+                className={`search-panel-caret${showControls ? " search-panel-caret-open" : ""}`}
               >
-                {pageConfig.filterOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option === "all" ? `All ${pageConfig.filterLabel}` : option}
-                  </option>
-                ))}
-              </Form.Select>
-            </Form.Group>
+                ▾
+              </span>
+            </Button>
           </div>
         </Card.Body>
       </Card>
@@ -288,7 +511,7 @@ export default function ArchivePage() {
               <Card.Title className="mb-1">Archived Items</Card.Title>
               <p className="text-muted small mb-0">
                 Showing {archivedItems.length} archived item
-                {archivedItems.length === 1 ? "" : "s"}.
+                {archivedItems.length === 1 ? "" : "s"}, sorted by {sortValue} and grouped by {groupValue}.
               </p>
             </div>
             <Button
@@ -305,8 +528,12 @@ export default function ArchivePage() {
               No archived items match the current search and filter.
             </Alert>
           ) : (
-            <ListGroup variant="flush" className="appointment-list-group">
-              {pagedItems.map((item) => {
+            <div className="directory-group-stack">
+              {groupedItems.map((group) => (
+                <section key={group.label} className="directory-group-section">
+                  <div className="directory-group-heading">{group.label}</div>
+                  <ListGroup variant="flush" className="appointment-list-group">
+                    {group.items.map((item) => {
                 const itemId = item.id;
                 const isSelected = selectedItemId === itemId;
 
@@ -320,8 +547,11 @@ export default function ArchivePage() {
                     {renderItem(item)}
                   </ListGroup.Item>
                 );
-              })}
-            </ListGroup>
+                    })}
+                  </ListGroup>
+                </section>
+              ))}
+            </div>
           )}
 
           <div className="d-flex justify-content-between align-items-center gap-2 mt-3">

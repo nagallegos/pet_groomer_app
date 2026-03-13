@@ -8,6 +8,7 @@ interface PetFormModalProps {
   onHide: () => void;
   owners: Owner[];
   initialPet?: Pet | null;
+  lockedOwnerId?: string;
   onSaved?: (pet: Pet, mode: "mock" | "api") => void;
 }
 
@@ -16,6 +17,7 @@ export default function PetFormModal({
   onHide,
   owners,
   initialPet = null,
+  lockedOwnerId,
   onSaved,
 }: PetFormModalProps) {
   const [ownerId, setOwnerId] = useState("");
@@ -33,11 +35,15 @@ export default function PetFormModal({
     () => owners.filter((owner) => !owner.isArchived),
     [owners],
   );
+  const lockedOwner = useMemo(
+    () => activeOwners.find((owner) => owner.id === lockedOwnerId) ?? null,
+    [activeOwners, lockedOwnerId],
+  );
 
   useEffect(() => {
     if (!show) return;
 
-    setOwnerId(initialPet?.ownerId ?? activeOwners[0]?.id ?? "");
+    setOwnerId(lockedOwnerId ?? initialPet?.ownerId ?? activeOwners[0]?.id ?? "");
     setName(initialPet?.name ?? "");
     setSpecies(initialPet?.species ?? "dog");
     setBreed(initialPet?.breed ?? "");
@@ -46,7 +52,7 @@ export default function PetFormModal({
     setColor(initialPet?.color ?? "");
     setNotes(initialPet?.notes.map((note) => note.text).join("\n") ?? "");
     setSaveError(null);
-  }, [activeOwners, initialPet, show]);
+  }, [activeOwners, initialPet, lockedOwnerId, show]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -77,7 +83,7 @@ export default function PetFormModal({
 
   return (
     <Modal show={show} onHide={onHide} centered fullscreen="sm-down">
-      <Form onSubmit={handleSubmit}>
+      <Form onSubmit={handleSubmit} className="modal-form-shell">
         <Modal.Header closeButton>
           <Modal.Title>{initialPet ? "Edit Pet" : "Add New Pet"}</Modal.Title>
         </Modal.Header>
@@ -98,17 +104,29 @@ export default function PetFormModal({
 
           <Form.Group className="mb-3">
             <Form.Label>Owner</Form.Label>
-            <Form.Select
-              value={ownerId}
-              onChange={(e) => setOwnerId(e.target.value)}
-              required
-            >
-              {activeOwners.map((owner) => (
-                <option key={owner.id} value={owner.id}>
-                  {owner.firstName} {owner.lastName}
-                </option>
-              ))}
-            </Form.Select>
+            {lockedOwner ? (
+              <>
+                <Form.Control
+                  value={`${lockedOwner.firstName} ${lockedOwner.lastName}`}
+                  readOnly
+                  plaintext={false}
+                  disabled
+                />
+                <Form.Text muted>This pet will be added to this client.</Form.Text>
+              </>
+            ) : (
+              <Form.Select
+                value={ownerId}
+                onChange={(e) => setOwnerId(e.target.value)}
+                required
+              >
+                {activeOwners.map((owner) => (
+                  <option key={owner.id} value={owner.id}>
+                    {owner.firstName} {owner.lastName}
+                  </option>
+                ))}
+              </Form.Select>
+            )}
           </Form.Group>
 
           <Form.Group className="mb-3">

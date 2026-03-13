@@ -11,6 +11,7 @@ export interface NoteItem {
   id: string;
   text: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Owner {

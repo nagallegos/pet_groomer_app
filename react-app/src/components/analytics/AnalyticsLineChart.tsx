@@ -93,16 +93,16 @@ export default function AnalyticsLineChart({
 
       <details className="analytics-details">
         <summary className="analytics-details-summary">{detailsLabel}</summary>
-        <div className="analytics-chart-labels">
+        <ul className="analytics-chart-labels" aria-label={detailsLabel}>
           {points.map((point, index) => (
-            <div key={`${point.label}-${index}`} className="analytics-chart-label-item">
+            <li key={`${point.label}-${index}`} className="analytics-chart-label-item">
               <span className="analytics-chart-label-text">{point.label}</span>
               <span className="analytics-chart-label-value">
                 {formatValue(point.value)}
               </span>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       </details>
     </div>
   );

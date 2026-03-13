@@ -5,7 +5,7 @@ import {
   APPOINTMENT_SERVICE_OPTIONS,
   derivePrimaryServiceType,
 } from "../../lib/appointmentServices";
-import { saveAppointment } from "../../lib/crmApi";
+import { isBackendConfigured, saveAppointment } from "../../lib/crmApi";
 import type { Appointment, Owner, Pet } from "../../types/models";
 
 interface AppointmentFormModalProps {
@@ -138,12 +138,23 @@ export default function AppointmentFormModal({
 
   return (
     <Modal show={show} onHide={onHide} centered fullscreen="sm-down">
-      <Form onSubmit={handleSubmit}>
+      <Form onSubmit={handleSubmit} className="modal-form-shell">
         <Modal.Header closeButton>
-          <Modal.Title>Schedule Appointment</Modal.Title>
+          <div className="w-100 d-flex justify-content-between align-items-start gap-3">
+            <div>
+              <Modal.Title>Schedule Appointment</Modal.Title>
+              <span className="mode-indicator mode-indicator-edit">Create Appointment</span>
+            </div>
+          </div>
         </Modal.Header>
 
         <Modal.Body>
+          {!isBackendConfigured() && (
+            <Alert variant="info" className="mb-3">
+              MongoDB backend not configured yet. Saves are currently local UI previews only.
+            </Alert>
+          )}
+
           {saveError && (
             <Alert variant="danger" className="mb-3">
               {saveError}
@@ -188,43 +199,49 @@ export default function AppointmentFormModal({
             </Form.Select>
           </Form.Group>
 
-          <Form.Group className="mb-3">
-            <Form.Label id="dateLabel">Date</Form.Label>
-            <Form.Control
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              required
-              title="Select appointment date"
-              aria-labelledby="dateLabel"
-            />
-          </Form.Group>
+          <div className="row g-3">
+            <div className="col-sm-6">
+              <Form.Group>
+                <Form.Label id="dateLabel">Date</Form.Label>
+                <Form.Control
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  required
+                  title="Select appointment date"
+                  aria-labelledby="dateLabel"
+                />
+              </Form.Group>
+            </div>
+            <div className="col-sm-3 col-6">
+              <Form.Group>
+                <Form.Label id="startTimeLabel">Start Time</Form.Label>
+                <Form.Control
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  required
+                  title="Select appointment start time"
+                  aria-labelledby="startTimeLabel"
+                />
+              </Form.Group>
+            </div>
+            <div className="col-sm-3 col-6">
+              <Form.Group>
+                <Form.Label id="endTimeLabel">End Time</Form.Label>
+                <Form.Control
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  required
+                  title="Select appointment end time"
+                  aria-labelledby="endTimeLabel"
+                />
+              </Form.Group>
+            </div>
+          </div>
 
-          <Form.Group className="mb-3">
-            <Form.Label id="startTimeLabel">Start Time</Form.Label>
-            <Form.Control
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              required
-              title="Select appointment start time"
-              aria-labelledby="startTimeLabel"
-            />
-          </Form.Group>
-
-          <Form.Group className="mb-3">
-            <Form.Label id="endTimeLabel">End Time</Form.Label>
-            <Form.Control
-              type="time"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              required
-              title="Select appointment end time"
-              aria-labelledby="endTimeLabel"
-            />
-          </Form.Group>
-
-          <Form.Group className="mb-3">
+          <Form.Group className="mt-3 mb-3">
             <Form.Label id="serviceTypeLabel">Services</Form.Label>
             <div
               className="service-option-grid"

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button, Card } from "react-bootstrap";
-import { Link } from "react-router-dom";
+import { Button, Card, Modal } from "react-bootstrap";
 import {
   Calendar,
   dateFnsLocalizer,
@@ -53,44 +52,82 @@ interface NewAppointmentDraft {
   endTime: string;
 }
 
+const CALENDAR_STATUS_LEGEND: Array<{
+  label: string;
+  dotClassName: string;
+}> = [
+  { label: "Scheduled", dotClassName: "appointment-status-dot-scheduled" },
+  { label: "Confirmed", dotClassName: "appointment-status-dot-confirmed" },
+  { label: "Completed", dotClassName: "appointment-status-dot-completed" },
+  { label: "Cancelled", dotClassName: "appointment-status-dot-cancelled" },
+  { label: "No Show", dotClassName: "appointment-status-dot-no-show" },
+];
+
+function CalendarStatusLegend({ compact = false }: { compact?: boolean }) {
+  return (
+    <div
+      className={`schedule-calendar-legend${compact ? " schedule-calendar-legend-compact" : ""}`}
+      aria-label="Appointment status legend"
+    >
+      {CALENDAR_STATUS_LEGEND.map((item) => (
+        <span key={item.label} className="schedule-calendar-legend-item">
+          <span
+            aria-hidden="true"
+            className={`appointment-status-dot ${item.dotClassName}`}
+          />
+          <span>{item.label}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 const MOBILE_BREAKPOINT = 768;
+const MOBILE_LANDSCAPE_HEIGHT_BREAKPOINT = 500;
+
+function isCompactMobileViewport() {
+  return (
+    window.innerWidth < MOBILE_BREAKPOINT ||
+    (window.innerHeight <= MOBILE_LANDSCAPE_HEIGHT_BREAKPOINT && window.innerWidth < 1100)
+  );
+}
 
 function getAppointmentStatusTheme(status: Appointment["status"]) {
   switch (status) {
     case "confirmed":
       return {
-        background: "#6c9a71",
-        border: "#4f7b55",
+        background: "#5f9c74",
+        border: "#48825d",
         text: "#f7fff8",
         dotClassName: "appointment-status-dot-confirmed",
       };
     case "completed":
       return {
-        background: "#98a8a2",
-        border: "#788983",
+        background: "#86939c",
+        border: "#6d7a83",
         text: "#f8fbfa",
         dotClassName: "appointment-status-dot-completed",
       };
     case "cancelled":
       return {
-        background: "#ca6d6b",
-        border: "#aa4f4c",
+        background: "#c85f66",
+        border: "#a94a50",
         text: "#fff8f8",
         dotClassName: "appointment-status-dot-cancelled",
       };
     case "no-show":
       return {
-        background: "#e3b24f",
-        border: "#bb8a25",
+        background: "#d9a441",
+        border: "#b98624",
         text: "#4f3a12",
         dotClassName: "appointment-status-dot-no-show",
       };
     case "scheduled":
     default:
       return {
-        background: "#2f6b5c",
-        border: "#1f5145",
-        text: "#f4fffb",
+        background: "#7f63c8",
+        border: "#684cb2",
+        text: "#fbf9ff",
         dotClassName: "appointment-status-dot-scheduled",
       };
   }
@@ -101,6 +138,8 @@ function MobileAgendaStyleEvent({
   onEdit,
 }: EventProps<CalendarEvent> & { onEdit: (event: CalendarEvent) => void }) {
   const statusTheme = getAppointmentStatusTheme(event.resource.status);
+  const owner = mockOwners.find((record) => record.id === event.resource.ownerId);
+  const ownerName = owner ? `${owner.firstName} ${owner.lastName}`.trim() : "";
 
   return (
     <div className="agenda-event-row">
@@ -112,14 +151,15 @@ function MobileAgendaStyleEvent({
         <div>
           <div className="agenda-event-title">{event.title}</div>
           <div className="agenda-event-meta">
-            {formatAppointmentServices(event.resource)} • {event.resource.status}
+            {ownerName ? `${ownerName} • ` : ""}
+            {formatAppointmentServices(event.resource)}
           </div>
         </div>
       </div>
 
       <Button
         size="sm"
-        variant="outline-secondary"
+        variant="link"
         className="agenda-event-edit-btn"
         onClick={(clickEvent) => {
           clickEvent.stopPropagation();
@@ -132,15 +172,28 @@ function MobileAgendaStyleEvent({
   );
 }
 
+function CalendarPetEventChip({ event }: EventProps<CalendarEvent>) {
+  const petName =
+    mockPets.find((pet) => pet.id === event.resource.petId)?.name ?? "Pet";
+  return <span>{petName}</span>;
+}
+
+function CalendarEventChip({ event }: EventProps<CalendarEvent>) {
+  const petName = event.title.split(" â€¢ ")[0];
+  return <span>{petName}</span>;
+}
+
+void CalendarEventChip;
+
 export default function SchedulePage() {
   const { showToast } = useAppToast();
   const isLoading = useInitialLoading();
 
   const getInitialView = (): CalendarViewName =>
-    window.innerWidth < MOBILE_BREAKPOINT ? Views.DAY : Views.MONTH;
+    isCompactMobileViewport() ? Views.DAY : Views.MONTH;
 
   const [isMobile, setIsMobile] = useState(
-    () => window.innerWidth < MOBILE_BREAKPOINT,
+    () => isCompactMobileViewport(),
   );
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [currentView, setCurrentView] = useState<CalendarViewName>(
@@ -149,6 +202,7 @@ export default function SchedulePage() {
   const [appointments, setAppointments] = useState<Appointment[]>(mockAppointments);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showMobileCalendar, setShowMobileCalendar] = useState(false);
   const [selectedAppointment, setSelectedAppointment] =
     useState<Appointment | null>(null);
   const [appointmentPendingDelete, setAppointmentPendingDelete] =
@@ -166,7 +220,7 @@ export default function SchedulePage() {
 
   useEffect(() => {
     const handleResize = () => {
-      const mobile = window.innerWidth < MOBILE_BREAKPOINT;
+      const mobile = isCompactMobileViewport();
       setIsMobile(mobile);
 
       setCurrentView((prev) => {
@@ -177,8 +231,8 @@ export default function SchedulePage() {
           return prev;
         }
 
-        if (prev === "three_day") {
-          return Views.DAY;
+        if (prev === "three_day" || prev === Views.AGENDA) {
+          return Views.MONTH;
         }
 
         return prev;
@@ -294,7 +348,7 @@ export default function SchedulePage() {
     ? ({
         day: true,
         three_day: ThreeDayView,
-        month: true,
+        agenda: true,
       } as const)
     : ({
         month: true,
@@ -302,6 +356,68 @@ export default function SchedulePage() {
         work_week: TuesdaySaturdayWorkWeekView,
         day: true,
       } as const);
+
+  const calendarView = (
+    <div
+      className={`calendar-scroll schedule-calendar-shell schedule-calendar-shell-${currentView.replace(
+        "_",
+        "-",
+      )}`}
+    >
+      <Calendar
+        localizer={localizer}
+        events={calendarEvents}
+        startAccessor="start"
+        endAccessor="end"
+        selectable
+        popup
+        date={currentDate}
+        view={currentView as View}
+        onNavigate={(date) => setCurrentDate(date)}
+        onView={(view) => setCurrentView(view as CalendarViewName)}
+        defaultView={getInitialView() as View}
+        className="schedule-calendar"
+        style={{ height: isMobile ? 560 : 750 }}
+        onSelectSlot={handleSelectSlot}
+        onSelectEvent={handleSelectEvent}
+        eventPropGetter={(event) => {
+          if (currentView === Views.AGENDA) {
+            return {
+              style: {
+                backgroundColor: "transparent",
+                borderColor: "transparent",
+                color: "inherit",
+                boxShadow: "none",
+              },
+            };
+          }
+
+          const statusTheme = getAppointmentStatusTheme(event.resource.status);
+
+          return {
+            style: {
+              backgroundColor: statusTheme.background,
+              borderColor: statusTheme.border,
+              color: statusTheme.text,
+            },
+          };
+        }}
+        components={{
+          toolbar: CustomCalendarToolbar,
+          event: CalendarPetEventChip,
+          agenda: {
+            event: (props) => (
+              <MobileAgendaStyleEvent
+                {...props}
+                onEdit={(event) => handleOpenAppointment(event.resource)}
+              />
+            ),
+          },
+        }}
+        views={availableViews as never}
+      />
+    </div>
+  );
 
   if (isLoading) {
     return <PageLoader label="Loading schedule..." />;
@@ -314,7 +430,7 @@ export default function SchedulePage() {
           <p className="page-kicker mb-2">Appointments</p>
           <h2 className="mb-1">Schedule Appointments</h2>
           <p className="text-muted mb-0">
-            Mobile opens in day view with an additional compact 3-day view.
+            Mobile opens in day view with additional 3-day and agenda views.
           </p>
         </div>
 
@@ -327,63 +443,47 @@ export default function SchedulePage() {
         </Button>
       </div>
 
-      <Card className="shadow-sm schedule-calendar-card mb-4">
-        <Card.Body className="calendar-card-body">
-          <div
-            className={`calendar-scroll schedule-calendar-shell schedule-calendar-shell-${currentView.replace(
-              "_",
-              "-",
-            )}`}
-          >
-            <Calendar
-              localizer={localizer}
-              events={calendarEvents}
-              startAccessor="start"
-              endAccessor="end"
-              selectable
-              popup
-              date={currentDate}
-              view={currentView as View}
-              onNavigate={(date) => setCurrentDate(date)}
-              onView={(view) => setCurrentView(view as CalendarViewName)}
-              defaultView={getInitialView() as View}
-              className="schedule-calendar"
-              style={{ height: isMobile ? 560 : 750 }}
-              onSelectSlot={handleSelectSlot}
-              onSelectEvent={handleSelectEvent}
-              eventPropGetter={(event) => {
-                const statusTheme = getAppointmentStatusTheme(event.resource.status);
+      {isMobile ? (
+      <Card className="shadow-sm schedule-calendar-card schedule-calendar-launcher-card mb-4">
+          <Card.Body className="calendar-card-body">
+            <div className="schedule-calendar-launcher">
+              <div>
+                <Card.Title className="mb-1">Calendar</Card.Title>
+                <p className="text-muted small mb-0">
+                  Open the calendar in a focused view without the page scroll fighting the time grid.
+                </p>
+                <div className="mt-2">
+                  <CalendarStatusLegend compact />
+                </div>
+              </div>
 
-                return {
-                  style: {
-                    backgroundColor: statusTheme.background,
-                    borderColor: statusTheme.border,
-                    color: statusTheme.text,
-                  },
-                };
-              }}
-              components={{
-                toolbar: CustomCalendarToolbar,
-                agenda: {
-                  event: (props) => (
-                    <MobileAgendaStyleEvent
-                      {...props}
-                      onEdit={(event) => handleOpenAppointment(event.resource)}
-                    />
-                  ),
-                },
-              }}
-              views={availableViews as never}
-            />
-          </div>
-        </Card.Body>
-      </Card>
-
-      <div className="d-flex justify-content-end mb-3">
-        <Link className="btn btn-outline-primary" to="/appointments/history">
-          View Appointment History
-        </Link>
-      </div>
+              <Button variant="outline-primary" onClick={() => setShowMobileCalendar(true)}>
+                View Calendar
+              </Button>
+            </div>
+          </Card.Body>
+        </Card>
+      ) : (
+        <Card className="shadow-sm schedule-calendar-card mb-4">
+          <Card.Body className="calendar-card-body">
+            <div className="schedule-calendar-card-header">
+              <div className="schedule-calendar-card-header-main">
+                <Card.Title className="mb-0">Calendar</Card.Title>
+                <CalendarStatusLegend />
+              </div>
+              <Button
+                variant="outline-primary"
+                size="sm"
+                className="schedule-calendar-fullscreen-btn"
+                onClick={() => setShowMobileCalendar(true)}
+              >
+                Fullscreen
+              </Button>
+            </div>
+            {calendarView}
+          </Card.Body>
+        </Card>
+      )}
 
       <PaginatedAppointmentList
         appointments={appointments}
@@ -391,6 +491,25 @@ export default function SchedulePage() {
         pets={mockPets}
         onAppointmentClick={handleOpenAppointment}
       />
+
+      <Modal
+        show={showMobileCalendar}
+        onHide={() => setShowMobileCalendar(false)}
+        fullscreen
+        className="schedule-calendar-modal"
+      >
+        <Modal.Header closeButton>
+          <div className="schedule-calendar-modal-header-content">
+            <div>
+              <Modal.Title>Calendar</Modal.Title>
+              <div className="mt-2">
+                <CalendarStatusLegend compact={isMobile} />
+              </div>
+            </div>
+          </div>
+        </Modal.Header>
+        <Modal.Body>{calendarView}</Modal.Body>
+      </Modal>
 
       <AppointmentFormModal
         show={showCreateModal}

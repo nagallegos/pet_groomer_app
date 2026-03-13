@@ -70,7 +70,7 @@ export default function ClientFormModal({
 
   return (
     <Modal show={show} onHide={onHide} centered fullscreen="sm-down">
-      <Form onSubmit={handleSubmit}>
+      <Form onSubmit={handleSubmit} className="modal-form-shell">
         <Modal.Header closeButton>
           <Modal.Title>
             {initialOwner ? "Edit Client" : "Add New Client"}

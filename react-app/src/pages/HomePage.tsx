@@ -104,31 +104,31 @@ export default function HomePage() {
 
   return (
     <>
-      <div className="page-header d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+      <div className="page-header home-page-header d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
         <div>
           <p className="page-kicker mb-2">Home</p>
           <h2 className="mb-1">Studio Overview</h2>
-          <p className="text-muted mb-0">
+          <p className="text-muted mb-0 home-page-subtitle">
             A quick view of clients, pets, and the upcoming grooming schedule.
           </p>
         </div>
       </div>
 
-      <Row className="g-4 mb-4">
-        {dashboardStats.map((stat) => (
-          <Col xs={12} sm={6} xl={4} key={stat.label}>
-            <Card className={`shadow-sm dashboard-stat-card dashboard-stat-${stat.tone}`}>
-              <Card.Body>
-                <p className="dashboard-stat-label mb-2">{stat.label}</p>
-                <div className="dashboard-stat-value">{stat.value}</div>
-              </Card.Body>
-            </Card>
-          </Col>
-        ))}
-      </Row>
+      <Row className="g-4 home-overview-grid">
+        <Col xs={12} xl={9}>
+          <Row className="g-3 mb-4 home-dashboard-stats">
+            {dashboardStats.map((stat) => (
+              <Col xs={6} xl={4} key={stat.label}>
+                <Card className={`shadow-sm dashboard-stat-card dashboard-stat-${stat.tone} home-dashboard-stat-card`}>
+                  <Card.Body>
+                    <p className="dashboard-stat-label mb-2">{stat.label}</p>
+                    <div className="dashboard-stat-value">{stat.value}</div>
+                  </Card.Body>
+                </Card>
+              </Col>
+            ))}
+          </Row>
 
-      <Row className="g-4">
-        <Col xs={12} xl={8}>
           <UpcomingAppointments
             appointments={mockAppointments}
             owners={mockOwners}
@@ -136,7 +136,7 @@ export default function HomePage() {
           />
         </Col>
 
-        <Col xs={12} xl={4}>
+        <Col xs={12} xl={3} className="home-sidebar-stack">
           <Card className="shadow-sm mb-4">
             <Card.Body>
               <Card.Title className="mb-2">Quick Actions</Card.Title>

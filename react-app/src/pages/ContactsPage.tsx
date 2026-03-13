@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Button, Card, Form } from "react-bootstrap";
+import { Button, Card, Collapse, Form } from "react-bootstrap";
 import { useAppToast } from "../components/common/AppToastProvider";
 import PageLoader from "../components/common/PageLoader";
 import ClientGrid from "../components/clients/ClientGrid";
@@ -25,6 +25,7 @@ export default function ContactsPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [viewMode, setViewMode] = useState<ClientViewMode>("card");
+  const [showControls, setShowControls] = useState(false);
 
   const normalizedSearchInput = searchInput.trim().toLowerCase();
   const normalizedActiveSearchTerm = activeSearchTerm.trim().toLowerCase();
@@ -58,6 +59,22 @@ export default function ContactsPage() {
       return sortDirection === "asc" ? fallbackComparison : -fallbackComparison;
     });
   }, [normalizedActiveSearchTerm, owners, sortDirection, sortField]);
+
+  const groupedOwners = useMemo(() => {
+    const groups = new Map<string, Owner[]>();
+
+    filteredAndSortedOwners.forEach((owner) => {
+      const groupKey = owner[sortField].charAt(0).toUpperCase() || "#";
+      const currentGroup = groups.get(groupKey) ?? [];
+      currentGroup.push(owner);
+      groups.set(groupKey, currentGroup);
+    });
+
+    return Array.from(groups.entries()).map(([label, items]) => ({
+      label,
+      items,
+    }));
+  }, [filteredAndSortedOwners, sortField]);
 
   const searchSuggestions = useMemo(() => {
     if (!normalizedSearchInput) return [];
@@ -132,15 +149,15 @@ export default function ContactsPage() {
       </div>
 
       <Card className="shadow-sm mb-4">
-        <Card.Body>
-          <div className="d-flex flex-column flex-lg-row gap-3 align-items-stretch align-items-lg-end">
+        <Card.Body className="search-panel-card">
+          <div className="search-panel-header">
             <Form
-              className="client-search-group flex-grow-1 position-relative"
+              className="client-search-group search-panel-main position-relative"
               onSubmit={handleSearchSubmit}
             >
               <Form.Group>
                 <Form.Label>Search Clients</Form.Label>
-                <div className="d-flex gap-2">
+                <div className="search-panel-input-row">
                   <Form.Control
                     type="search"
                     value={searchInput}
@@ -155,8 +172,10 @@ export default function ContactsPage() {
                     }}
                     placeholder="Search by first or last name"
                   />
-                  <Button type="submit" variant="primary">
-                    Search
+                  <Button type="submit" variant="primary" aria-label="Search clients">
+                    <span aria-hidden="true" className="search-panel-icon">
+                      ⌕
+                    </span>
                   </Button>
                 </div>
               </Form.Group>
@@ -183,56 +202,63 @@ export default function ContactsPage() {
                   </div>
                 )}
             </Form>
-
-            <Form.Group className="client-sort-group">
-              <Form.Label>Sort Field</Form.Label>
-              <Form.Select
-                value={sortField}
-                onChange={(event) => setSortField(event.target.value as SortField)}
-              >
-                <option value="firstName">First Name</option>
-                <option value="lastName">Last Name</option>
-              </Form.Select>
-            </Form.Group>
-
-            <Form.Group className="client-sort-group">
-              <Form.Label>Sort Order</Form.Label>
-              <Form.Select
-                value={sortDirection}
-                onChange={(event) =>
-                  setSortDirection(event.target.value as SortDirection)
-                }
-              >
-                <option value="asc">Ascending</option>
-                <option value="desc">Descending</option>
-              </Form.Select>
-            </Form.Group>
-
-            <Form.Group className="client-view-group">
-              <Form.Label>View</Form.Label>
-              <div className="client-view-toggle">
-                <Button
-                  variant={viewMode === "card" ? "primary" : "outline-primary"}
-                  onClick={() => setViewMode("card")}
-                >
-                  Card View
-                </Button>
-                <Button
-                  variant={viewMode === "list" ? "primary" : "outline-primary"}
-                  onClick={() => setViewMode("list")}
-                >
-                  List View
-                </Button>
-              </div>
-            </Form.Group>
           </div>
+
+          <Collapse in={showControls}>
+            <div id="contact-search-controls" className="search-panel-controls">
+              <div className="search-panel-control-grid">
+                <Form.Group className="client-sort-group">
+                  <Form.Label>Sort Field</Form.Label>
+                  <Form.Select
+                    value={sortField}
+                    onChange={(event) => setSortField(event.target.value as SortField)}
+                  >
+                    <option value="firstName">First Name</option>
+                    <option value="lastName">Last Name</option>
+                  </Form.Select>
+                </Form.Group>
+
+                <Form.Group className="client-sort-group">
+                  <Form.Label>Sort Order</Form.Label>
+                  <Form.Select
+                    value={sortDirection}
+                    onChange={(event) =>
+                      setSortDirection(event.target.value as SortDirection)
+                    }
+                  >
+                    <option value="asc">Ascending</option>
+                    <option value="desc">Descending</option>
+                  </Form.Select>
+                </Form.Group>
+
+                <Form.Group className="client-view-group">
+                  <Form.Label>View</Form.Label>
+                  <div className="client-view-toggle">
+                    <Button
+                      variant={viewMode === "card" ? "primary" : "outline-primary"}
+                      onClick={() => setViewMode("card")}
+                    >
+                      Card View
+                    </Button>
+                    <Button
+                      variant={viewMode === "list" ? "primary" : "outline-primary"}
+                      onClick={() => setViewMode("list")}
+                    >
+                      List View
+                    </Button>
+                  </div>
+                </Form.Group>
+              </div>
+            </div>
+          </Collapse>
 
           <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mt-3">
             <p className="text-muted small mb-0">
               Showing {filteredAndSortedOwners.length} client
               {filteredAndSortedOwners.length === 1 ? "" : "s"} sorted by{" "}
               {sortField === "firstName" ? "first name" : "last name"}{" "}
-              {sortDirection === "asc" ? "ascending" : "descending"}.
+              {sortDirection === "asc" ? "ascending" : "descending"} and grouped by{" "}
+              {sortField === "firstName" ? "first" : "last"}-name letter.
             </p>
 
             {activeSearchTerm && (
@@ -249,14 +275,39 @@ export default function ContactsPage() {
               </Button>
             )}
           </div>
+
+          <div className="search-panel-corner">
+            <Button
+              variant={showControls ? "primary" : "outline-secondary"}
+              className="search-panel-toggle"
+              onClick={() => setShowControls((current) => !current)}
+              aria-expanded={showControls}
+              aria-controls="contact-search-controls"
+              aria-label={showControls ? "Hide filters and sort" : "Show filters and sort"}
+            >
+              <span
+                aria-hidden="true"
+                className={`search-panel-caret${showControls ? " search-panel-caret-open" : ""}`}
+              >
+                ▾
+              </span>
+            </Button>
+          </div>
         </Card.Body>
       </Card>
 
-      <ClientGrid
-        owners={filteredAndSortedOwners}
-        onClientClick={setSelectedClient}
-        viewMode={viewMode}
-      />
+      <div className="directory-group-stack">
+        {groupedOwners.map((group) => (
+          <section key={group.label} className="directory-group-section">
+            <div className="directory-group-heading">{group.label}</div>
+            <ClientGrid
+              owners={group.items}
+              onClientClick={setSelectedClient}
+              viewMode={viewMode}
+            />
+          </section>
+        ))}
+      </div>
 
       <ClientQuickViewModal
         show={!!selectedClient}
@@ -264,6 +315,14 @@ export default function ContactsPage() {
         pets={selectedClientPets}
         appointments={selectedClientAppointments}
         onHide={() => setSelectedClient(null)}
+        onOwnerUpdated={(updatedOwner) => {
+          setOwners((currentOwners) =>
+            currentOwners.map((owner) =>
+              owner.id === updatedOwner.id ? updatedOwner : owner,
+            ),
+          );
+          setSelectedClient(updatedOwner);
+        }}
         onOwnerArchived={(ownerId) => {
           setOwners((currentOwners) =>
             currentOwners.filter((owner) => owner.id !== ownerId),

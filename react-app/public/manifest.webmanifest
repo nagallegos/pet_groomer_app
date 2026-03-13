@@ -1,0 +1,29 @@
+{
+  "name": "Barks Bubbles & Love",
+  "short_name": "Barks",
+  "description": "Dog grooming CRM for appointments, clients, pets, and scheduling.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7efff",
+  "theme_color": "#9b79ca",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

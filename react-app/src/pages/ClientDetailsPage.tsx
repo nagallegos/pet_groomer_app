@@ -1,17 +1,37 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button, Card, Col, ListGroup, Row } from "react-bootstrap";
+import { Alert, Button, Card, Col, Dropdown, Form, ListGroup, Modal, Row, Spinner } from "react-bootstrap";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import AppointmentFormModal from "../components/appointments/AppointmentFormModal";
 import AppointmentDetailsModal from "../components/appointments/AppointmentDetailsModal";
-import ClientFormModal from "../components/clients/ClientFormModal";
 import { useAppToast } from "../components/common/AppToastProvider";
+import ClientContactActions from "../components/common/ClientContactActions";
 import ConfirmDeleteModal from "../components/common/ConfirmDeleteModal";
 import PageLoader from "../components/common/PageLoader";
 import PetFormModal from "../components/pets/PetFormModal";
 import { mockAppointments, mockOwners, mockPets } from "../data/mockData";
 import useInitialLoading from "../hooks/useInitialLoading";
-import { archiveOwner, archivePet, deleteOwner, deletePet } from "../lib/crmApi";
-import type { Appointment, Owner, Pet } from "../types/models";
+import {
+  archiveOwner,
+  archivePet,
+  deleteOwner,
+  deletePet,
+  isBackendConfigured,
+  saveOwner,
+  type OwnerUpsertInput,
+} from "../lib/crmApi";
+import type { Appointment, ContactMethod, NoteItem, Owner, Pet } from "../types/models";
+
+type ClientNoteEntityType = "client" | "pet" | "appointment";
+
+interface ClientTimelineNote {
+  id: string;
+  entityId: string;
+  entityType: ClientNoteEntityType;
+  entityLabel: string;
+  text: string;
+  createdAt: string;
+  updatedAt?: string;
+}
 
 export default function ClientDetailsPage() {
   const navigate = useNavigate();
@@ -36,7 +56,6 @@ export default function ClientDetailsPage() {
 
   const [owner, setOwner] = useState<Owner | null>(initialOwner);
   const [pets, setPets] = useState<Pet[]>(initialPets);
-  const [showEditClientModal, setShowEditClientModal] = useState(false);
   const [showEditPetModal, setShowEditPetModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showDeleteClientModal, setShowDeleteClientModal] = useState(false);
@@ -50,6 +69,23 @@ export default function ClientDetailsPage() {
     useState<Appointment | null>(null);
   const [showAppointmentDetailsModal, setShowAppointmentDetailsModal] =
     useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [preferredContactMethod, setPreferredContactMethod] =
+    useState<ContactMethod>("text");
+  const [address, setAddress] = useState("");
+  const [isSavingClient, setIsSavingClient] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [notesEditMode, setNotesEditMode] = useState(false);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [selectedNoteEntityType, setSelectedNoteEntityType] =
+    useState<ClientNoteEntityType>("client");
+  const [selectedNoteEntityId, setSelectedNoteEntityId] = useState("");
+  const [noteText, setNoteText] = useState("");
 
   useEffect(() => {
     setOwner(initialOwner);
@@ -63,6 +99,94 @@ export default function ClientDetailsPage() {
     setClientAppointments(appointments);
   }, [appointments]);
 
+  useEffect(() => {
+    if (!owner) {
+      return;
+    }
+
+    setFirstName(owner.firstName);
+    setLastName(owner.lastName);
+    setPhone(owner.phone);
+    setEmail(owner.email);
+    setPreferredContactMethod(owner.preferredContactMethod);
+    setAddress(owner.address ?? "");
+    setSaveError(null);
+    setSelectedNoteEntityId(owner.id);
+  }, [owner]);
+
+  const noteTargets = useMemo(
+    () =>
+      owner
+        ? [
+            {
+              entityType: "client" as const,
+              entityId: owner.id,
+              label: `${owner.firstName} ${owner.lastName} (Client)`,
+            },
+            ...pets.map((pet) => ({
+              entityType: "pet" as const,
+              entityId: pet.id,
+              label: `${pet.name} (Pet)`,
+            })),
+            ...clientAppointments.map((appointment) => {
+              const appointmentPet = pets.find((pet) => pet.id === appointment.petId);
+              return {
+                entityType: "appointment" as const,
+                entityId: appointment.id,
+                label: `${appointmentPet?.name ?? "Pet"} Appointment ${new Date(appointment.start).toLocaleDateString()}`,
+              };
+            }),
+          ]
+        : [],
+    [clientAppointments, owner, pets],
+  );
+
+  const timelineNotes = useMemo<ClientTimelineNote[]>(
+    () =>
+      owner
+        ? [
+        ...owner.notes.map((note) => ({
+          id: note.id,
+          entityId: owner.id,
+          entityType: "client" as const,
+          entityLabel: `${owner.firstName} ${owner.lastName}`,
+          text: note.text,
+          createdAt: note.createdAt,
+          updatedAt: note.updatedAt,
+        })),
+        ...pets.flatMap((pet) =>
+          pet.notes.map((note) => ({
+            id: note.id,
+            entityId: pet.id,
+            entityType: "pet" as const,
+            entityLabel: pet.name,
+            text: note.text,
+            createdAt: note.createdAt,
+            updatedAt: note.updatedAt,
+          })),
+        ),
+        ...clientAppointments.flatMap((appointment) => {
+          const appointmentPet = pets.find((pet) => pet.id === appointment.petId);
+
+          return appointment.notes.map((note) => ({
+            id: note.id,
+            entityId: appointment.id,
+            entityType: "appointment" as const,
+            entityLabel: `${appointmentPet?.name ?? "Pet"} • ${new Date(appointment.start).toLocaleDateString()}`,
+            text: note.text,
+            createdAt: note.createdAt,
+            updatedAt: note.updatedAt,
+          }));
+        }),
+          ].sort(
+            (left, right) =>
+              new Date(right.updatedAt ?? right.createdAt).getTime() -
+              new Date(left.updatedAt ?? left.createdAt).getTime(),
+          )
+        : [],
+    [clientAppointments, owner, pets],
+  );
+
   if (isLoading) {
     return <PageLoader label="Loading client profile..." />;
   }
@@ -70,6 +194,161 @@ export default function ClientDetailsPage() {
   if (!owner) {
     return <div>Client not found.</div>;
   }
+
+  const handleSaveClient = async () => {
+    setIsSavingClient(true);
+    setSaveError(null);
+
+    const payload: OwnerUpsertInput = {
+      firstName,
+      lastName,
+      phone,
+      email,
+      preferredContactMethod,
+      address,
+      notes: owner.notes.map((note) => note.text).join("\n\n"),
+    };
+
+    try {
+      const result = await saveOwner(payload, owner);
+      setOwner({
+        ...result.data,
+        notes: owner.notes,
+      });
+      showToast({
+        title: "Client Updated",
+        body:
+          result.mode === "api"
+            ? "Client updated in backend."
+            : "Client changes saved in mock mode.",
+        variant: "success",
+      });
+      setIsEditMode(false);
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : "Unable to save client changes.",
+      );
+    } finally {
+      setIsSavingClient(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setFirstName(owner.firstName);
+    setLastName(owner.lastName);
+    setPhone(owner.phone);
+    setEmail(owner.email);
+    setPreferredContactMethod(owner.preferredContactMethod);
+    setAddress(owner.address ?? "");
+    setSaveError(null);
+    setIsEditMode(false);
+  };
+
+  const resetNotesEditor = () => {
+    setNotesEditMode(false);
+    setSelectedNoteId(null);
+    setSelectedNoteEntityType("client");
+    setSelectedNoteEntityId(owner.id);
+    setNoteText("");
+  };
+
+  const openNewNoteEditor = () => {
+    setSelectedNoteId(null);
+    setSelectedNoteEntityType("client");
+    setSelectedNoteEntityId(owner.id);
+    setNoteText("");
+    setNotesEditMode(true);
+  };
+
+  const openEditNoteEditor = (note: ClientTimelineNote) => {
+    setSelectedNoteId(note.id);
+    setSelectedNoteEntityType(note.entityType);
+    setSelectedNoteEntityId(note.entityId);
+    setNoteText(note.text);
+    setNotesEditMode(true);
+  };
+
+  const updateEntityNotes = (
+    existingNotes: NoteItem[],
+    entityType: ClientNoteEntityType,
+    entityId: string,
+  ) => {
+    const timestamp = new Date().toISOString();
+
+    if (selectedNoteId) {
+      return existingNotes.map((note) =>
+        note.id === selectedNoteId
+          ? {
+              ...note,
+              text: noteText.trim(),
+              updatedAt: timestamp,
+            }
+          : note,
+      );
+    }
+
+    if (entityType !== selectedNoteEntityType || entityId !== selectedNoteEntityId) {
+      return existingNotes;
+    }
+
+    return [
+      {
+        id: `${entityType}-note-${Date.now()}`,
+        text: noteText.trim(),
+        createdAt: timestamp,
+      },
+      ...existingNotes,
+    ];
+  };
+
+  const handleSaveNote = () => {
+    if (!noteText.trim()) {
+      return;
+    }
+
+    if (selectedNoteEntityType === "client") {
+      setOwner((currentOwner) =>
+        currentOwner
+          ? {
+              ...currentOwner,
+              notes: updateEntityNotes(currentOwner.notes, "client", currentOwner.id),
+            }
+          : currentOwner,
+      );
+    }
+
+    if (selectedNoteEntityType === "pet") {
+      setPets((currentPets) =>
+        currentPets.map((pet) =>
+          pet.id === selectedNoteEntityId
+            ? {
+                ...pet,
+                notes: updateEntityNotes(pet.notes, "pet", pet.id),
+              }
+            : pet,
+        ),
+      );
+    }
+
+    if (selectedNoteEntityType === "appointment") {
+      setClientAppointments((currentAppointments) =>
+        currentAppointments.map((appointment) =>
+          appointment.id === selectedNoteEntityId
+            ? {
+                ...appointment,
+                notes: updateEntityNotes(
+                  appointment.notes,
+                  "appointment",
+                  appointment.id,
+                ),
+              }
+            : appointment,
+        ),
+      );
+    }
+
+    resetNotesEditor();
+  };
 
   return (
     <div>
@@ -82,34 +361,67 @@ export default function ClientDetailsPage() {
           <p className="text-muted mb-0">Client record and pet history</p>
         </div>
 
-        <div className="page-actions d-flex gap-2 flex-wrap">
-          <Button
-            variant="outline-secondary"
-            onClick={() => setShowEditClientModal(true)}
-          >
-            Edit Client
-          </Button>
-          <Button
-            variant="warning"
-            className="action-button-wide"
-            onClick={() => setShowArchiveClientModal(true)}
-          >
-            Archive Client
-          </Button>
-          <Button
-            variant="outline-danger"
-            className="icon-action-button"
-            onClick={() => setShowDeleteClientModal(true)}
-            aria-label="Delete client"
-            title="Delete client"
-          >
-            <svg aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" width="16" height="16">
-              <path d="M6.5 1h3l.5 1H13a.5.5 0 0 1 0 1h-.6l-.7 9.1A2 2 0 0 1 9.7 14H6.3a2 2 0 0 1-2-1.9L3.6 3H3a.5.5 0 0 1 0-1h3zm-1.2 2 .7 9.1a1 1 0 0 0 1 .9h3.4a1 1 0 0 0 1-.9L10.7 3zM6 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 6 5m4.5.5v5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 1 0M8 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 8 5" />
-            </svg>
-          </Button>
-          <Button variant="primary" onClick={() => setShowScheduleModal(true)}>
-            Schedule Appointment
-          </Button>
+        <div className="page-actions d-flex gap-2 flex-wrap align-items-center">
+          <span className={`mode-indicator${isEditMode ? " mode-indicator-edit" : ""}`}>
+            {isEditMode ? "Edit Mode" : "View Mode"}
+          </span>
+
+          {isEditMode ? (
+            <>
+              <Button
+                variant="outline-secondary"
+                onClick={handleCancelEdit}
+                disabled={isSavingClient}
+              >
+                Cancel Edit
+              </Button>
+              <Button
+                variant="outline-secondary"
+                onClick={() => setShowNotesModal(true)}
+              >
+                View Notes
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => void handleSaveClient()}
+                disabled={isSavingClient}
+              >
+                {isSavingClient && (
+                  <Spinner animation="border" size="sm" className="me-2" />
+                )}
+                Save Client
+              </Button>
+            </>
+          ) : (
+            <>
+              <Dropdown align="end">
+              <Dropdown.Toggle variant="outline-secondary">
+                Actions
+              </Dropdown.Toggle>
+              <Dropdown.Menu>
+                <Dropdown.Item onClick={() => setIsEditMode(true)}>
+                  Edit Client
+                </Dropdown.Item>
+                <Dropdown.Item onClick={() => setShowNotesModal(true)}>
+                  View Notes
+                </Dropdown.Item>
+                <Dropdown.Item onClick={() => setShowScheduleModal(true)}>
+                  Schedule Appointment
+                </Dropdown.Item>
+                  <Dropdown.Divider />
+                  <Dropdown.Item onClick={() => setShowArchiveClientModal(true)}>
+                    Archive Client
+                  </Dropdown.Item>
+                  <Dropdown.Item
+                    className="text-danger"
+                    onClick={() => setShowDeleteClientModal(true)}
+                  >
+                    Delete Client
+                  </Dropdown.Item>
+                </Dropdown.Menu>
+              </Dropdown>
+            </>
+          )}
         </div>
       </div>
 
@@ -118,28 +430,93 @@ export default function ClientDetailsPage() {
           <Card className="shadow-sm">
             <Card.Body>
               <Card.Title>Owner Information</Card.Title>
-              <p className="mb-1">
-                <strong>Phone:</strong> {owner.phone}
-              </p>
-              <p className="mb-1">
-                <strong>Email:</strong> {owner.email}
-              </p>
-              <p className="mb-1">
-                <strong>Address:</strong> {owner.address ?? "—"}
-              </p>
-              <p className="mb-3">
-                <strong>Preferred Contact:</strong> {owner.preferredContactMethod}
-              </p>
 
-              <h6>Notes</h6>
-              {owner.notes.length === 0 ? (
-                <p className="text-muted mb-0">No notes.</p>
+              {isEditMode ? (
+                <>
+                  {!isBackendConfigured() && (
+                    <Alert variant="info" className="mb-3">
+                      MongoDB backend not configured yet. Saves are currently local UI previews only.
+                    </Alert>
+                  )}
+
+                  {saveError && (
+                    <Alert variant="danger" className="mb-3">
+                      {saveError}
+                    </Alert>
+                  )}
+
+                  <Form.Group className="mb-3">
+                    <Form.Label>First Name</Form.Label>
+                    <Form.Control
+                      value={firstName}
+                      onChange={(event) => setFirstName(event.target.value)}
+                    />
+                  </Form.Group>
+
+                  <Form.Group className="mb-3">
+                    <Form.Label>Last Name</Form.Label>
+                    <Form.Control
+                      value={lastName}
+                      onChange={(event) => setLastName(event.target.value)}
+                    />
+                  </Form.Group>
+
+                  <Form.Group className="mb-3">
+                    <Form.Label>Phone</Form.Label>
+                    <Form.Control
+                      value={phone}
+                      onChange={(event) => setPhone(event.target.value)}
+                    />
+                  </Form.Group>
+
+                  <Form.Group className="mb-3">
+                    <Form.Label>Email</Form.Label>
+                    <Form.Control
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                    />
+                  </Form.Group>
+
+                  <Form.Group className="mb-3">
+                    <Form.Label>Preferred Contact</Form.Label>
+                    <Form.Select
+                      value={preferredContactMethod}
+                      onChange={(event) =>
+                        setPreferredContactMethod(event.target.value as ContactMethod)
+                      }
+                    >
+                      <option value="text">Text</option>
+                      <option value="email">Email</option>
+                    </Form.Select>
+                  </Form.Group>
+
+                  <Form.Group className="mb-3">
+                    <Form.Label>Address</Form.Label>
+                    <Form.Control
+                      value={address}
+                      onChange={(event) => setAddress(event.target.value)}
+                    />
+                  </Form.Group>
+
+                </>
               ) : (
-                <ListGroup>
-                  {owner.notes.map((note) => (
-                    <ListGroup.Item key={note.id}>{note.text}</ListGroup.Item>
-                  ))}
-                </ListGroup>
+                <>
+                  <p className="mb-1">
+                    <strong>Contact:</strong>
+                  </p>
+                  <ClientContactActions phone={owner.phone} email={owner.email} stacked />
+                  <p className="mb-1">
+                    <strong>Address:</strong> {owner.address ?? "—"}
+                  </p>
+                  <p className="mb-3">
+                    <strong>Preferred Contact:</strong> {owner.preferredContactMethod}
+                  </p>
+
+                  <p className="mb-0">
+                    <strong>Notes:</strong> {timelineNotes.length} total across client, pets, and appointments.
+                  </p>
+                </>
               )}
             </Card.Body>
           </Card>
@@ -150,16 +527,18 @@ export default function ClientDetailsPage() {
             <Card.Body>
               <div className="d-flex justify-content-between align-items-center mb-3">
                 <Card.Title className="mb-0">Pets</Card.Title>
-                <Button
-                  size="sm"
-                  variant="primary"
-                  onClick={() => {
-                    setSelectedPet(null);
-                    setShowEditPetModal(true);
-                  }}
-                >
-                  Add Pet
-                </Button>
+                {isEditMode && (
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => {
+                      setSelectedPet(null);
+                      setShowEditPetModal(true);
+                    }}
+                  >
+                    Add Pet
+                  </Button>
+                )}
               </div>
 
               {pets.length === 0 ? (
@@ -168,52 +547,55 @@ export default function ClientDetailsPage() {
                 <ListGroup>
                   {pets.map((pet) => (
                     <ListGroup.Item key={pet.id}>
-                      <div className="d-flex justify-content-between align-items-center">
+                      <div className="d-flex justify-content-between align-items-start gap-3">
                         <div>
                           <strong>{pet.name}</strong> — {pet.species}, {pet.breed}
                         </div>
-                        <div className="d-flex gap-2">
-                          <Link to={`/pets/${pet.id}`}>
-                            <Button size="sm" variant="outline-primary">
-                              View
-                            </Button>
+                        <div className="pet-row-actions">
+                          <Link to={`/pets/${pet.id}`} className="pet-row-indicator-link">
+                            <span className="pet-row-indicator">View</span>
                           </Link>
-                          <Button
-                            size="sm"
-                            variant="outline-secondary"
-                            onClick={() => {
-                              setSelectedPet(pet);
-                              setShowEditPetModal(true);
-                            }}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="warning"
-                            className="action-button-wide"
-                            onClick={() => {
-                              setSelectedPet(pet);
-                              setShowArchivePetModal(true);
-                            }}
-                          >
-                            Archive
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline-danger"
-                            className="icon-action-button"
-                            onClick={() => {
-                              setSelectedPet(pet);
-                              setShowDeletePetModal(true);
-                            }}
-                            aria-label={`Delete ${pet.name}`}
-                            title={`Delete ${pet.name}`}
-                          >
-                            <svg aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" width="16" height="16">
-                              <path d="M6.5 1h3l.5 1H13a.5.5 0 0 1 0 1h-.6l-.7 9.1A2 2 0 0 1 9.7 14H6.3a2 2 0 0 1-2-1.9L3.6 3H3a.5.5 0 0 1 0-1h3zm-1.2 2 .7 9.1a1 1 0 0 0 1 .9h3.4a1 1 0 0 0 1-.9L10.7 3zM6 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 6 5m4.5.5v5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 1 0M8 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 8 5" />
-                            </svg>
-                          </Button>
+
+                          {isEditMode && (
+                            <>
+                              <button
+                                type="button"
+                                className="pet-row-indicator-button"
+                                onClick={() => {
+                                  setSelectedPet(pet);
+                                  setShowEditPetModal(true);
+                                }}
+                              >
+                                <span className="pet-row-indicator">Edit</span>
+                              </button>
+                              <Button
+                                size="sm"
+                                variant="warning"
+                                className="action-button-wide"
+                                onClick={() => {
+                                  setSelectedPet(pet);
+                                  setShowArchivePetModal(true);
+                                }}
+                              >
+                                Archive
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-danger"
+                                className="icon-action-button"
+                                onClick={() => {
+                                  setSelectedPet(pet);
+                                  setShowDeletePetModal(true);
+                                }}
+                                aria-label={`Delete ${pet.name}`}
+                                title={`Delete ${pet.name}`}
+                              >
+                                <svg aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" width="16" height="16">
+                                  <path d="M6.5 1h3l.5 1H13a.5.5 0 0 1 0 1h-.6l-.7 9.1A2 2 0 0 1 9.7 14H6.3a2 2 0 0 1-2-1.9L3.6 3H3a.5.5 0 0 1 0-1h3zm-1.2 2 .7 9.1a1 1 0 0 0 1 .9h3.4a1 1 0 0 0 1-.9L10.7 3zM6 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 6 5m4.5.5v5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 1 0M8 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 8 5" />
+                                </svg>
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </ListGroup.Item>
@@ -255,26 +637,12 @@ export default function ClientDetailsPage() {
         </Col>
       </Row>
 
-      <ClientFormModal
-        show={showEditClientModal}
-        onHide={() => setShowEditClientModal(false)}
-        initialOwner={owner}
-        onSaved={(updatedOwner) => {
-          setOwner(updatedOwner);
-          showToast({
-            title: "Client Updated",
-            body: "Client changes saved and ready for backend persistence.",
-            variant: "success",
-          });
-          setShowEditClientModal(false);
-        }}
-      />
-
       <PetFormModal
         show={showEditPetModal}
         onHide={() => setShowEditPetModal(false)}
         owners={mockOwners}
         initialPet={selectedPet}
+        lockedOwnerId={selectedPet ? undefined : owner.id}
         onSaved={(updatedPet) => {
           setPets((currentPets) => {
             const existingPetIndex = currentPets.findIndex(
@@ -452,7 +820,7 @@ export default function ClientDetailsPage() {
             title: "Pet Deleted",
             body:
               result.mode === "api"
-                ? "Pet deleted from backend."
+                ? "Pet deleted in backend."
                 : "Pet deleted in mock mode.",
             variant: "warning",
           });
@@ -460,6 +828,137 @@ export default function ClientDetailsPage() {
           setSelectedPet(null);
         }}
       />
+
+      <Modal
+        show={showNotesModal}
+        onHide={() => {
+          setShowNotesModal(false);
+          resetNotesEditor();
+        }}
+        centered
+        fullscreen="sm-down"
+      >
+        <Modal.Header closeButton>
+          <div className="w-100 d-flex justify-content-between align-items-start gap-3">
+            <div>
+              <Modal.Title>Client Notes</Modal.Title>
+              <span className={`mode-indicator${notesEditMode ? " mode-indicator-edit" : ""}`}>
+                {notesEditMode ? "Edit Mode" : "View Mode"}
+              </span>
+            </div>
+
+            {!notesEditMode && (
+              <Dropdown align="end">
+                <Dropdown.Toggle variant="outline-secondary" size="sm">
+                  Actions
+                </Dropdown.Toggle>
+                <Dropdown.Menu>
+                  <Dropdown.Item onClick={openNewNoteEditor}>Add Note</Dropdown.Item>
+                </Dropdown.Menu>
+              </Dropdown>
+            )}
+          </div>
+        </Modal.Header>
+        <Modal.Body>
+          {notesEditMode ? (
+            <>
+              {!selectedNoteId && (
+                <Form.Group className="mb-3">
+                  <Form.Label>Attach Note To</Form.Label>
+                  <Form.Select
+                    value={`${selectedNoteEntityType}:${selectedNoteEntityId}`}
+                    onChange={(event) => {
+                      const [entityType, entityId] = event.target.value.split(":");
+                      setSelectedNoteEntityType(entityType as ClientNoteEntityType);
+                      setSelectedNoteEntityId(entityId);
+                    }}
+                  >
+                    {noteTargets.map((target) => (
+                      <option
+                        key={`${target.entityType}:${target.entityId}`}
+                        value={`${target.entityType}:${target.entityId}`}
+                      >
+                        {target.label}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              )}
+
+              {selectedNoteId && (
+                <p className="text-muted small">
+                  Editing note on{" "}
+                  {
+                    noteTargets.find(
+                      (target) =>
+                        target.entityType === selectedNoteEntityType &&
+                        target.entityId === selectedNoteEntityId,
+                    )?.label
+                  }
+                </p>
+              )}
+
+              <Form.Group>
+                <Form.Label>Note</Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={6}
+                  value={noteText}
+                  onChange={(event) => setNoteText(event.target.value)}
+                  placeholder="Enter note details..."
+                />
+              </Form.Group>
+            </>
+          ) : timelineNotes.length === 0 ? (
+            <p className="text-muted mb-0">No notes have been added to this client, pets, or appointments.</p>
+          ) : (
+            <ListGroup>
+              {timelineNotes.map((note) => (
+                <ListGroup.Item key={`${note.entityType}-${note.entityId}-${note.id}`}>
+                  <div className="d-flex justify-content-between align-items-start gap-3">
+                    <div className="client-note-item">
+                      <div className="client-note-meta">
+                        <span className={`client-note-type client-note-type-${note.entityType}`}>
+                          {note.entityType}
+                        </span>
+                        <span>{note.entityLabel}</span>
+                        <span>
+                          {new Date(note.createdAt).toLocaleString()}
+                          {note.updatedAt ? ` • Updated ${new Date(note.updatedAt).toLocaleString()}` : ""}
+                        </span>
+                      </div>
+                      <div>{note.text}</div>
+                    </div>
+                    <button
+                      type="button"
+                      className="pet-row-indicator-button"
+                      onClick={() => openEditNoteEditor(note)}
+                    >
+                      <span className="pet-row-indicator">Edit</span>
+                    </button>
+                  </div>
+                </ListGroup.Item>
+              ))}
+            </ListGroup>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          {notesEditMode ? (
+            <>
+              <Button variant="outline-secondary" onClick={resetNotesEditor}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleSaveNote} disabled={!noteText.trim()}>
+                Save Note
+              </Button>
+            </>
+          ) : (
+            <Button variant="secondary" onClick={() => setShowNotesModal(false)}>
+              Close
+            </Button>
+          )}
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

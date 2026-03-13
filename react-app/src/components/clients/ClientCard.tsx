@@ -1,4 +1,5 @@
 import { Button, Card } from "react-bootstrap";
+import ClientContactActions from "../common/ClientContactActions";
 import type { Owner } from "../../types/models";
 
 interface ClientCardProps {
@@ -14,8 +15,7 @@ export default function ClientCard({ owner, onClick }: ClientCardProps) {
           {owner.firstName} {owner.lastName}
         </Card.Title>
 
-        <Card.Text className="mb-1">{owner.phone}</Card.Text>
-        <Card.Text className="mb-1 text-break">{owner.email}</Card.Text>
+        <ClientContactActions phone={owner.phone} email={owner.email} stacked />
         <Card.Text className="text-muted small mb-3">
           Preferred: {owner.preferredContactMethod}
         </Card.Text>
