@@ -1,25 +1,41 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Card, Col, Dropdown, Form, ListGroup, Modal, Row, Spinner } from "react-bootstrap";
+import { Alert, Button, Card, Col, Collapse, Dropdown, Form, ListGroup, Modal, Row, Spinner } from "react-bootstrap";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import AppointmentFormModal from "../components/appointments/AppointmentFormModal";
 import AppointmentDetailsModal from "../components/appointments/AppointmentDetailsModal";
+import AppointmentFormModal from "../components/appointments/AppointmentFormModal";
+import { useAppData } from "../components/common/AppDataProvider";
 import { useAppToast } from "../components/common/AppToastProvider";
 import ClientContactActions from "../components/common/ClientContactActions";
 import ConfirmDeleteModal from "../components/common/ConfirmDeleteModal";
 import PageLoader from "../components/common/PageLoader";
 import PetFormModal from "../components/pets/PetFormModal";
-import { mockAppointments, mockOwners, mockPets } from "../data/mockData";
+import PetQuickViewModal from "../components/pets/PetQuickViewModal";
 import useInitialLoading from "../hooks/useInitialLoading";
 import {
+  addAppointmentNote,
+  addOwnerNote,
+  addPetNote,
+  archiveAppointmentNote,
   archiveOwner,
+  archiveOwnerNote,
   archivePet,
+  archivePetNote,
+  deleteAppointmentNoteItem,
   deleteOwner,
+  deleteOwnerNoteItem,
   deletePet,
+  deletePetNoteItem,
   isBackendConfigured,
   saveOwner,
+  unarchiveAppointmentNote,
+  unarchiveOwnerNote,
+  unarchivePetNote,
+  updateAppointmentNote,
+  updateOwnerNote,
+  updatePetNote,
   type OwnerUpsertInput,
 } from "../lib/crmApi";
-import type { Appointment, ContactMethod, NoteItem, Owner, Pet } from "../types/models";
+import type { Appointment, ContactMethod, Owner, Pet } from "../types/models";
 
 type ClientNoteEntityType = "client" | "pet" | "appointment";
 
@@ -31,28 +47,27 @@ interface ClientTimelineNote {
   text: string;
   createdAt: string;
   updatedAt?: string;
+  isArchived?: boolean;
+  archivedAt?: string;
 }
 
 export default function ClientDetailsPage() {
   const navigate = useNavigate();
   const { showToast } = useAppToast();
   const isLoading = useInitialLoading();
+  const {
+    owners,
+    pets: allPets,
+    appointments: allAppointments,
+    setOwners,
+    setPets: setAllPets,
+    setAppointments: setAllAppointments,
+  } = useAppData();
   const { clientId } = useParams();
 
-  const initialOwner = useMemo(
-    () => mockOwners.find((item) => item.id === clientId) ?? null,
-    [clientId],
-  );
-
-  const initialPets = useMemo(
-    () => mockPets.filter((pet) => pet.ownerId === clientId),
-    [clientId],
-  );
-
-  const appointments = useMemo(
-    () => mockAppointments.filter((appt) => appt.ownerId === clientId),
-    [clientId],
-  );
+  const initialOwner = useMemo(() => owners.find((item) => item.id === clientId) ?? null, [clientId, owners]);
+  const initialPets = useMemo(() => allPets.filter((pet) => pet.ownerId === clientId && !pet.isArchived), [allPets, clientId]);
+  const appointments = useMemo(() => allAppointments.filter((appt) => appt.ownerId === clientId && !appt.isArchived), [allAppointments, clientId]);
 
   const [owner, setOwner] = useState<Owner | null>(initialOwner);
   const [pets, setPets] = useState<Pet[]>(initialPets);
@@ -63,47 +78,36 @@ export default function ClientDetailsPage() {
   const [showDeletePetModal, setShowDeletePetModal] = useState(false);
   const [showArchivePetModal, setShowArchivePetModal] = useState(false);
   const [selectedPet, setSelectedPet] = useState<Pet | null>(null);
-  const [clientAppointments, setClientAppointments] =
-    useState<Appointment[]>(appointments);
-  const [selectedAppointment, setSelectedAppointment] =
-    useState<Appointment | null>(null);
-  const [showAppointmentDetailsModal, setShowAppointmentDetailsModal] =
-    useState(false);
+  const [viewingPet, setViewingPet] = useState<Pet | null>(null);
+  const [clientAppointments, setClientAppointments] = useState<Appointment[]>(appointments);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [showAppointmentDetailsModal, setShowAppointmentDetailsModal] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [preferredContactMethod, setPreferredContactMethod] =
-    useState<ContactMethod>("text");
+  const [preferredContactMethod, setPreferredContactMethod] = useState<ContactMethod>("text");
   const [address, setAddress] = useState("");
   const [isSavingClient, setIsSavingClient] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [notesEditMode, setNotesEditMode] = useState(false);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
-  const [selectedNoteEntityType, setSelectedNoteEntityType] =
-    useState<ClientNoteEntityType>("client");
+  const [selectedNoteEntityType, setSelectedNoteEntityType] = useState<ClientNoteEntityType>("client");
   const [selectedNoteEntityId, setSelectedNoteEntityId] = useState("");
   const [noteText, setNoteText] = useState("");
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [noteSaveError, setNoteSaveError] = useState<string | null>(null);
+  const [showArchivedNotes, setShowArchivedNotes] = useState(false);
+  const [isApplyingNoteAction, setIsApplyingNoteAction] = useState(false);
+
+  useEffect(() => setOwner(initialOwner), [initialOwner]);
+  useEffect(() => setPets(initialPets), [initialPets]);
+  useEffect(() => setClientAppointments(appointments), [appointments]);
 
   useEffect(() => {
-    setOwner(initialOwner);
-  }, [initialOwner]);
-
-  useEffect(() => {
-    setPets(initialPets);
-  }, [initialPets]);
-
-  useEffect(() => {
-    setClientAppointments(appointments);
-  }, [appointments]);
-
-  useEffect(() => {
-    if (!owner) {
-      return;
-    }
-
+    if (!owner) return;
     setFirstName(owner.firstName);
     setLastName(owner.lastName);
     setPhone(owner.phone);
@@ -118,16 +122,8 @@ export default function ClientDetailsPage() {
     () =>
       owner
         ? [
-            {
-              entityType: "client" as const,
-              entityId: owner.id,
-              label: `${owner.firstName} ${owner.lastName} (Client)`,
-            },
-            ...pets.map((pet) => ({
-              entityType: "pet" as const,
-              entityId: pet.id,
-              label: `${pet.name} (Pet)`,
-            })),
+            { entityType: "client" as const, entityId: owner.id, label: `${owner.firstName} ${owner.lastName} (Client)` },
+            ...pets.map((pet) => ({ entityType: "pet" as const, entityId: pet.id, label: `${pet.name} (Pet)` })),
             ...clientAppointments.map((appointment) => {
               const appointmentPet = pets.find((pet) => pet.id === appointment.petId);
               return {
@@ -145,39 +141,44 @@ export default function ClientDetailsPage() {
     () =>
       owner
         ? [
-        ...owner.notes.map((note) => ({
-          id: note.id,
-          entityId: owner.id,
-          entityType: "client" as const,
-          entityLabel: `${owner.firstName} ${owner.lastName}`,
-          text: note.text,
-          createdAt: note.createdAt,
-          updatedAt: note.updatedAt,
-        })),
-        ...pets.flatMap((pet) =>
-          pet.notes.map((note) => ({
-            id: note.id,
-            entityId: pet.id,
-            entityType: "pet" as const,
-            entityLabel: pet.name,
-            text: note.text,
-            createdAt: note.createdAt,
-            updatedAt: note.updatedAt,
-          })),
-        ),
-        ...clientAppointments.flatMap((appointment) => {
-          const appointmentPet = pets.find((pet) => pet.id === appointment.petId);
-
-          return appointment.notes.map((note) => ({
-            id: note.id,
-            entityId: appointment.id,
-            entityType: "appointment" as const,
-            entityLabel: `${appointmentPet?.name ?? "Pet"} • ${new Date(appointment.start).toLocaleDateString()}`,
-            text: note.text,
-            createdAt: note.createdAt,
-            updatedAt: note.updatedAt,
-          }));
-        }),
+            ...owner.notes.map((note) => ({
+              id: note.id,
+              entityId: owner.id,
+              entityType: "client" as const,
+              entityLabel: `${owner.firstName} ${owner.lastName}`,
+              text: note.text,
+              createdAt: note.createdAt,
+              updatedAt: note.updatedAt,
+              isArchived: note.isArchived,
+              archivedAt: note.archivedAt,
+            })),
+            ...pets.flatMap((pet) =>
+              pet.notes.map((note) => ({
+                id: note.id,
+                entityId: pet.id,
+                entityType: "pet" as const,
+                entityLabel: pet.name,
+                text: note.text,
+                createdAt: note.createdAt,
+                updatedAt: note.updatedAt,
+                isArchived: note.isArchived,
+                archivedAt: note.archivedAt,
+              })),
+            ),
+            ...clientAppointments.flatMap((appointment) => {
+              const appointmentPet = pets.find((pet) => pet.id === appointment.petId);
+              return appointment.notes.map((note) => ({
+                id: note.id,
+                entityId: appointment.id,
+                entityType: "appointment" as const,
+                entityLabel: `${appointmentPet?.name ?? "Pet"} | ${new Date(appointment.start).toLocaleDateString()}`,
+                text: note.text,
+                createdAt: note.createdAt,
+                updatedAt: note.updatedAt,
+                isArchived: note.isArchived,
+                archivedAt: note.archivedAt,
+              }));
+            }),
           ].sort(
             (left, right) =>
               new Date(right.updatedAt ?? right.createdAt).getTime() -
@@ -187,6 +188,15 @@ export default function ClientDetailsPage() {
     [clientAppointments, owner, pets],
   );
 
+  const activeTimelineNotes = useMemo(() => timelineNotes.filter((note) => !note.isArchived), [timelineNotes]);
+  const archivedTimelineNotes = useMemo(() => timelineNotes.filter((note) => note.isArchived), [timelineNotes]);
+  const activeClientNotes = useMemo(() => owner?.notes.filter((note) => !note.isArchived) ?? [], [owner]);
+  const previewClientNotes = useMemo(() => activeClientNotes.slice(0, 3), [activeClientNotes]);
+  const viewingPetAppointments = useMemo(
+    () => (viewingPet ? clientAppointments.filter((appointment) => appointment.petId === viewingPet.id) : []),
+    [clientAppointments, viewingPet],
+  );
+
   if (isLoading) {
     return <PageLoader label="Loading client profile..." />;
   }
@@ -194,6 +204,36 @@ export default function ClientDetailsPage() {
   if (!owner) {
     return <div>Client not found.</div>;
   }
+
+  const replaceOwnerInState = (updatedOwner: Owner) => {
+    setOwner(updatedOwner);
+    setOwners((currentOwners) =>
+      currentOwners.map((currentOwner) => (currentOwner.id === updatedOwner.id ? updatedOwner : currentOwner)),
+    );
+  };
+
+  const replacePetInState = (updatedPet: Pet) => {
+    setAllPets((currentPets) => currentPets.map((pet) => (pet.id === updatedPet.id ? updatedPet : pet)));
+    setPets((currentPets) => currentPets.map((pet) => (pet.id === updatedPet.id ? updatedPet : pet)));
+    setSelectedPet((currentPet) => (currentPet?.id === updatedPet.id ? updatedPet : currentPet));
+    setViewingPet((currentPet) => (currentPet?.id === updatedPet.id ? updatedPet : currentPet));
+  };
+
+  const replaceAppointmentInState = (updatedAppointment: Appointment) => {
+    setAllAppointments((currentAppointments) =>
+      currentAppointments.map((appointment) =>
+        appointment.id === updatedAppointment.id ? updatedAppointment : appointment,
+      ),
+    );
+    setClientAppointments((currentAppointments) =>
+      currentAppointments.map((appointment) =>
+        appointment.id === updatedAppointment.id ? updatedAppointment : appointment,
+      ),
+    );
+    setSelectedAppointment((currentAppointment) =>
+      currentAppointment?.id === updatedAppointment.id ? updatedAppointment : currentAppointment,
+    );
+  };
 
   const handleSaveClient = async () => {
     setIsSavingClient(true);
@@ -206,28 +246,19 @@ export default function ClientDetailsPage() {
       email,
       preferredContactMethod,
       address,
-      notes: owner.notes.map((note) => note.text).join("\n\n"),
     };
 
     try {
       const result = await saveOwner(payload, owner);
-      setOwner({
-        ...result.data,
-        notes: owner.notes,
-      });
+      replaceOwnerInState({ ...result.data, notes: owner.notes });
       showToast({
         title: "Client Updated",
-        body:
-          result.mode === "api"
-            ? "Client updated in backend."
-            : "Client changes saved in mock mode.",
+        body: result.mode === "api" ? "Client updated in backend." : "Client changes saved in mock mode.",
         variant: "success",
       });
       setIsEditMode(false);
     } catch (error) {
-      setSaveError(
-        error instanceof Error ? error.message : "Unable to save client changes.",
-      );
+      setSaveError(error instanceof Error ? error.message : "Unable to save client changes.");
     } finally {
       setIsSavingClient(false);
     }
@@ -250,6 +281,7 @@ export default function ClientDetailsPage() {
     setSelectedNoteEntityType("client");
     setSelectedNoteEntityId(owner.id);
     setNoteText("");
+    setNoteSaveError(null);
   };
 
   const openNewNoteEditor = () => {
@@ -257,6 +289,7 @@ export default function ClientDetailsPage() {
     setSelectedNoteEntityType("client");
     setSelectedNoteEntityId(owner.id);
     setNoteText("");
+    setNoteSaveError(null);
     setNotesEditMode(true);
   };
 
@@ -265,89 +298,115 @@ export default function ClientDetailsPage() {
     setSelectedNoteEntityType(note.entityType);
     setSelectedNoteEntityId(note.entityId);
     setNoteText(note.text);
+    setNoteSaveError(null);
     setNotesEditMode(true);
   };
 
-  const updateEntityNotes = (
-    existingNotes: NoteItem[],
-    entityType: ClientNoteEntityType,
-    entityId: string,
-  ) => {
-    const timestamp = new Date().toISOString();
-
-    if (selectedNoteId) {
-      return existingNotes.map((note) =>
-        note.id === selectedNoteId
-          ? {
-              ...note,
-              text: noteText.trim(),
-              updatedAt: timestamp,
-            }
-          : note,
-      );
-    }
-
-    if (entityType !== selectedNoteEntityType || entityId !== selectedNoteEntityId) {
-      return existingNotes;
-    }
-
-    return [
-      {
-        id: `${entityType}-note-${Date.now()}`,
-        text: noteText.trim(),
-        createdAt: timestamp,
-      },
-      ...existingNotes,
-    ];
-  };
-
-  const handleSaveNote = () => {
+  const handleSaveNote = async () => {
     if (!noteText.trim()) {
       return;
     }
 
-    if (selectedNoteEntityType === "client") {
-      setOwner((currentOwner) =>
-        currentOwner
-          ? {
-              ...currentOwner,
-              notes: updateEntityNotes(currentOwner.notes, "client", currentOwner.id),
-            }
-          : currentOwner,
-      );
-    }
+    setIsSavingNote(true);
+    setNoteSaveError(null);
 
-    if (selectedNoteEntityType === "pet") {
-      setPets((currentPets) =>
-        currentPets.map((pet) =>
-          pet.id === selectedNoteEntityId
-            ? {
-                ...pet,
-                notes: updateEntityNotes(pet.notes, "pet", pet.id),
-              }
-            : pet,
-        ),
-      );
-    }
+    try {
+      if (selectedNoteEntityType === "client") {
+        const result = selectedNoteId
+          ? await updateOwnerNote(owner, selectedNoteId, noteText.trim())
+          : await addOwnerNote(owner, noteText.trim());
+        replaceOwnerInState(result.data);
+      } else if (selectedNoteEntityType === "pet") {
+        const currentPet = pets.find((pet) => pet.id === selectedNoteEntityId);
+        if (!currentPet) {
+          return;
+        }
 
-    if (selectedNoteEntityType === "appointment") {
-      setClientAppointments((currentAppointments) =>
-        currentAppointments.map((appointment) =>
-          appointment.id === selectedNoteEntityId
-            ? {
-                ...appointment,
-                notes: updateEntityNotes(
-                  appointment.notes,
-                  "appointment",
-                  appointment.id,
-                ),
-              }
-            : appointment,
-        ),
-      );
-    }
+        const result = selectedNoteId
+          ? await updatePetNote(currentPet, selectedNoteId, noteText.trim())
+          : await addPetNote(currentPet, noteText.trim());
+        replacePetInState(result.data);
+      } else {
+        const currentAppointment = clientAppointments.find((appointment) => appointment.id === selectedNoteEntityId);
+        if (!currentAppointment) {
+          return;
+        }
 
-    resetNotesEditor();
+        const result = selectedNoteId
+          ? await updateAppointmentNote(currentAppointment, selectedNoteId, noteText.trim())
+          : await addAppointmentNote(currentAppointment, noteText.trim());
+        replaceAppointmentInState(result.data);
+      }
+
+      resetNotesEditor();
+      showToast({
+        title: selectedNoteId ? "Note Updated" : "Note Added",
+        body: "The note was saved successfully.",
+        variant: "success",
+      });
+    } catch (error) {
+      setNoteSaveError(error instanceof Error ? error.message : "Unable to save note.");
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
+
+  const handleNoteAction = async (note: ClientTimelineNote, action: "archive" | "restore" | "delete") => {
+    setIsApplyingNoteAction(true);
+    setNoteSaveError(null);
+
+    try {
+      if (note.entityType === "client") {
+        const result =
+          action === "archive"
+            ? await archiveOwnerNote(owner, note.id)
+            : action === "restore"
+              ? await unarchiveOwnerNote(owner, note.id)
+              : await deleteOwnerNoteItem(owner, note.id);
+        replaceOwnerInState(result.data);
+      } else if (note.entityType === "pet") {
+        const currentPet = pets.find((pet) => pet.id === note.entityId);
+        if (!currentPet) {
+          return;
+        }
+
+        const result =
+          action === "archive"
+            ? await archivePetNote(currentPet, note.id)
+            : action === "restore"
+              ? await unarchivePetNote(currentPet, note.id)
+              : await deletePetNoteItem(currentPet, note.id);
+        replacePetInState(result.data);
+      } else {
+        const currentAppointment = clientAppointments.find((appointment) => appointment.id === note.entityId);
+        if (!currentAppointment) {
+          return;
+        }
+
+        const result =
+          action === "archive"
+            ? await archiveAppointmentNote(currentAppointment, note.id)
+            : action === "restore"
+              ? await unarchiveAppointmentNote(currentAppointment, note.id)
+              : await deleteAppointmentNoteItem(currentAppointment, note.id);
+        replaceAppointmentInState(result.data);
+      }
+
+      showToast({
+        title: action === "archive" ? "Note Archived" : action === "restore" ? "Note Restored" : "Note Deleted",
+        body:
+          action === "archive"
+            ? "The note was moved out of the active list."
+            : action === "restore"
+              ? "The note was restored to the active list."
+              : "The note was deleted.",
+        variant: action === "delete" ? "warning" : "success",
+      });
+    } catch (error) {
+      setNoteSaveError(error instanceof Error ? error.message : "Unable to update note.");
+    } finally {
+      setIsApplyingNoteAction(false);
+    }
   };
 
   return (
@@ -368,59 +427,31 @@ export default function ClientDetailsPage() {
 
           {isEditMode ? (
             <>
-              <Button
-                variant="outline-secondary"
-                onClick={handleCancelEdit}
-                disabled={isSavingClient}
-              >
+              <Button variant="outline-secondary" onClick={handleCancelEdit} disabled={isSavingClient}>
                 Cancel Edit
               </Button>
-              <Button
-                variant="outline-secondary"
-                onClick={() => setShowNotesModal(true)}
-              >
+              <Button variant="outline-secondary" onClick={() => setShowNotesModal(true)}>
                 View Notes
               </Button>
-              <Button
-                variant="primary"
-                onClick={() => void handleSaveClient()}
-                disabled={isSavingClient}
-              >
-                {isSavingClient && (
-                  <Spinner animation="border" size="sm" className="me-2" />
-                )}
+              <Button variant="primary" onClick={() => void handleSaveClient()} disabled={isSavingClient}>
+                {isSavingClient && <Spinner animation="border" size="sm" className="me-2" />}
                 Save Client
               </Button>
             </>
           ) : (
-            <>
-              <Dropdown align="end">
-              <Dropdown.Toggle variant="outline-secondary">
-                Actions
-              </Dropdown.Toggle>
+            <Dropdown align="end">
+              <Dropdown.Toggle variant="outline-secondary">Actions</Dropdown.Toggle>
               <Dropdown.Menu>
-                <Dropdown.Item onClick={() => setIsEditMode(true)}>
-                  Edit Client
+                <Dropdown.Item onClick={() => setIsEditMode(true)}>Edit Client</Dropdown.Item>
+                <Dropdown.Item onClick={() => setShowNotesModal(true)}>View Notes</Dropdown.Item>
+                <Dropdown.Item onClick={() => setShowScheduleModal(true)}>Schedule Appointment</Dropdown.Item>
+                <Dropdown.Divider />
+                <Dropdown.Item onClick={() => setShowArchiveClientModal(true)}>Archive Client</Dropdown.Item>
+                <Dropdown.Item className="text-danger" onClick={() => setShowDeleteClientModal(true)}>
+                  Delete Client
                 </Dropdown.Item>
-                <Dropdown.Item onClick={() => setShowNotesModal(true)}>
-                  View Notes
-                </Dropdown.Item>
-                <Dropdown.Item onClick={() => setShowScheduleModal(true)}>
-                  Schedule Appointment
-                </Dropdown.Item>
-                  <Dropdown.Divider />
-                  <Dropdown.Item onClick={() => setShowArchiveClientModal(true)}>
-                    Archive Client
-                  </Dropdown.Item>
-                  <Dropdown.Item
-                    className="text-danger"
-                    onClick={() => setShowDeleteClientModal(true)}
-                  >
-                    Delete Client
-                  </Dropdown.Item>
-                </Dropdown.Menu>
-              </Dropdown>
-            </>
+              </Dropdown.Menu>
+            </Dropdown>
           )}
         </div>
       </div>
@@ -435,70 +466,52 @@ export default function ClientDetailsPage() {
                 <>
                   {!isBackendConfigured() && (
                     <Alert variant="info" className="mb-3">
-                      MongoDB backend not configured yet. Saves are currently local UI previews only.
+                      Backend not configured yet. Saves are currently local UI previews only.
                     </Alert>
                   )}
-
                   {saveError && (
                     <Alert variant="danger" className="mb-3">
                       {saveError}
                     </Alert>
                   )}
-
                   <Form.Group className="mb-3">
                     <Form.Label>First Name</Form.Label>
-                    <Form.Control
-                      value={firstName}
-                      onChange={(event) => setFirstName(event.target.value)}
-                    />
+                    <Form.Control value={firstName} onChange={(event) => setFirstName(event.target.value)} />
                   </Form.Group>
-
                   <Form.Group className="mb-3">
                     <Form.Label>Last Name</Form.Label>
-                    <Form.Control
-                      value={lastName}
-                      onChange={(event) => setLastName(event.target.value)}
-                    />
+                    <Form.Control value={lastName} onChange={(event) => setLastName(event.target.value)} />
                   </Form.Group>
-
                   <Form.Group className="mb-3">
                     <Form.Label>Phone</Form.Label>
-                    <Form.Control
-                      value={phone}
-                      onChange={(event) => setPhone(event.target.value)}
-                    />
+                    <Form.Control value={phone} onChange={(event) => setPhone(event.target.value)} />
                   </Form.Group>
-
                   <Form.Group className="mb-3">
                     <Form.Label>Email</Form.Label>
-                    <Form.Control
-                      type="email"
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                    />
+                    <Form.Control type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
                   </Form.Group>
-
                   <Form.Group className="mb-3">
                     <Form.Label>Preferred Contact</Form.Label>
-                    <Form.Select
-                      value={preferredContactMethod}
-                      onChange={(event) =>
-                        setPreferredContactMethod(event.target.value as ContactMethod)
-                      }
-                    >
+                    <Form.Select value={preferredContactMethod} onChange={(event) => setPreferredContactMethod(event.target.value as ContactMethod)}>
                       <option value="text">Text</option>
                       <option value="email">Email</option>
                     </Form.Select>
                   </Form.Group>
-
                   <Form.Group className="mb-3">
                     <Form.Label>Address</Form.Label>
-                    <Form.Control
-                      value={address}
-                      onChange={(event) => setAddress(event.target.value)}
-                    />
+                    <Form.Control value={address} onChange={(event) => setAddress(event.target.value)} />
                   </Form.Group>
-
+                  <div className="client-notes-preview">
+                    <div className="d-flex justify-content-between align-items-center gap-2 mb-2">
+                      <Form.Label className="mb-0">Client Notes</Form.Label>
+                      <Button size="sm" variant="outline-secondary" onClick={() => setShowNotesModal(true)}>
+                        Manage Notes
+                      </Button>
+                    </div>
+                    <p className="text-muted small mb-0">
+                      Notes are edited individually. Use the notes view to add, archive, restore, or delete them.
+                    </p>
+                  </div>
                 </>
               ) : (
                 <>
@@ -507,40 +520,54 @@ export default function ClientDetailsPage() {
                   </p>
                   <ClientContactActions phone={owner.phone} email={owner.email} stacked />
                   <p className="mb-1">
-                    <strong>Address:</strong> {owner.address ?? "—"}
+                    <strong>Address:</strong> {owner.address ?? "-"}
                   </p>
                   <p className="mb-3">
                     <strong>Preferred Contact:</strong> {owner.preferredContactMethod}
                   </p>
-
-                  <p className="mb-0">
-                    <strong>Notes:</strong> {timelineNotes.length} total across client, pets, and appointments.
-                  </p>
+                  <div className="client-notes-preview">
+                    <div className="d-flex justify-content-between align-items-center gap-2 mb-2">
+                      <strong>Client Notes</strong>
+                      {(activeClientNotes.length > 3 || activeTimelineNotes.length > activeClientNotes.length || archivedTimelineNotes.length > 0) && (
+                        <Button size="sm" variant="outline-secondary" onClick={() => setShowNotesModal(true)}>
+                          View More
+                        </Button>
+                      )}
+                    </div>
+                    {previewClientNotes.length === 0 ? (
+                      <p className="text-muted mb-0">No active client notes.</p>
+                    ) : (
+                      <ListGroup className="compact-note-list">
+                        {previewClientNotes.map((note) => (
+                          <ListGroup.Item key={note.id}>
+                            <div className="client-note-item">
+                              <div className="client-note-meta">
+                                <span>{new Date(note.createdAt).toLocaleDateString()}</span>
+                                {note.updatedAt && <span>Updated {new Date(note.updatedAt).toLocaleDateString()}</span>}
+                              </div>
+                              <div>{note.text}</div>
+                            </div>
+                          </ListGroup.Item>
+                        ))}
+                      </ListGroup>
+                    )}
+                  </div>
                 </>
               )}
             </Card.Body>
           </Card>
         </Col>
-
         <Col lg={8}>
           <Card className="shadow-sm mb-4">
             <Card.Body>
               <div className="d-flex justify-content-between align-items-center mb-3">
                 <Card.Title className="mb-0">Pets</Card.Title>
                 {isEditMode && (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={() => {
-                      setSelectedPet(null);
-                      setShowEditPetModal(true);
-                    }}
-                  >
+                  <Button size="sm" variant="primary" onClick={() => { setSelectedPet(null); setShowEditPetModal(true); }}>
                     Add Pet
                   </Button>
                 )}
               </div>
-
               {pets.length === 0 ? (
                 <p className="text-muted mb-0">No pets on file.</p>
               ) : (
@@ -549,47 +576,27 @@ export default function ClientDetailsPage() {
                     <ListGroup.Item key={pet.id}>
                       <div className="d-flex justify-content-between align-items-start gap-3">
                         <div>
-                          <strong>{pet.name}</strong> — {pet.species}, {pet.breed}
+                          <strong>{pet.name}</strong> - {pet.species}, {pet.breed}
                         </div>
                         <div className="pet-row-actions">
-                          <Link to={`/pets/${pet.id}`} className="pet-row-indicator-link">
-                            <span className="pet-row-indicator">View</span>
-                          </Link>
-
+                          {isEditMode ? (
+                            <button type="button" className="pet-row-indicator-button" onClick={() => setViewingPet(pet)}>
+                              <span className="pet-row-indicator">View</span>
+                            </button>
+                          ) : (
+                            <Link to={`/pets/${pet.id}`} className="pet-row-indicator-link">
+                              <span className="pet-row-indicator">View</span>
+                            </Link>
+                          )}
                           {isEditMode && (
                             <>
-                              <button
-                                type="button"
-                                className="pet-row-indicator-button"
-                                onClick={() => {
-                                  setSelectedPet(pet);
-                                  setShowEditPetModal(true);
-                                }}
-                              >
+                              <button type="button" className="pet-row-indicator-button" onClick={() => { setSelectedPet(pet); setShowEditPetModal(true); }}>
                                 <span className="pet-row-indicator">Edit</span>
                               </button>
-                              <Button
-                                size="sm"
-                                variant="warning"
-                                className="action-button-wide"
-                                onClick={() => {
-                                  setSelectedPet(pet);
-                                  setShowArchivePetModal(true);
-                                }}
-                              >
+                              <Button size="sm" variant="warning" className="action-button-wide" onClick={() => { setSelectedPet(pet); setShowArchivePetModal(true); }}>
                                 Archive
                               </Button>
-                              <Button
-                                size="sm"
-                                variant="outline-danger"
-                                className="icon-action-button"
-                                onClick={() => {
-                                  setSelectedPet(pet);
-                                  setShowDeletePetModal(true);
-                                }}
-                                aria-label={`Delete ${pet.name}`}
-                                title={`Delete ${pet.name}`}
-                              >
+                              <Button size="sm" variant="outline-danger" className="icon-action-button" onClick={() => { setSelectedPet(pet); setShowDeletePetModal(true); }} aria-label={`Delete ${pet.name}`} title={`Delete ${pet.name}`}>
                                 <svg aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" width="16" height="16">
                                   <path d="M6.5 1h3l.5 1H13a.5.5 0 0 1 0 1h-.6l-.7 9.1A2 2 0 0 1 9.7 14H6.3a2 2 0 0 1-2-1.9L3.6 3H3a.5.5 0 0 1 0-1h3zm-1.2 2 .7 9.1a1 1 0 0 0 1 .9h3.4a1 1 0 0 0 1-.9L10.7 3zM6 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 6 5m4.5.5v5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 1 0M8 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 8 5" />
                                 </svg>
@@ -604,29 +611,18 @@ export default function ClientDetailsPage() {
               )}
             </Card.Body>
           </Card>
-
           <Card className="shadow-sm">
             <Card.Body>
               <Card.Title>Appointment History</Card.Title>
-
               {clientAppointments.length === 0 ? (
                 <p className="text-muted mb-0">No appointment history.</p>
               ) : (
                 <ListGroup>
                   {clientAppointments.map((appt) => {
-                    const pet = mockPets.find((p) => p.id === appt.petId);
-
+                    const pet = allPets.find((record) => record.id === appt.petId);
                     return (
-                      <ListGroup.Item
-                        key={appt.id}
-                        action
-                        onClick={() => {
-                          setSelectedAppointment(appt);
-                          setShowAppointmentDetailsModal(true);
-                        }}
-                      >
-                        <strong>{pet?.name ?? "Unknown Pet"}</strong> —{" "}
-                        {new Date(appt.start).toLocaleString()} — {appt.status}
+                      <ListGroup.Item key={appt.id} action onClick={() => { setSelectedAppointment(appt); setShowAppointmentDetailsModal(true); }}>
+                        <strong>{pet?.name ?? "Unknown Pet"}</strong> - {new Date(appt.start).toLocaleString()} - {appt.status}
                       </ListGroup.Item>
                     );
                   })}
@@ -637,221 +633,52 @@ export default function ClientDetailsPage() {
         </Col>
       </Row>
 
-      <PetFormModal
-        show={showEditPetModal}
-        onHide={() => setShowEditPetModal(false)}
-        owners={mockOwners}
-        initialPet={selectedPet}
-        lockedOwnerId={selectedPet ? undefined : owner.id}
-        onSaved={(updatedPet) => {
-          setPets((currentPets) => {
-            const existingPetIndex = currentPets.findIndex(
-              (pet) => pet.id === updatedPet.id,
-            );
-
-            if (existingPetIndex === -1) {
-              return [...currentPets, updatedPet];
-            }
-
-            return currentPets.map((pet) =>
-              pet.id === updatedPet.id ? updatedPet : pet,
-            );
-          });
-          showToast({
-            title: selectedPet ? "Pet Updated" : "Pet Added",
-            body: selectedPet
-              ? "Pet changes saved and ready for backend persistence."
-              : "Pet created and ready for backend persistence.",
-            variant: "success",
-          });
-          setShowEditPetModal(false);
-          setSelectedPet(null);
-        }}
-      />
-
-      <AppointmentFormModal
-        show={showScheduleModal}
-        onHide={() => setShowScheduleModal(false)}
-        owners={mockOwners}
-        pets={pets}
-        initialOwnerId={owner.id}
-        onSaved={() => {
-          showToast({
-            title: "Appointment Scheduled",
-            body: "The appointment was created and is ready for backend persistence.",
-            variant: "success",
-          });
-        }}
-      />
-
-      <AppointmentDetailsModal
-        show={showAppointmentDetailsModal}
-        onHide={() => {
-          setShowAppointmentDetailsModal(false);
-          setSelectedAppointment(null);
-        }}
-        appointment={selectedAppointment}
-        owners={mockOwners}
-        pets={mockPets}
-        onUpdated={(updatedAppointment) => {
-          if (updatedAppointment.isArchived) {
-            setClientAppointments((currentAppointments) =>
-              currentAppointments.filter(
-                (appointment) => appointment.id !== updatedAppointment.id,
-              ),
-            );
-            setSelectedAppointment(null);
-            setShowAppointmentDetailsModal(false);
-            return;
-          }
-
-          setClientAppointments((currentAppointments) =>
-            currentAppointments.map((appointment) =>
-              appointment.id === updatedAppointment.id
-                ? updatedAppointment
-                : appointment,
-            ),
-          );
-          setSelectedAppointment(updatedAppointment);
-        }}
-        onDeleted={(appointmentId) => {
-          setClientAppointments((currentAppointments) =>
-            currentAppointments.filter(
-              (appointment) => appointment.id !== appointmentId,
-            ),
-          );
+      <PetFormModal show={showEditPetModal} onHide={() => setShowEditPetModal(false)} owners={owners} initialPet={selectedPet} lockedOwnerId={selectedPet ? undefined : owner.id} onSaved={(updatedPet) => {
+        setAllPets((currentPets) => {
+          const existingPetIndex = currentPets.findIndex((pet) => pet.id === updatedPet.id);
+          if (existingPetIndex === -1) return [...currentPets, updatedPet];
+          return currentPets.map((pet) => (pet.id === updatedPet.id ? updatedPet : pet));
+        });
+        setPets((currentPets) => {
+          const existingPetIndex = currentPets.findIndex((pet) => pet.id === updatedPet.id);
+          if (existingPetIndex === -1) return [...currentPets, updatedPet];
+          return currentPets.map((pet) => (pet.id === updatedPet.id ? updatedPet : pet));
+        });
+        showToast({ title: selectedPet ? "Pet Updated" : "Pet Added", body: selectedPet ? "Pet changes saved and ready for backend persistence." : "Pet created and ready for backend persistence.", variant: "success" });
+        setShowEditPetModal(false);
+        setSelectedPet(null);
+      }} />
+      <PetQuickViewModal show={!!viewingPet} pet={viewingPet} owner={owner} appointments={viewingPetAppointments} onHide={() => setViewingPet(null)} onBack={() => setViewingPet(null)} allowPageNavigation={!isEditMode} returnToParentOnSave={isEditMode} onPetUpdated={(updatedPet) => { replacePetInState(updatedPet); if (isEditMode) setViewingPet(null); }} onPetArchived={(archivedPet) => { replacePetInState(archivedPet); setViewingPet(null); }} onPetDeleted={(petId) => { setAllPets((currentPets) => currentPets.filter((pet) => pet.id !== petId)); setPets((currentPets) => currentPets.filter((pet) => pet.id !== petId)); setViewingPet(null); }} />
+      <AppointmentFormModal show={showScheduleModal} onHide={() => setShowScheduleModal(false)} owners={owners} pets={pets} initialOwnerId={owner.id} onSaved={(appointment) => { setAllAppointments((currentAppointments) => [...currentAppointments, appointment]); showToast({ title: "Appointment Scheduled", body: "The appointment was created and is ready for backend persistence.", variant: "success" }); }} />
+      <AppointmentDetailsModal show={showAppointmentDetailsModal} onHide={() => { setShowAppointmentDetailsModal(false); setSelectedAppointment(null); }} appointment={selectedAppointment} owners={owners} pets={allPets} onUpdated={(updatedAppointment) => {
+        if (updatedAppointment.isArchived) {
+          setAllAppointments((currentAppointments) => currentAppointments.map((appointment) => appointment.id === updatedAppointment.id ? updatedAppointment : appointment));
+          setClientAppointments((currentAppointments) => currentAppointments.filter((appointment) => appointment.id !== updatedAppointment.id));
           setSelectedAppointment(null);
           setShowAppointmentDetailsModal(false);
-        }}
-      />
-
-      <ConfirmDeleteModal
-        show={showArchiveClientModal}
-        title="Archive Client"
-        body="Archiving removes this client from the visible client lists and related active views."
-        note="Archived client records can still be retrieved later if needed. Deleting permanently removes the record instead."
-        confirmLabel="Archive"
-        confirmVariant="warning"
-        onCancel={() => setShowArchiveClientModal(false)}
-        onConfirm={async () => {
-          const result = await archiveOwner(owner);
-          showToast({
-            title: "Client Archived",
-            body:
-              result.mode === "api"
-                ? "Client archived in backend."
-                : "Client archived in mock mode.",
-            variant: "warning",
-          });
-          setShowArchiveClientModal(false);
-          navigate("/contacts");
-        }}
-      />
-
-      <ConfirmDeleteModal
-        show={showDeleteClientModal}
-        title="Delete Client"
-        body="Deleting permanently removes this client from the system."
-        note="If you only want to hide this client from visible data, choose Archive instead. Archived records can still be retrieved later if needed."
-        confirmLabel="Delete Permanently"
-        onCancel={() => setShowDeleteClientModal(false)}
-        onConfirm={async () => {
-          const result = await deleteOwner(owner);
-          showToast({
-            title: "Client Deleted",
-            body:
-              result.mode === "api"
-                ? "Client deleted from backend."
-                : "Client deleted in mock mode.",
-            variant: "warning",
-          });
-          setShowDeleteClientModal(false);
-          navigate("/contacts");
-        }}
-      />
-
-      <ConfirmDeleteModal
-        show={showArchivePetModal}
-        title="Archive Pet"
-        body="Archiving removes this pet from the visible pet lists and active client views."
-        note="Archived pet records can still be retrieved later if needed. Deleting permanently removes the record instead."
-        confirmLabel="Archive"
-        confirmVariant="warning"
-        onCancel={() => {
-          setShowArchivePetModal(false);
-          setSelectedPet(null);
-        }}
-        onConfirm={async () => {
-          if (!selectedPet) return;
-          const result = await archivePet(selectedPet);
-          setPets((currentPets) =>
-            currentPets.filter((pet) => pet.id !== result.data.id),
-          );
-          showToast({
-            title: "Pet Archived",
-            body:
-              result.mode === "api"
-                ? "Pet archived in backend."
-                : "Pet archived in mock mode.",
-            variant: "warning",
-          });
-          setShowArchivePetModal(false);
-          setSelectedPet(null);
-        }}
-      />
-
-      <ConfirmDeleteModal
-        show={showDeletePetModal}
-        title="Delete Pet"
-        body="Deleting permanently removes this pet from the system."
-        note="If you only want to hide this pet from visible data, choose Archive instead. Archived records can still be retrieved later if needed."
-        confirmLabel="Delete Permanently"
-        onCancel={() => {
-          setShowDeletePetModal(false);
-          setSelectedPet(null);
-        }}
-        onConfirm={async () => {
-          if (!selectedPet) return;
-          const result = await deletePet(selectedPet);
-          setPets((currentPets) =>
-            currentPets.filter((pet) => pet.id !== result.data.id),
-          );
-          showToast({
-            title: "Pet Deleted",
-            body:
-              result.mode === "api"
-                ? "Pet deleted in backend."
-                : "Pet deleted in mock mode.",
-            variant: "warning",
-          });
-          setShowDeletePetModal(false);
-          setSelectedPet(null);
-        }}
-      />
-
-      <Modal
-        show={showNotesModal}
-        onHide={() => {
-          setShowNotesModal(false);
-          resetNotesEditor();
-        }}
-        centered
-        fullscreen="sm-down"
-      >
+          return;
+        }
+        replaceAppointmentInState(updatedAppointment);
+      }} onDeleted={(appointmentId) => {
+        setAllAppointments((currentAppointments) => currentAppointments.filter((appointment) => appointment.id !== appointmentId));
+        setClientAppointments((currentAppointments) => currentAppointments.filter((appointment) => appointment.id !== appointmentId));
+        setSelectedAppointment(null);
+        setShowAppointmentDetailsModal(false);
+      }} />
+      <ConfirmDeleteModal show={showArchiveClientModal} title="Archive Client" body="Archiving removes this client from the visible client lists and related active views." note="Archived client records can still be retrieved later if needed. Deleting permanently removes the record instead." confirmLabel="Archive" confirmVariant="warning" onCancel={() => setShowArchiveClientModal(false)} onConfirm={async () => { const result = await archiveOwner(owner); replaceOwnerInState(result.data); showToast({ title: "Client Archived", body: result.mode === "api" ? "Client archived in backend." : "Client archived in mock mode.", variant: "warning" }); setShowArchiveClientModal(false); navigate("/contacts"); }} />
+      <ConfirmDeleteModal show={showDeleteClientModal} title="Delete Client" body="Deleting permanently removes this client from the system." note="If you only want to hide this client from visible data, choose Archive instead. Archived records can still be retrieved later if needed." confirmLabel="Delete Permanently" onCancel={() => setShowDeleteClientModal(false)} onConfirm={async () => { const result = await deleteOwner(owner); setOwners((currentOwners) => currentOwners.filter((currentOwner) => currentOwner.id !== result.data.id)); showToast({ title: "Client Deleted", body: result.mode === "api" ? "Client deleted from backend." : "Client deleted in mock mode.", variant: "warning" }); setShowDeleteClientModal(false); navigate("/contacts"); }} />
+      <ConfirmDeleteModal show={showArchivePetModal} title="Archive Pet" body="Archiving removes this pet from the visible pet lists and active client views." note="Archived pet records can still be retrieved later if needed. Deleting permanently removes the record instead." confirmLabel="Archive" confirmVariant="warning" onCancel={() => { setShowArchivePetModal(false); setSelectedPet(null); }} onConfirm={async () => { if (!selectedPet) return; const result = await archivePet(selectedPet); replacePetInState(result.data); showToast({ title: "Pet Archived", body: result.mode === "api" ? "Pet archived in backend." : "Pet archived in mock mode.", variant: "warning" }); setShowArchivePetModal(false); setSelectedPet(null); }} />
+      <ConfirmDeleteModal show={showDeletePetModal} title="Delete Pet" body="Deleting permanently removes this pet from the system." note="If you only want to hide this pet from visible data, choose Archive instead. Archived records can still be retrieved later if needed." confirmLabel="Delete Permanently" onCancel={() => { setShowDeletePetModal(false); setSelectedPet(null); }} onConfirm={async () => { if (!selectedPet) return; const result = await deletePet(selectedPet); setAllPets((currentPets) => currentPets.filter((pet) => pet.id !== result.data.id)); setPets((currentPets) => currentPets.filter((pet) => pet.id !== result.data.id)); showToast({ title: "Pet Deleted", body: result.mode === "api" ? "Pet deleted in backend." : "Pet deleted in mock mode.", variant: "warning" }); setShowDeletePetModal(false); setSelectedPet(null); }} />
+      <Modal show={showNotesModal} onHide={() => { setShowNotesModal(false); resetNotesEditor(); }} centered fullscreen="sm-down">
         <Modal.Header closeButton>
           <div className="w-100 d-flex justify-content-between align-items-start gap-3">
             <div>
               <Modal.Title>Client Notes</Modal.Title>
-              <span className={`mode-indicator${notesEditMode ? " mode-indicator-edit" : ""}`}>
-                {notesEditMode ? "Edit Mode" : "View Mode"}
-              </span>
+              <span className={`mode-indicator${notesEditMode ? " mode-indicator-edit" : ""}`}>{notesEditMode ? "Edit Mode" : "View Mode"}</span>
             </div>
-
             {!notesEditMode && (
               <Dropdown align="end">
-                <Dropdown.Toggle variant="outline-secondary" size="sm">
-                  Actions
-                </Dropdown.Toggle>
+                <Dropdown.Toggle variant="outline-secondary" size="sm">Actions</Dropdown.Toggle>
                 <Dropdown.Menu>
                   <Dropdown.Item onClick={openNewNoteEditor}>Add Note</Dropdown.Item>
                 </Dropdown.Menu>
@@ -860,102 +687,93 @@ export default function ClientDetailsPage() {
           </div>
         </Modal.Header>
         <Modal.Body>
+          {noteSaveError && <Alert variant="danger" className="mb-3">{noteSaveError}</Alert>}
           {notesEditMode ? (
             <>
               {!selectedNoteId && (
                 <Form.Group className="mb-3">
                   <Form.Label>Attach Note To</Form.Label>
-                  <Form.Select
-                    value={`${selectedNoteEntityType}:${selectedNoteEntityId}`}
-                    onChange={(event) => {
-                      const [entityType, entityId] = event.target.value.split(":");
-                      setSelectedNoteEntityType(entityType as ClientNoteEntityType);
-                      setSelectedNoteEntityId(entityId);
-                    }}
-                  >
-                    {noteTargets.map((target) => (
-                      <option
-                        key={`${target.entityType}:${target.entityId}`}
-                        value={`${target.entityType}:${target.entityId}`}
-                      >
-                        {target.label}
-                      </option>
-                    ))}
+                  <Form.Select value={`${selectedNoteEntityType}:${selectedNoteEntityId}`} onChange={(event) => { const [entityType, entityId] = event.target.value.split(":"); setSelectedNoteEntityType(entityType as ClientNoteEntityType); setSelectedNoteEntityId(entityId); }}>
+                    {noteTargets.map((target) => <option key={`${target.entityType}:${target.entityId}`} value={`${target.entityType}:${target.entityId}`}>{target.label}</option>)}
                   </Form.Select>
                 </Form.Group>
               )}
-
-              {selectedNoteId && (
-                <p className="text-muted small">
-                  Editing note on{" "}
-                  {
-                    noteTargets.find(
-                      (target) =>
-                        target.entityType === selectedNoteEntityType &&
-                        target.entityId === selectedNoteEntityId,
-                    )?.label
-                  }
-                </p>
-              )}
-
+              {selectedNoteId && <p className="text-muted small">Editing note on {noteTargets.find((target) => target.entityType === selectedNoteEntityType && target.entityId === selectedNoteEntityId)?.label}</p>}
               <Form.Group>
                 <Form.Label>Note</Form.Label>
-                <Form.Control
-                  as="textarea"
-                  rows={6}
-                  value={noteText}
-                  onChange={(event) => setNoteText(event.target.value)}
-                  placeholder="Enter note details..."
-                />
+                <Form.Control as="textarea" rows={6} value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder="Enter note details..." />
               </Form.Group>
             </>
-          ) : timelineNotes.length === 0 ? (
-            <p className="text-muted mb-0">No notes have been added to this client, pets, or appointments.</p>
           ) : (
-            <ListGroup>
-              {timelineNotes.map((note) => (
-                <ListGroup.Item key={`${note.entityType}-${note.entityId}-${note.id}`}>
-                  <div className="d-flex justify-content-between align-items-start gap-3">
-                    <div className="client-note-item">
-                      <div className="client-note-meta">
-                        <span className={`client-note-type client-note-type-${note.entityType}`}>
-                          {note.entityType}
-                        </span>
-                        <span>{note.entityLabel}</span>
-                        <span>
-                          {new Date(note.createdAt).toLocaleString()}
-                          {note.updatedAt ? ` • Updated ${new Date(note.updatedAt).toLocaleString()}` : ""}
-                        </span>
+            <>
+              {activeTimelineNotes.length === 0 ? <p className="text-muted mb-0">No active notes have been added to this client, pets, or appointments.</p> : (
+                <ListGroup>
+                  {activeTimelineNotes.map((note) => (
+                    <ListGroup.Item key={`${note.entityType}-${note.entityId}-${note.id}`}>
+                      <div className="d-flex justify-content-between align-items-start gap-3">
+                        <div className="client-note-item">
+                          <div className="client-note-meta">
+                            <span className={`client-note-type client-note-type-${note.entityType}`}>{note.entityType}</span>
+                            <span>{note.entityLabel}</span>
+                            <span>{new Date(note.createdAt).toLocaleString()}{note.updatedAt ? ` | Updated ${new Date(note.updatedAt).toLocaleString()}` : ""}</span>
+                          </div>
+                          <div>{note.text}</div>
+                        </div>
+                        <div className="note-inline-actions">
+                          <button type="button" className="pet-row-indicator-button" onClick={() => openEditNoteEditor(note)}><span className="pet-row-indicator">Edit</span></button>
+                          <button type="button" className="pet-row-indicator-button" disabled={isApplyingNoteAction} onClick={() => { void handleNoteAction(note, "archive"); }}><span className="pet-row-indicator">Archive</span></button>
+                          <button type="button" className="pet-row-indicator-button" disabled={isApplyingNoteAction} onClick={() => { void handleNoteAction(note, "delete"); }}><span className="pet-row-indicator pet-row-indicator-danger">Delete</span></button>
+                        </div>
                       </div>
-                      <div>{note.text}</div>
+                    </ListGroup.Item>
+                  ))}
+                </ListGroup>
+              )}
+              {archivedTimelineNotes.length > 0 && (
+                <div className="mt-3">
+                  <Button variant="outline-secondary" size="sm" onClick={() => setShowArchivedNotes((current) => !current)} aria-expanded={showArchivedNotes} aria-controls="archived-client-notes">
+                    {showArchivedNotes ? "Hide Archived Notes" : `Show Archived Notes (${archivedTimelineNotes.length})`}
+                  </Button>
+                  <Collapse in={showArchivedNotes}>
+                    <div id="archived-client-notes" className="mt-3">
+                      <ListGroup>
+                        {archivedTimelineNotes.map((note) => (
+                          <ListGroup.Item key={`${note.entityType}-${note.entityId}-${note.id}`}>
+                            <div className="d-flex justify-content-between align-items-start gap-3">
+                              <div className="client-note-item">
+                                <div className="client-note-meta">
+                                  <span className={`client-note-type client-note-type-${note.entityType}`}>{note.entityType}</span>
+                                  <span>{note.entityLabel}</span>
+                                  <span>Archived {note.archivedAt ? new Date(note.archivedAt).toLocaleString() : ""}</span>
+                                </div>
+                                <div>{note.text}</div>
+                              </div>
+                              <div className="note-inline-actions">
+                                <button type="button" className="pet-row-indicator-button" disabled={isApplyingNoteAction} onClick={() => { void handleNoteAction(note, "restore"); }}><span className="pet-row-indicator">Restore</span></button>
+                                <button type="button" className="pet-row-indicator-button" disabled={isApplyingNoteAction} onClick={() => { void handleNoteAction(note, "delete"); }}><span className="pet-row-indicator pet-row-indicator-danger">Delete</span></button>
+                              </div>
+                            </div>
+                          </ListGroup.Item>
+                        ))}
+                      </ListGroup>
                     </div>
-                    <button
-                      type="button"
-                      className="pet-row-indicator-button"
-                      onClick={() => openEditNoteEditor(note)}
-                    >
-                      <span className="pet-row-indicator">Edit</span>
-                    </button>
-                  </div>
-                </ListGroup.Item>
-              ))}
-            </ListGroup>
+                  </Collapse>
+                </div>
+              )}
+            </>
           )}
         </Modal.Body>
         <Modal.Footer>
           {notesEditMode ? (
             <>
-              <Button variant="outline-secondary" onClick={resetNotesEditor}>
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={handleSaveNote} disabled={!noteText.trim()}>
+              <Button variant="outline-secondary" onClick={resetNotesEditor}>Cancel</Button>
+              <Button variant="primary" onClick={() => void handleSaveNote()} disabled={!noteText.trim() || isSavingNote}>
+                {isSavingNote && <Spinner animation="border" size="sm" className="me-2" />}
                 Save Note
               </Button>
             </>
           ) : (
-            <Button variant="secondary" onClick={() => setShowNotesModal(false)}>
-              Close
-            </Button>
+            <Button variant="secondary" onClick={() => setShowNotesModal(false)}>Close</Button>
           )}
         </Modal.Footer>
       </Modal>

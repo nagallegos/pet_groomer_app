@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { Button, Card, Collapse, Form } from "react-bootstrap";
+import { useAppData } from "../components/common/AppDataProvider";
 import { useAppToast } from "../components/common/AppToastProvider";
 import PageLoader from "../components/common/PageLoader";
 import ClientGrid from "../components/clients/ClientGrid";
 import ClientQuickViewModal from "../components/clients/ClientQuickViewModal";
 import ClientFormModal from "../components/clients/ClientFormModal";
-import { mockAppointments, mockOwners, mockPets } from "../data/mockData";
 import useInitialLoading from "../hooks/useInitialLoading";
 import type { Owner } from "../types/models";
 
@@ -16,8 +16,8 @@ type ClientViewMode = "card" | "list";
 export default function ContactsPage() {
   const { showToast } = useAppToast();
   const isLoading = useInitialLoading();
+  const { owners, pets, appointments, setOwners, setPets } = useAppData();
   const [selectedClient, setSelectedClient] = useState<Owner | null>(null);
-  const [owners, setOwners] = useState<Owner[]>(mockOwners);
   const [showAddClientModal, setShowAddClientModal] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [activeSearchTerm, setActiveSearchTerm] = useState("");
@@ -32,6 +32,7 @@ export default function ContactsPage() {
 
   const filteredAndSortedOwners = useMemo(() => {
     const filteredOwners = owners.filter((owner) => {
+      if (owner.isArchived) return false;
       if (!normalizedActiveSearchTerm) return true;
 
       return (
@@ -81,6 +82,7 @@ export default function ContactsPage() {
 
     return owners
       .filter((owner) => {
+        if (owner.isArchived) return false;
         return (
           owner.firstName.toLowerCase().includes(normalizedSearchInput) ||
           owner.lastName.toLowerCase().includes(normalizedSearchInput) ||
@@ -114,15 +116,15 @@ export default function ContactsPage() {
 
   const selectedClientPets = useMemo(() => {
     if (!selectedClient) return [];
-    return mockPets.filter((pet) => pet.ownerId === selectedClient.id);
-  }, [selectedClient]);
+    return pets.filter((pet) => pet.ownerId === selectedClient.id);
+  }, [pets, selectedClient]);
 
   const selectedClientAppointments = useMemo(() => {
     if (!selectedClient) return [];
-    return mockAppointments.filter(
+    return appointments.filter(
       (appt) => appt.ownerId === selectedClient.id,
     );
-  }, [selectedClient]);
+  }, [appointments, selectedClient]);
 
   if (isLoading) {
     return <PageLoader label="Loading clients..." />;
@@ -323,9 +325,11 @@ export default function ContactsPage() {
           );
           setSelectedClient(updatedOwner);
         }}
-        onOwnerArchived={(ownerId) => {
+        onOwnerArchived={(archivedOwner) => {
           setOwners((currentOwners) =>
-            currentOwners.filter((owner) => owner.id !== ownerId),
+            currentOwners.map((owner) =>
+              owner.id === archivedOwner.id ? archivedOwner : owner,
+            ),
           );
           setSelectedClient(null);
         }}
@@ -334,6 +338,25 @@ export default function ContactsPage() {
             currentOwners.filter((owner) => owner.id !== ownerId),
           );
           setSelectedClient(null);
+        }}
+        onPetUpdated={(updatedPet) => {
+          setPets((currentPets) =>
+            currentPets.map((pet) =>
+              pet.id === updatedPet.id ? updatedPet : pet,
+            ),
+          );
+        }}
+        onPetArchived={(archivedPet) => {
+          setPets((currentPets) =>
+            currentPets.map((pet) =>
+              pet.id === archivedPet.id ? archivedPet : pet,
+            ),
+          );
+        }}
+        onPetDeleted={(petId) => {
+          setPets((currentPets) =>
+            currentPets.filter((pet) => pet.id !== petId),
+          );
         }}
       />
 

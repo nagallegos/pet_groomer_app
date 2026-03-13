@@ -54,6 +54,7 @@ export default function PaginatedAppointmentList({
   const sortedAppointments = useMemo(
     () =>
       [...appointments]
+        .filter((appointment) => !appointment.isArchived)
         .filter((appointment) => new Date(appointment.start) >= startOfToday)
         .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime()),
     [appointments, startOfToday],

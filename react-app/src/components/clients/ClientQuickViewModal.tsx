@@ -1,11 +1,16 @@
-import { useEffect, useState } from "react";
-import { Alert, Button, Dropdown, Form, ListGroup, Modal, Spinner } from "react-bootstrap";
+import { useEffect, useMemo, useState } from "react";
+import { Alert, Button, Collapse, Dropdown, Form, ListGroup, Modal, Spinner } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 import {
+  addOwnerNote,
   archiveOwner,
+  archiveOwnerNote,
   deleteOwner,
+  deleteOwnerNoteItem,
   isBackendConfigured,
   saveOwner,
+  unarchiveOwnerNote,
+  updateOwnerNote,
   type OwnerUpsertInput,
 } from "../../lib/crmApi";
 import { useAppToast } from "../common/AppToastProvider";
@@ -20,9 +25,12 @@ interface ClientQuickViewModalProps {
   pets: Pet[];
   appointments: Appointment[];
   onHide: () => void;
-  onOwnerArchived?: (ownerId: string) => void;
+  onOwnerArchived?: (owner: Owner) => void;
   onOwnerDeleted?: (ownerId: string) => void;
   onOwnerUpdated?: (owner: Owner) => void;
+  onPetUpdated?: (pet: Pet) => void;
+  onPetArchived?: (pet: Pet) => void;
+  onPetDeleted?: (petId: string) => void;
 }
 
 export default function ClientQuickViewModal({
@@ -34,6 +42,9 @@ export default function ClientQuickViewModal({
   onOwnerArchived,
   onOwnerDeleted,
   onOwnerUpdated,
+  onPetUpdated,
+  onPetArchived,
+  onPetDeleted,
 }: ClientQuickViewModalProps) {
   const navigate = useNavigate();
   const { showToast } = useAppToast();
@@ -48,7 +59,11 @@ export default function ClientQuickViewModal({
   const [preferredContactMethod, setPreferredContactMethod] =
     useState<ContactMethod>("text");
   const [address, setAddress] = useState("");
-  const [notes, setNotes] = useState("");
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState("");
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [showArchivedNotes, setShowArchivedNotes] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
@@ -64,10 +79,15 @@ export default function ClientQuickViewModal({
     setEmail(owner.email);
     setPreferredContactMethod(owner.preferredContactMethod);
     setAddress(owner.address ?? "");
-    setNotes(owner.notes.map((note) => note.text).join("\n"));
+    setSelectedNoteId(null);
+    setNoteText("");
+    setNoteError(null);
     setIsEditing(false);
     setSaveError(null);
   }, [owner, show]);
+
+  const activeNotes = useMemo(() => owner?.notes.filter((note) => !note.isArchived) ?? [], [owner]);
+  const archivedNotes = useMemo(() => owner?.notes.filter((note) => note.isArchived) ?? [], [owner]);
 
   if (!owner) return null;
 
@@ -77,8 +97,7 @@ export default function ClientQuickViewModal({
     phone !== owner.phone ||
     email !== owner.email ||
     preferredContactMethod !== owner.preferredContactMethod ||
-    address !== (owner.address ?? "") ||
-    notes !== owner.notes.map((note) => note.text).join("\n");
+    address !== (owner.address ?? "");
 
   const saveClientChanges = async () => {
     setIsSaving(true);
@@ -91,7 +110,6 @@ export default function ClientQuickViewModal({
       email,
       preferredContactMethod,
       address,
-      notes,
     };
 
     try {
@@ -139,6 +157,65 @@ export default function ClientQuickViewModal({
   const selectedPetAppointments = selectedPet
     ? appointments.filter((appointment) => appointment.petId === selectedPet.id)
     : [];
+
+  const resetNoteEditor = () => {
+    setSelectedNoteId(null);
+    setNoteText("");
+    setNoteError(null);
+  };
+
+  const handleSaveNote = async () => {
+    if (!noteText.trim()) {
+      return;
+    }
+
+    setIsSavingNote(true);
+    setNoteError(null);
+
+    try {
+      const result = selectedNoteId
+        ? await updateOwnerNote(owner, selectedNoteId, noteText.trim())
+        : await addOwnerNote(owner, noteText.trim());
+      onOwnerUpdated?.(result.data);
+      resetNoteEditor();
+      showToast({
+        title: selectedNoteId ? "Note Updated" : "Note Added",
+        body: "The client note was saved successfully.",
+        variant: "success",
+      });
+    } catch (error) {
+      setNoteError(error instanceof Error ? error.message : "Unable to save note.");
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
+
+  const handleNoteAction = async (noteId: string, action: "archive" | "restore" | "delete") => {
+    setIsSavingNote(true);
+    setNoteError(null);
+
+    try {
+      const result =
+        action === "archive"
+          ? await archiveOwnerNote(owner, noteId)
+          : action === "restore"
+            ? await unarchiveOwnerNote(owner, noteId)
+            : await deleteOwnerNoteItem(owner, noteId);
+      onOwnerUpdated?.(result.data);
+      if (selectedNoteId === noteId) {
+        resetNoteEditor();
+      }
+      showToast({
+        title: action === "archive" ? "Note Archived" : action === "restore" ? "Note Restored" : "Note Deleted",
+        body: action === "delete" ? "The note was deleted." : "The note list was updated.",
+        variant: action === "delete" ? "warning" : "success",
+      });
+    } catch (error) {
+      setNoteError(error instanceof Error ? error.message : "Unable to update note.");
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
 
   return (
     <>
@@ -195,7 +272,7 @@ export default function ClientQuickViewModal({
             <>
               {!isBackendConfigured() && (
                 <Alert variant="info" className="mb-3">
-                  MongoDB backend not configured yet. Saves are currently local UI previews only.
+                  Backend not configured yet. Saves are currently local UI previews only.
                 </Alert>
               )}
 
@@ -261,16 +338,102 @@ export default function ClientQuickViewModal({
                 />
               </Form.Group>
 
-              <Form.Group>
-                <Form.Label>Client Notes</Form.Label>
-                <Form.Control
-                  as="textarea"
-                  rows={4}
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                />
-              </Form.Group>
-
+              <div>
+                <div className="d-flex justify-content-between align-items-center gap-2 mb-2">
+                  <Form.Label className="mb-0">Client Notes</Form.Label>
+                  <Button size="sm" variant="outline-secondary" onClick={resetNoteEditor}>
+                    New Note
+                  </Button>
+                </div>
+                {noteError && (
+                  <Alert variant="danger" className="mb-3">
+                    {noteError}
+                  </Alert>
+                )}
+                <Form.Group className="mb-3">
+                  <Form.Control
+                    as="textarea"
+                    rows={3}
+                    value={noteText}
+                    onChange={(event) => setNoteText(event.target.value)}
+                    placeholder="Add or edit a client note..."
+                  />
+                </Form.Group>
+                <div className="d-flex justify-content-end gap-2 mb-3">
+                  {selectedNoteId && (
+                    <Button size="sm" variant="outline-secondary" onClick={resetNoteEditor}>
+                      Cancel Note Edit
+                    </Button>
+                  )}
+                  <Button size="sm" variant="primary" onClick={() => void handleSaveNote()} disabled={!noteText.trim() || isSavingNote}>
+                    {isSavingNote && <Spinner animation="border" size="sm" className="me-2" />}
+                    Save Note
+                  </Button>
+                </div>
+                {activeNotes.length === 0 ? (
+                  <p className="text-muted mb-0">No active client notes.</p>
+                ) : (
+                  <ListGroup className="compact-note-list">
+                    {activeNotes.map((note) => (
+                      <ListGroup.Item key={note.id}>
+                        <div className="d-flex justify-content-between align-items-start gap-3">
+                          <div className="client-note-item">
+                            <div className="client-note-meta">
+                              <span>{new Date(note.createdAt).toLocaleDateString()}</span>
+                              {note.updatedAt && <span>Updated {new Date(note.updatedAt).toLocaleDateString()}</span>}
+                            </div>
+                            <div>{note.text}</div>
+                          </div>
+                          <div className="note-inline-actions">
+                            <button type="button" className="pet-row-indicator-button" onClick={() => { setSelectedNoteId(note.id); setNoteText(note.text); }}>
+                              <span className="pet-row-indicator">Edit</span>
+                            </button>
+                            <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "archive"); }}>
+                              <span className="pet-row-indicator">Archive</span>
+                            </button>
+                            <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "delete"); }}>
+                              <span className="pet-row-indicator pet-row-indicator-danger">Delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      </ListGroup.Item>
+                    ))}
+                  </ListGroup>
+                )}
+                {archivedNotes.length > 0 && (
+                  <div className="mt-3">
+                    <Button size="sm" variant="outline-secondary" onClick={() => setShowArchivedNotes((current) => !current)}>
+                      {showArchivedNotes ? "Hide Archived Notes" : `Show Archived Notes (${archivedNotes.length})`}
+                    </Button>
+                    <Collapse in={showArchivedNotes}>
+                      <div className="mt-3">
+                        <ListGroup className="compact-note-list">
+                          {archivedNotes.map((note) => (
+                            <ListGroup.Item key={note.id}>
+                              <div className="d-flex justify-content-between align-items-start gap-3">
+                                <div className="client-note-item">
+                                  <div className="client-note-meta">
+                                    <span>Archived {note.archivedAt ? new Date(note.archivedAt).toLocaleDateString() : ""}</span>
+                                  </div>
+                                  <div>{note.text}</div>
+                                </div>
+                                <div className="note-inline-actions">
+                                  <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "restore"); }}>
+                                    <span className="pet-row-indicator">Restore</span>
+                                  </button>
+                                  <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "delete"); }}>
+                                    <span className="pet-row-indicator pet-row-indicator-danger">Delete</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </ListGroup.Item>
+                          ))}
+                        </ListGroup>
+                      </div>
+                    </Collapse>
+                  </div>
+                )}
+              </div>
               <p className="text-muted small mt-3 mb-0">
                 Use the full client page to edit pets and other related records.
               </p>
@@ -398,7 +561,7 @@ export default function ClientQuickViewModal({
                 : "Client archived in mock mode.",
             variant: "warning",
           });
-          onOwnerArchived?.(owner.id);
+          onOwnerArchived?.(result.data);
           setShowArchiveModal(false);
           onHide();
         }}
@@ -486,7 +649,16 @@ export default function ClientQuickViewModal({
         }}
         onBack={() => setSelectedPet(null)}
         onPetUpdated={(updatedPet) => {
+          onPetUpdated?.(updatedPet);
           setSelectedPet(updatedPet);
+        }}
+        onPetArchived={(archivedPet) => {
+          onPetArchived?.(archivedPet);
+          setSelectedPet(null);
+        }}
+        onPetDeleted={(petId) => {
+          onPetDeleted?.(petId);
+          setSelectedPet(null);
         }}
       />
     </>

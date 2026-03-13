@@ -1,0 +1,101 @@
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { getApiBaseUrl, type AppUserRole } from "../../lib/crmApi";
+import { AuthContext } from "./authContext";
+
+export interface AppUser {
+  id: string;
+  email: string;
+  role: AppUserRole;
+  name: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  notifyByEmail: boolean;
+  notifyByText: boolean;
+}
+
+export interface UserProfileInput {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  notifyByEmail: boolean;
+  notifyByText: boolean;
+}
+
+export interface AuthContextValue {
+  user: AppUser | null;
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  updateProfile: (input: UserProfileInput) => Promise<void>;
+}
+
+const API_BASE_URL = getApiBaseUrl();
+
+async function authRequest(path: string, method: string, body?: unknown) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({ error: "Request failed." }));
+    throw new Error(payload.error ?? "Request failed.");
+  }
+
+  return response.json();
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    authRequest("/auth/me", "GET")
+      .then((payload) => {
+        if (!cancelled) {
+          setUser(payload.user);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setUser(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      isLoading,
+      login: async (email, password) => {
+        const payload = await authRequest("/auth/login", "POST", { email, password });
+        setUser(payload.user);
+      },
+      logout: async () => {
+        await authRequest("/auth/logout", "POST");
+        setUser(null);
+      },
+      updateProfile: async (input) => {
+        const payload = await authRequest("/auth/profile", "PUT", input);
+        setUser(payload.user);
+      },
+    }),
+    [isLoading, user],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}

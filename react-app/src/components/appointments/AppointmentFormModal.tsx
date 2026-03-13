@@ -122,7 +122,7 @@ export default function AppointmentFormModal({
         body:
           result.mode === "api"
             ? "Appointment saved to backend."
-            : "Appointment saved in mock mode. Connect VITE_API_BASE_URL later to persist to MongoDB.",
+            : "Appointment saved in mock mode. Connect the API later to persist changes.",
         variant: "success",
       });
       onSaved?.(result.data);
@@ -151,7 +151,7 @@ export default function AppointmentFormModal({
         <Modal.Body>
           {!isBackendConfigured() && (
             <Alert variant="info" className="mb-3">
-              MongoDB backend not configured yet. Saves are currently local UI previews only.
+              Backend not configured yet. Saves are currently local UI previews only.
             </Alert>
           )}
 
@@ -276,7 +276,7 @@ export default function AppointmentFormModal({
           )}
 
           <Form.Group className="mb-3">
-            <Form.Label id="costLabel">Projected Cost</Form.Label>
+            <Form.Label id="costLabel" className="appointment-cost-highlight">Projected Cost</Form.Label>
             <Form.Control
               type="number"
               min="0"
@@ -286,6 +286,7 @@ export default function AppointmentFormModal({
               placeholder="85.00"
               title="Enter projected appointment cost"
               aria-labelledby="costLabel"
+              className="appointment-cost-input"
             />
           </Form.Group>
 

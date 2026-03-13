@@ -17,14 +17,14 @@ import PaginatedAppointmentList from "../components/appointments/PaginatedAppoin
 import CustomCalendarToolbar from "../components/calendar/CustomCalendarToolbar";
 import ThreeDayView from "../components/calendar/ThreeDayView";
 import TuesdaySaturdayWorkWeekView from "../components/calendar/TuesdaySaturdayWeekView";
+import { useAppData } from "../components/common/AppDataProvider";
 import { useAppToast } from "../components/common/AppToastProvider";
 import ConfirmDeleteModal from "../components/common/ConfirmDeleteModal";
 import PageLoader from "../components/common/PageLoader";
-import { mockAppointments, mockOwners, mockPets } from "../data/mockData";
 import useInitialLoading from "../hooks/useInitialLoading";
 import { formatAppointmentServices } from "../lib/appointmentServices";
 import { archiveAppointment, deleteAppointment } from "../lib/crmApi";
-import type { Appointment } from "../types/models";
+import type { Appointment, Owner } from "../types/models";
 
 const localizer = dateFnsLocalizer({
   format,
@@ -88,7 +88,8 @@ const MOBILE_LANDSCAPE_HEIGHT_BREAKPOINT = 500;
 function isCompactMobileViewport() {
   return (
     window.innerWidth < MOBILE_BREAKPOINT ||
-    (window.innerHeight <= MOBILE_LANDSCAPE_HEIGHT_BREAKPOINT && window.innerWidth < 1100)
+    (window.innerHeight <= MOBILE_LANDSCAPE_HEIGHT_BREAKPOINT &&
+      window.innerWidth < 1100)
   );
 }
 
@@ -136,9 +137,13 @@ function getAppointmentStatusTheme(status: Appointment["status"]) {
 function MobileAgendaStyleEvent({
   event,
   onEdit,
-}: EventProps<CalendarEvent> & { onEdit: (event: CalendarEvent) => void }) {
+  owners,
+}: EventProps<CalendarEvent> & {
+  onEdit: (event: CalendarEvent) => void;
+  owners: Owner[];
+}) {
   const statusTheme = getAppointmentStatusTheme(event.resource.status);
-  const owner = mockOwners.find((record) => record.id === event.resource.ownerId);
+  const owner = owners.find((record) => record.id === event.resource.ownerId);
   const ownerName = owner ? `${owner.firstName} ${owner.lastName}`.trim() : "";
 
   return (
@@ -173,33 +178,20 @@ function MobileAgendaStyleEvent({
 }
 
 function CalendarPetEventChip({ event }: EventProps<CalendarEvent>) {
-  const petName =
-    mockPets.find((pet) => pet.id === event.resource.petId)?.name ?? "Pet";
-  return <span>{petName}</span>;
+  return <span>{event.title}</span>;
 }
-
-function CalendarEventChip({ event }: EventProps<CalendarEvent>) {
-  const petName = event.title.split(" â€¢ ")[0];
-  return <span>{petName}</span>;
-}
-
-void CalendarEventChip;
 
 export default function SchedulePage() {
   const { showToast } = useAppToast();
   const isLoading = useInitialLoading();
+  const { owners, pets, appointments, setAppointments } = useAppData();
 
   const getInitialView = (): CalendarViewName =>
     isCompactMobileViewport() ? Views.DAY : Views.MONTH;
 
-  const [isMobile, setIsMobile] = useState(
-    () => isCompactMobileViewport(),
-  );
+  const [isMobile, setIsMobile] = useState(() => isCompactMobileViewport());
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
-  const [currentView, setCurrentView] = useState<CalendarViewName>(
-    getInitialView,
-  );
-  const [appointments, setAppointments] = useState<Appointment[]>(mockAppointments);
+  const [currentView, setCurrentView] = useState<CalendarViewName>(getInitialView);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showMobileCalendar, setShowMobileCalendar] = useState(false);
@@ -209,7 +201,6 @@ export default function SchedulePage() {
     useState<Appointment | null>(null);
   const [appointmentPendingArchive, setAppointmentPendingArchive] =
     useState<Appointment | null>(null);
-
   const [draft, setDraft] = useState<NewAppointmentDraft>({
     ownerId: "",
     petId: "",
@@ -225,7 +216,11 @@ export default function SchedulePage() {
 
       setCurrentView((prev) => {
         if (mobile) {
-          if (prev === Views.MONTH || prev === Views.WEEK || prev === Views.WORK_WEEK) {
+          if (
+            prev === Views.MONTH ||
+            prev === Views.WEEK ||
+            prev === Views.WORK_WEEK
+          ) {
             return Views.DAY;
           }
           return prev;
@@ -243,21 +238,25 @@ export default function SchedulePage() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  const visibleAppointments = useMemo(
+    () => appointments.filter((appointment) => !appointment.isArchived),
+    [appointments],
+  );
+
   const calendarEvents = useMemo<CalendarEvent[]>(
     () =>
-      appointments.map((appt) => {
-        const owner = mockOwners.find((o) => o.id === appt.ownerId);
-        const pet = mockPets.find((p) => p.id === appt.petId);
+      visibleAppointments.map((appointment) => {
+        const pet = pets.find((item) => item.id === appointment.petId);
 
         return {
-          id: appt.id,
-          title: `${pet?.name ?? "Pet"} • ${owner?.firstName ?? ""} ${owner?.lastName ?? ""}`,
-          start: new Date(appt.start),
-          end: new Date(appt.end),
-          resource: appt,
+          id: appointment.id,
+          title: pet?.name ?? "Pet",
+          start: new Date(appointment.start),
+          end: new Date(appointment.end),
+          resource: appointment,
         };
       }),
-    [appointments],
+    [pets, visibleAppointments],
   );
 
   const handleSelectSlot = ({ start }: { start: Date; end: Date }) => {
@@ -317,8 +316,11 @@ export default function SchedulePage() {
     try {
       const result = await archiveAppointment(appointment);
       setAppointments((currentAppointments) =>
-        currentAppointments.filter(
-          (currentAppointment) => currentAppointment.id !== result.data.id,
+        currentAppointments.map(
+          (currentAppointment) =>
+            currentAppointment.id === result.data.id
+              ? result.data
+              : currentAppointment,
         ),
       );
       showToast({
@@ -409,6 +411,7 @@ export default function SchedulePage() {
             event: (props) => (
               <MobileAgendaStyleEvent
                 {...props}
+                owners={owners}
                 onEdit={(event) => handleOpenAppointment(event.resource)}
               />
             ),
@@ -444,20 +447,24 @@ export default function SchedulePage() {
       </div>
 
       {isMobile ? (
-      <Card className="shadow-sm schedule-calendar-card schedule-calendar-launcher-card mb-4">
+        <Card className="shadow-sm schedule-calendar-card schedule-calendar-launcher-card mb-4">
           <Card.Body className="calendar-card-body">
             <div className="schedule-calendar-launcher">
               <div>
                 <Card.Title className="mb-1">Calendar</Card.Title>
                 <p className="text-muted small mb-0">
-                  Open the calendar in a focused view without the page scroll fighting the time grid.
+                  Open the calendar in a focused view without the page scroll
+                  fighting the time grid.
                 </p>
                 <div className="mt-2">
                   <CalendarStatusLegend compact />
                 </div>
               </div>
 
-              <Button variant="outline-primary" onClick={() => setShowMobileCalendar(true)}>
+              <Button
+                variant="outline-primary"
+                onClick={() => setShowMobileCalendar(true)}
+              >
                 View Calendar
               </Button>
             </div>
@@ -486,9 +493,9 @@ export default function SchedulePage() {
       )}
 
       <PaginatedAppointmentList
-        appointments={appointments}
-        owners={mockOwners}
-        pets={mockPets}
+        appointments={visibleAppointments}
+        owners={owners}
+        pets={pets}
         onAppointmentClick={handleOpenAppointment}
       />
 
@@ -514,8 +521,8 @@ export default function SchedulePage() {
       <AppointmentFormModal
         show={showCreateModal}
         onHide={() => setShowCreateModal(false)}
-        owners={mockOwners}
-        pets={mockPets}
+        owners={owners}
+        pets={pets}
         initialOwnerId={draft.ownerId}
         initialPetId={draft.petId}
         initialDate={draft.date}
@@ -536,13 +543,16 @@ export default function SchedulePage() {
           setSelectedAppointment(null);
         }}
         appointment={selectedAppointment}
-        owners={mockOwners}
-        pets={mockPets}
+        owners={owners}
+        pets={pets}
         onUpdated={(updatedAppointment) => {
           if (updatedAppointment.isArchived) {
             setAppointments((currentAppointments) =>
-              currentAppointments.filter(
-                (appointment) => appointment.id !== updatedAppointment.id,
+              currentAppointments.map(
+                (appointment) =>
+                  appointment.id === updatedAppointment.id
+                    ? updatedAppointment
+                    : appointment,
               ),
             );
             setSelectedAppointment(null);

@@ -1,5 +1,6 @@
 import { Nav, Offcanvas } from "react-bootstrap";
 import { NavLink } from "react-router-dom";
+import { useAuth } from "../common/useAuth";
 import SettingsMenu from "./SettingsMenu";
 
 interface SidebarProps {
@@ -54,22 +55,47 @@ const navItems = [
       </svg>
     ),
   },
+  {
+    to: "/users",
+    label: "Users",
+    icon: (
+      <svg viewBox="0 0 24 24" focusable="false">
+        <path d="M9 11a3 3 0 1 0 0-6a3 3 0 0 0 0 6Zm8 1.5a2.5 2.5 0 1 0 0-5M4.5 19a4.5 4.5 0 0 1 9 0M16 18.5c0-1.75-1.12-3.22-2.68-3.78" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
 ] as const;
 
 export default function Sidebar({ show, onHide }: SidebarProps) {
+  const { user } = useAuth();
+  const visibleNavItems = navItems.filter(
+    (item) => item.to !== "/users" || user?.role === "admin",
+  );
+  const roleLabel =
+    user?.role === "admin"
+      ? "Administrator"
+      : user?.role === "groomer"
+        ? "Pet Groomer"
+        : "Client User";
+
   return (
     <>
       <aside className="sidebar-desktop d-none d-lg-flex flex-column">
-        <div className="sidebar-brand">
-          <span className="sidebar-brand-mark" aria-hidden="true">🐶</span>
-          <div>
-            <p className="sidebar-eyebrow mb-1">Pet Grooming Manager</p>
-            <h4 className="sidebar-title mb-0">Barks Bubbles & Love</h4>
+        <div className="sidebar-top">
+          <div className="sidebar-brand">
+            <span className="sidebar-brand-mark" aria-hidden="true">🐶</span>
+            <div>
+              <p className="sidebar-eyebrow mb-1">Pet Grooming Manager</p>
+              <h4 className="sidebar-title mb-0">Barks Bubbles & Love</h4>
+            </div>
+          </div>
+          <div className="sidebar-settings-wrap">
+            <SettingsMenu />
           </div>
         </div>
 
         <Nav className="sidebar-nav flex-column gap-2">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <Nav.Link key={item.to} as={NavLink} to={item.to} className="sidebar-link">
               <span aria-hidden="true" className="sidebar-link-icon">
                 {item.icon}
@@ -80,23 +106,31 @@ export default function Sidebar({ show, onHide }: SidebarProps) {
         </Nav>
 
         <div className="sidebar-footer mt-auto">
-          <div className="mb-3">
-            <SettingsMenu />
-          </div>
           <small>Warm, polished client care for every bath, brush, and bow.</small>
         </div>
       </aside>
 
       <Offcanvas show={show} onHide={onHide} className="d-lg-none sidebar-offcanvas">
         <Offcanvas.Header closeButton>
-          <Offcanvas.Title>Barks Bubbles & Love</Offcanvas.Title>
+          <div className="sidebar-offcanvas-header-main">
+            {user && (
+              <div className="sidebar-user-chip sidebar-user-chip-mobile">
+                <strong>{user.firstName} {user.lastName}</strong>
+                <span>{roleLabel}</span>
+              </div>
+            )}
+            <Offcanvas.Title>Barks Bubbles & Love</Offcanvas.Title>
+          </div>
         </Offcanvas.Header>
         <Offcanvas.Body>
           <div className="d-flex justify-content-end mb-3">
-            <SettingsMenu toggleClassName="sidebar-offcanvas-settings-btn" />
+            <SettingsMenu
+              toggleClassName="sidebar-offcanvas-settings-btn"
+              onNavigate={onHide}
+            />
           </div>
           <Nav className="flex-column gap-2">
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <Nav.Link
                 key={item.to}
                 as={NavLink}

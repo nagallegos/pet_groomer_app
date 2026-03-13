@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { Alert, Button, Card, Collapse, Form, ListGroup } from "react-bootstrap";
 import { useParams } from "react-router-dom";
+import { useAppData } from "../components/common/AppDataProvider";
 import ConfirmDeleteModal from "../components/common/ConfirmDeleteModal";
 import PageLoader from "../components/common/PageLoader";
 import { useAppToast } from "../components/common/AppToastProvider";
-import { mockAppointments, mockOwners, mockPets } from "../data/mockData";
 import useInitialLoading from "../hooks/useInitialLoading";
 import { formatAppointmentServices } from "../lib/appointmentServices";
 import {
@@ -21,10 +21,15 @@ const PAGE_SIZE = 12;
 export default function ArchivePage() {
   const { showToast } = useAppToast();
   const isLoading = useInitialLoading();
+  const {
+    owners,
+    pets,
+    appointments,
+    setOwners,
+    setPets,
+    setAppointments,
+  } = useAppData();
   const { archiveType } = useParams<{ archiveType: ArchiveType }>();
-  const [owners, setOwners] = useState<Owner[]>(mockOwners);
-  const [pets, setPets] = useState<Pet[]>(mockPets);
-  const [appointments, setAppointments] = useState<Appointment[]>(mockAppointments);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterValue, setFilterValue] = useState("all");
   const [sortValue, setSortValue] = useState("name");
@@ -49,6 +54,8 @@ export default function ArchivePage() {
       case "pets":
         return {
           title: "Pet Archives",
+          description: "Review archived pet records, check ownership details, and restore them when needed.",
+          singularLabel: "pet",
           searchLabel: "Search Archived Pets",
           searchPlaceholder: "Search by pet, breed, species, or owner",
           filterLabel: "Species",
@@ -67,6 +74,8 @@ export default function ArchivePage() {
       case "appointments":
         return {
           title: "Appointment Archives",
+          description: "Browse archived appointments by date, client, or status and restore them to the schedule history.",
+          singularLabel: "appointment",
           searchLabel: "Search Archived Appointments",
           searchPlaceholder: "Search by client, pet, service, or status",
           filterLabel: "Status",
@@ -86,6 +95,8 @@ export default function ArchivePage() {
       default:
         return {
           title: "Client Archives",
+          description: "Search archived client records, review contact details, and restore them to the active client list.",
+          singularLabel: "client",
           searchLabel: "Search Archived Clients",
           searchPlaceholder: "Search by first name, last name, email, or phone",
           filterLabel: "Preferred Contact",
@@ -222,6 +233,8 @@ export default function ArchivePage() {
 
   const totalPages = Math.max(1, Math.ceil(archivedItems.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
+  const rangeStart = archivedItems.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const rangeEnd = archivedItems.length === 0 ? 0 : Math.min(archivedItems.length, safePage * PAGE_SIZE);
   const pagedItems = archivedItems.slice(
     (safePage - 1) * PAGE_SIZE,
     safePage * PAGE_SIZE,
@@ -305,7 +318,7 @@ export default function ArchivePage() {
         <>
           <div className="fw-semibold">{owner.firstName} {owner.lastName}</div>
           <div className="small text-muted">
-            {owner.email} • {owner.phone} • {owner.preferredContactMethod}
+            {owner.email} | {owner.phone} | {owner.preferredContactMethod}
           </div>
         </>
       );
@@ -318,8 +331,8 @@ export default function ArchivePage() {
         <>
           <div className="fw-semibold">{pet.name}</div>
           <div className="small text-muted">
-            {pet.species} • {pet.breed}
-            {owner ? ` • ${owner.firstName} ${owner.lastName}` : ""}
+            {pet.species} | {pet.breed}
+            {owner ? ` | ${owner.firstName} ${owner.lastName}` : ""}
           </div>
         </>
       );
@@ -332,11 +345,10 @@ export default function ArchivePage() {
     return (
       <>
         <div className="fw-semibold">
-          {pet?.name ?? "Pet"} • {owner?.firstName ?? ""} {owner?.lastName ?? ""}
+          {pet?.name ?? "Pet"} | {owner?.firstName ?? ""} {owner?.lastName ?? ""}
         </div>
         <div className="small text-muted">
-          {new Date(appointment.start).toLocaleString()} •{" "}
-          {formatAppointmentServices(appointment)} • {appointment.status}
+          {new Date(appointment.start).toLocaleString()} | {formatAppointmentServices(appointment)} | {appointment.status}
         </div>
       </>
     );
@@ -385,9 +397,7 @@ export default function ArchivePage() {
         <div>
           <p className="page-kicker mb-2">Archives</p>
           <h2 className="mb-1">{pageConfig.title}</h2>
-          <p className="text-muted mb-0">
-            Search archived records, review them, and restore them to active status.
-          </p>
+          <p className="text-muted mb-0">{pageConfig.description}</p>
         </div>
       </div>
 
@@ -504,23 +514,30 @@ export default function ArchivePage() {
         </Card.Body>
       </Card>
 
-      <Card className="shadow-sm">
+      <Card className="shadow-sm archive-results-card">
         <Card.Body>
-          <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
+          <div className="archive-results-header">
             <div>
               <Card.Title className="mb-1">Archived Items</Card.Title>
               <p className="text-muted small mb-0">
-                Showing {archivedItems.length} archived item
-                {archivedItems.length === 1 ? "" : "s"}, sorted by {sortValue} and grouped by {groupValue}.
+                Showing {rangeStart}-{rangeEnd} of {archivedItems.length} archived {pageConfig.singularLabel}
+                {archivedItems.length === 1 ? "" : "s"}.
               </p>
             </div>
-            <Button
-              variant="primary"
-              disabled={!selectedItemId}
-              onClick={() => setShowUnarchiveModal(true)}
-            >
-              Unarchive Selected
-            </Button>
+            <div className="archive-results-meta">
+              <div className="archive-results-chip">Sorted by {sortValue}</div>
+              <div className="archive-results-chip">Grouped by {groupValue}</div>
+              <div className={`archive-results-chip${selectedItemId ? " archive-results-chip-active" : ""}`}>
+                {selectedItemId ? "1 selected" : "0 selected"}
+              </div>
+              <Button
+                variant="primary"
+                disabled={!selectedItemId}
+                onClick={() => setShowUnarchiveModal(true)}
+              >
+                Unarchive Selected
+              </Button>
+            </div>
           </div>
 
           {pagedItems.length === 0 ? (
@@ -532,21 +549,30 @@ export default function ArchivePage() {
               {groupedItems.map((group) => (
                 <section key={group.label} className="directory-group-section">
                   <div className="directory-group-heading">{group.label}</div>
-                  <ListGroup variant="flush" className="appointment-list-group">
+                  <ListGroup variant="flush" className="appointment-list-group archive-list-group">
                     {group.items.map((item) => {
-                const itemId = item.id;
-                const isSelected = selectedItemId === itemId;
+                      const itemId = item.id;
+                      const isSelected = selectedItemId === itemId;
 
-                return (
-                  <ListGroup.Item
-                    key={itemId}
-                    action
-                    active={isSelected}
-                    onClick={() => setSelectedItemId(itemId)}
-                  >
-                    {renderItem(item)}
-                  </ListGroup.Item>
-                );
+                      return (
+                        <ListGroup.Item
+                          key={itemId}
+                          action
+                          active={isSelected}
+                          onClick={() => setSelectedItemId(itemId)}
+                          className="archive-list-item"
+                        >
+                          <div className="archive-list-item-main">
+                            <span
+                              aria-hidden="true"
+                              className={`archive-list-item-indicator archive-list-item-indicator-${validArchiveType}`}
+                            />
+                            <div className="archive-list-item-copy">
+                              {renderItem(item)}
+                            </div>
+                          </div>
+                        </ListGroup.Item>
+                      );
                     })}
                   </ListGroup>
                 </section>
@@ -554,22 +580,29 @@ export default function ArchivePage() {
             </div>
           )}
 
-          <div className="d-flex justify-content-between align-items-center gap-2 mt-3">
+          <div className="archive-pagination">
             <Button
               variant="outline-secondary"
+              className="appointment-list-page-btn"
               disabled={safePage === 1}
               onClick={() => setPage((current) => Math.max(1, current - 1))}
+              aria-label="Previous page"
             >
-              Previous
+              ‹
             </Button>
+            <span className="text-muted small">
+              {rangeStart}-{rangeEnd} of {archivedItems.length}
+            </span>
             <Button
               variant="outline-secondary"
+              className="appointment-list-page-btn"
               disabled={safePage === totalPages}
               onClick={() =>
                 setPage((current) => Math.min(totalPages, current + 1))
               }
+              aria-label="Next page"
             >
-              Next
+              ›
             </Button>
           </div>
         </Card.Body>

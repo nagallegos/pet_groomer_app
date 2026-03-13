@@ -2,8 +2,8 @@ import { useMemo, useState } from "react";
 import { addWeeks, endOfDay, format, startOfDay, startOfWeek, startOfYear, subWeeks } from "date-fns";
 import { Card, Col, Form, Row } from "react-bootstrap";
 import AnalyticsLineChart from "../components/analytics/AnalyticsLineChart";
+import { useAppData } from "../components/common/AppDataProvider";
 import PageLoader from "../components/common/PageLoader";
-import { mockAppointments } from "../data/mockData";
 import useInitialLoading from "../hooks/useInitialLoading";
 import type { Appointment } from "../types/models";
 
@@ -73,6 +73,7 @@ function isRangeValid(start: string, end: string) {
 
 export default function AnalysisPage() {
   const isLoading = useInitialLoading();
+  const { appointments } = useAppData();
   const now = useMemo(() => new Date(), []);
   const today = useMemo(() => startOfDay(now), [now]);
   const currentYear = today.getFullYear();
@@ -93,8 +94,8 @@ export default function AnalysisPage() {
   );
 
   const activeAppointments = useMemo(
-    () => mockAppointments.filter((appointment) => !appointment.isArchived),
-    [],
+    () => appointments.filter((appointment) => !appointment.isArchived),
+    [appointments],
   );
 
   const revenueYtd = useMemo(

@@ -30,6 +30,7 @@ export default function PetFormModal({
   const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const originalNotes = initialPet?.notes.map((note) => note.text).join("\n") ?? "";
 
   const activeOwners = useMemo(
     () => owners.filter((owner) => !owner.isArchived),
@@ -67,8 +68,11 @@ export default function PetFormModal({
       weightLbs: weightLbs ? Number(weightLbs) : undefined,
       ageYears: ageYears ? Number(ageYears) : undefined,
       color,
-      notes,
     };
+
+    if (!initialPet || notes !== originalNotes) {
+      payload.notes = notes;
+    }
 
     try {
       const result = await savePet(payload, initialPet ?? undefined);
@@ -91,7 +95,7 @@ export default function PetFormModal({
         <Modal.Body>
           {!isBackendConfigured() && (
             <Alert variant="info" className="mb-3">
-              MongoDB backend not configured yet. Saves are currently local UI
+              Backend not configured yet. Saves are currently local UI
               previews only.
             </Alert>
           )}

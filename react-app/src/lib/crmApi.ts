@@ -2,10 +2,40 @@ import type {
   Appointment,
   AppointmentStatus,
   ContactMethod,
+  NoteItem,
   Owner,
   Pet,
   Species,
 } from "../types/models";
+
+export type AppUserRole = "admin" | "groomer" | "client";
+
+export interface ManagedUser {
+  id: string;
+  email: string;
+  role: AppUserRole;
+  name: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  notifyByEmail: boolean;
+  notifyByText: boolean;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ManagedUserUpsertInput {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  role: AppUserRole;
+  notifyByEmail: boolean;
+  notifyByText: boolean;
+  isActive: boolean;
+  password?: string;
+}
 import { derivePrimaryServiceType } from "./appointmentServices";
 
 export interface OwnerUpsertInput {
@@ -15,7 +45,7 @@ export interface OwnerUpsertInput {
   email: string;
   preferredContactMethod: ContactMethod;
   address?: string;
-  notes: string;
+  notes?: string;
 }
 
 export interface PetUpsertInput {
@@ -26,7 +56,7 @@ export interface PetUpsertInput {
   weightLbs?: number;
   ageYears?: number;
   color?: string;
-  notes: string;
+  notes?: string;
 }
 
 export interface AppointmentUpsertInput {
@@ -38,28 +68,34 @@ export interface AppointmentUpsertInput {
   selectedServices?: string[];
   customServiceType?: string;
   cost: number;
-  notes: string;
+  notes?: string;
   status?: AppointmentStatus;
 }
+
+type NoteSaveResult<T> = SaveResult<T>;
 
 type SaveResult<T> = {
   data: T;
   mode: "mock" | "api";
 };
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim();
+export function getApiBaseUrl() {
+  return import.meta.env.VITE_API_BASE_URL?.trim() || "/api";
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 export function isBackendConfigured() {
   return Boolean(API_BASE_URL);
 }
 
-async function request<T>(path: string, method: string, body: unknown): Promise<T> {
+async function request<T>(path: string, method: string, body?: unknown): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
-    headers: {
+    headers: body === undefined ? undefined : {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -67,6 +103,23 @@ async function request<T>(path: string, method: string, body: unknown): Promise<
   }
 
   return (await response.json()) as T;
+}
+
+export async function listManagedUsers(): Promise<ManagedUser[]> {
+  return request<ManagedUser[]>("/users", "GET");
+}
+
+export async function saveManagedUser(
+  input: ManagedUserUpsertInput,
+  existingUser?: ManagedUser,
+): Promise<ManagedUser> {
+  return existingUser
+    ? request<ManagedUser>(`/users/${existingUser.id}`, "PUT", input)
+    : request<ManagedUser>("/users", "POST", input);
+}
+
+export async function deleteManagedUser(userId: string): Promise<ManagedUser> {
+  return request<ManagedUser>(`/users/${userId}`, "DELETE", {});
 }
 
 function normalizeOwner(input: OwnerUpsertInput, existingOwner?: Owner): Owner {
@@ -87,7 +140,7 @@ function normalizeOwner(input: OwnerUpsertInput, existingOwner?: Owner): Owner {
               existingOwner?.notes[0]?.createdAt ?? new Date().toISOString(),
           },
         ]
-      : [],
+      : existingOwner?.notes ?? [],
     isArchived: existingOwner?.isArchived ?? false,
     archivedAt: existingOwner?.archivedAt,
   };
@@ -112,7 +165,7 @@ function normalizePet(input: PetUpsertInput, existingPet?: Pet): Pet {
               existingPet?.notes[0]?.createdAt ?? new Date().toISOString(),
           },
         ]
-      : [],
+      : existingPet?.notes ?? [],
     isArchived: existingPet?.isArchived ?? false,
     archivedAt: existingPet?.archivedAt,
   };
@@ -144,7 +197,7 @@ function normalizeAppointment(
               existingAppointment?.notes[0]?.createdAt ?? new Date().toISOString(),
           },
         ]
-      : [],
+      : existingAppointment?.notes ?? [],
     confirmationSentAt: existingAppointment?.confirmationSentAt,
     confirmedAt: existingAppointment?.confirmedAt,
     isArchived: existingAppointment?.isArchived ?? false,
@@ -380,6 +433,352 @@ export async function deleteAppointment(
 
   const data = await request<Appointment>(
     `/appointments/${appointment.id}`,
+    "DELETE",
+    {},
+  );
+  return { data, mode: "api" };
+}
+
+function updateExistingNote(
+  notes: NoteItem[],
+  noteId: string,
+  text: string,
+): NoteItem[] {
+  return notes.map((note) =>
+    note.id === noteId
+      ? {
+          ...note,
+          text,
+          updatedAt: new Date().toISOString(),
+        }
+      : note,
+  );
+}
+
+function archiveExistingNote(
+  notes: NoteItem[],
+  noteId: string,
+  isArchived: boolean,
+): NoteItem[] {
+  return notes.map((note) =>
+    note.id === noteId
+      ? {
+          ...note,
+          isArchived,
+          archivedAt: isArchived ? new Date().toISOString() : undefined,
+          updatedAt: new Date().toISOString(),
+        }
+      : note,
+  );
+}
+
+function deleteExistingNote(notes: NoteItem[], noteId: string): NoteItem[] {
+  return notes.filter((note) => note.id !== noteId);
+}
+
+function appendNewNote(notes: NoteItem[], prefix: string, text: string): NoteItem[] {
+  return [
+    {
+      id: `${prefix}-${Date.now()}`,
+      text,
+      createdAt: new Date().toISOString(),
+      isArchived: false,
+    },
+    ...notes,
+  ];
+}
+
+export async function addOwnerNote(
+  owner: Owner,
+  text: string,
+): Promise<NoteSaveResult<Owner>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...owner,
+        notes: appendNewNote(owner.notes, "owner-note-local", text),
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Owner>(`/owners/${owner.id}/notes`, "POST", { text });
+  return { data, mode: "api" };
+}
+
+export async function updateOwnerNote(
+  owner: Owner,
+  noteId: string,
+  text: string,
+): Promise<NoteSaveResult<Owner>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...owner,
+        notes: updateExistingNote(owner.notes, noteId, text),
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Owner>(`/owners/${owner.id}/notes/${noteId}`, "PUT", {
+    text,
+  });
+  return { data, mode: "api" };
+}
+
+export async function archiveOwnerNote(
+  owner: Owner,
+  noteId: string,
+): Promise<NoteSaveResult<Owner>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...owner,
+        notes: archiveExistingNote(owner.notes, noteId, true),
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Owner>(`/owners/${owner.id}/notes/${noteId}/archive`, "POST", {});
+  return { data, mode: "api" };
+}
+
+export async function unarchiveOwnerNote(
+  owner: Owner,
+  noteId: string,
+): Promise<NoteSaveResult<Owner>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...owner,
+        notes: archiveExistingNote(owner.notes, noteId, false),
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Owner>(`/owners/${owner.id}/notes/${noteId}/unarchive`, "POST", {});
+  return { data, mode: "api" };
+}
+
+export async function deleteOwnerNoteItem(
+  owner: Owner,
+  noteId: string,
+): Promise<NoteSaveResult<Owner>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...owner,
+        notes: deleteExistingNote(owner.notes, noteId),
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Owner>(`/owners/${owner.id}/notes/${noteId}`, "DELETE", {});
+  return { data, mode: "api" };
+}
+
+export async function addPetNote(
+  pet: Pet,
+  text: string,
+): Promise<NoteSaveResult<Pet>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...pet,
+        notes: appendNewNote(pet.notes, "pet-note-local", text),
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Pet>(`/pets/${pet.id}/notes`, "POST", { text });
+  return { data, mode: "api" };
+}
+
+export async function updatePetNote(
+  pet: Pet,
+  noteId: string,
+  text: string,
+): Promise<NoteSaveResult<Pet>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...pet,
+        notes: updateExistingNote(pet.notes, noteId, text),
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Pet>(`/pets/${pet.id}/notes/${noteId}`, "PUT", {
+    text,
+  });
+  return { data, mode: "api" };
+}
+
+export async function archivePetNote(
+  pet: Pet,
+  noteId: string,
+): Promise<NoteSaveResult<Pet>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...pet,
+        notes: archiveExistingNote(pet.notes, noteId, true),
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Pet>(`/pets/${pet.id}/notes/${noteId}/archive`, "POST", {});
+  return { data, mode: "api" };
+}
+
+export async function unarchivePetNote(
+  pet: Pet,
+  noteId: string,
+): Promise<NoteSaveResult<Pet>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...pet,
+        notes: archiveExistingNote(pet.notes, noteId, false),
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Pet>(`/pets/${pet.id}/notes/${noteId}/unarchive`, "POST", {});
+  return { data, mode: "api" };
+}
+
+export async function deletePetNoteItem(
+  pet: Pet,
+  noteId: string,
+): Promise<NoteSaveResult<Pet>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...pet,
+        notes: deleteExistingNote(pet.notes, noteId),
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Pet>(`/pets/${pet.id}/notes/${noteId}`, "DELETE", {});
+  return { data, mode: "api" };
+}
+
+export async function addAppointmentNote(
+  appointment: Appointment,
+  text: string,
+): Promise<NoteSaveResult<Appointment>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...appointment,
+        notes: appendNewNote(appointment.notes, "appointment-note-local", text),
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Appointment>(
+    `/appointments/${appointment.id}/notes`,
+    "POST",
+    { text },
+  );
+  return { data, mode: "api" };
+}
+
+export async function updateAppointmentNote(
+  appointment: Appointment,
+  noteId: string,
+  text: string,
+): Promise<NoteSaveResult<Appointment>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...appointment,
+        notes: updateExistingNote(appointment.notes, noteId, text),
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Appointment>(
+    `/appointments/${appointment.id}/notes/${noteId}`,
+    "PUT",
+    { text },
+  );
+  return { data, mode: "api" };
+}
+
+export async function archiveAppointmentNote(
+  appointment: Appointment,
+  noteId: string,
+): Promise<NoteSaveResult<Appointment>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...appointment,
+        notes: archiveExistingNote(appointment.notes, noteId, true),
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Appointment>(
+    `/appointments/${appointment.id}/notes/${noteId}/archive`,
+    "POST",
+    {},
+  );
+  return { data, mode: "api" };
+}
+
+export async function unarchiveAppointmentNote(
+  appointment: Appointment,
+  noteId: string,
+): Promise<NoteSaveResult<Appointment>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...appointment,
+        notes: archiveExistingNote(appointment.notes, noteId, false),
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Appointment>(
+    `/appointments/${appointment.id}/notes/${noteId}/unarchive`,
+    "POST",
+    {},
+  );
+  return { data, mode: "api" };
+}
+
+export async function deleteAppointmentNoteItem(
+  appointment: Appointment,
+  noteId: string,
+): Promise<NoteSaveResult<Appointment>> {
+  if (!isBackendConfigured()) {
+    return {
+      data: {
+        ...appointment,
+        notes: deleteExistingNote(appointment.notes, noteId),
+      },
+      mode: "mock",
+    };
+  }
+
+  const data = await request<Appointment>(
+    `/appointments/${appointment.id}/notes/${noteId}`,
     "DELETE",
     {},
   );

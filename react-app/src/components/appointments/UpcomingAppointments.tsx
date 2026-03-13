@@ -127,7 +127,18 @@ export default function UpcomingAppointments({
           <ListGroup variant="flush">
             {filteredAppointments.map((appt) => (
               <ListGroup.Item key={appt.id} className="px-0">
-                <div className="d-flex justify-content-between align-items-start gap-3">
+                <div
+                  className={`d-flex justify-content-between align-items-start gap-3${onAppointmentClick ? " upcoming-appointment-item" : ""}`}
+                  role={onAppointmentClick ? "button" : undefined}
+                  tabIndex={onAppointmentClick ? 0 : undefined}
+                  onClick={onAppointmentClick ? () => onAppointmentClick(appt) : undefined}
+                  onKeyDown={onAppointmentClick ? (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onAppointmentClick(appt);
+                    }
+                  } : undefined}
+                >
                   <div>
                     <div className="fw-semibold">{getPetName(appt.petId)}</div>
                     <div className="small text-muted">
@@ -139,7 +150,7 @@ export default function UpcomingAppointments({
                     <div className="small text-muted">
                       {formatAppointmentServices(appt)}
                     </div>
-                    <div className="small fw-semibold text-success-emphasis">
+                    <div className="small fw-semibold appointment-cost-highlight">
                       {formatCurrency(appt.cost)}
                     </div>
                   </div>
@@ -153,7 +164,10 @@ export default function UpcomingAppointments({
                       <Button
                         size="sm"
                         variant="outline-primary"
-                        onClick={() => onAppointmentClick(appt)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onAppointmentClick(appt);
+                        }}
                       >
                         Open
                       </Button>

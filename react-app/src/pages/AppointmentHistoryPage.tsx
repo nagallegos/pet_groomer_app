@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button, Card, Collapse, Form, ListGroup } from "react-bootstrap";
 import { useSearchParams } from "react-router-dom";
 import AppointmentDetailsModal from "../components/appointments/AppointmentDetailsModal";
+import { useAppData } from "../components/common/AppDataProvider";
 import PageLoader from "../components/common/PageLoader";
-import { mockAppointments, mockOwners, mockPets } from "../data/mockData";
 import useInitialLoading from "../hooks/useInitialLoading";
 import { formatAppointmentServices } from "../lib/appointmentServices";
 import type { Appointment } from "../types/models";
@@ -33,8 +33,8 @@ function getStatusVariant(status: Appointment["status"]) {
 
 export default function AppointmentHistoryPage() {
   const isLoading = useInitialLoading();
+  const { appointments, owners, pets, setAppointments } = useAppData();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [appointments, setAppointments] = useState<Appointment[]>(mockAppointments);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<HistoryStatusFilter>("all");
   const [serviceFilter, setServiceFilter] = useState("all");
@@ -82,8 +82,8 @@ export default function AppointmentHistoryPage() {
           return true;
         }
 
-        const owner = mockOwners.find((item) => item.id === appointment.ownerId);
-        const pet = mockPets.find((item) => item.id === appointment.petId);
+        const owner = owners.find((item) => item.id === appointment.ownerId);
+        const pet = pets.find((item) => item.id === appointment.petId);
         const haystack = [
           pet?.name ?? "",
           owner ? `${owner.firstName} ${owner.lastName}` : "",
@@ -99,10 +99,10 @@ export default function AppointmentHistoryPage() {
         return haystack.includes(normalizedSearchTerm);
       })
       .sort((a, b) => {
-        const aOwner = mockOwners.find((item) => item.id === a.ownerId);
-        const bOwner = mockOwners.find((item) => item.id === b.ownerId);
-        const aPet = mockPets.find((item) => item.id === a.petId);
-        const bPet = mockPets.find((item) => item.id === b.petId);
+        const aOwner = owners.find((item) => item.id === a.ownerId);
+        const bOwner = owners.find((item) => item.id === b.ownerId);
+        const aPet = pets.find((item) => item.id === a.petId);
+        const bPet = pets.find((item) => item.id === b.petId);
         const direction = sortDirection === "asc" ? 1 : -1;
 
         if (sortField === "date") {
@@ -129,7 +129,7 @@ export default function AppointmentHistoryPage() {
           direction
         );
       });
-  }, [appointments, now, searchTerm, serviceFilter, sortDirection, sortField, statusFilter]);
+  }, [appointments, now, owners, pets, searchTerm, serviceFilter, sortDirection, sortField, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAppointments.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -142,7 +142,7 @@ export default function AppointmentHistoryPage() {
     const groups = new Map<string, Appointment[]>();
 
     pagedAppointments.forEach((appointment) => {
-      const owner = mockOwners.find((item) => item.id === appointment.ownerId);
+      const owner = owners.find((item) => item.id === appointment.ownerId);
       const label =
         groupMode === "status"
           ? appointment.status
@@ -163,7 +163,7 @@ export default function AppointmentHistoryPage() {
       label,
       items,
     }));
-  }, [groupMode, pagedAppointments]);
+  }, [groupMode, owners, pagedAppointments]);
 
   const searchParamAppointmentId = searchParams.get("appointmentId");
   const searchedAppointment = useMemo(
@@ -366,8 +366,8 @@ export default function AppointmentHistoryPage() {
                   <div className="directory-group-heading">{group.label}</div>
                   <ListGroup variant="flush" className="appointment-list-group">
                     {group.items.map((appointment) => {
-                const owner = mockOwners.find((item) => item.id === appointment.ownerId);
-                const pet = mockPets.find((item) => item.id === appointment.petId);
+                const owner = owners.find((item) => item.id === appointment.ownerId);
+                const pet = pets.find((item) => item.id === appointment.petId);
 
                 return (
                   <ListGroup.Item
@@ -452,15 +452,18 @@ export default function AppointmentHistoryPage() {
         show={!!activeSelectedAppointment}
         onHide={() => setSelectedAppointment(null)}
         appointment={activeSelectedAppointment}
-        owners={mockOwners}
-        pets={mockPets}
+        owners={owners}
+        pets={pets}
         allowPastEditing
         editingWarning="Only update historical appointments when correcting information that was inaccurate before the appointment was completed."
         onUpdated={(updatedAppointment) => {
           if (updatedAppointment.isArchived) {
             setAppointments((currentAppointments) =>
-              currentAppointments.filter(
-                (appointment) => appointment.id !== updatedAppointment.id,
+              currentAppointments.map(
+                (appointment) =>
+                  appointment.id === updatedAppointment.id
+                    ? updatedAppointment
+                    : appointment,
               ),
             );
             setSelectedAppointment(null);

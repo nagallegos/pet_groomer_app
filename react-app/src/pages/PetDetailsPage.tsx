@@ -3,11 +3,11 @@ import { Alert, Button, Card, Dropdown, Form, ListGroup, Row, Spinner } from "re
 import { Link, useNavigate, useParams } from "react-router-dom";
 import AppointmentFormModal from "../components/appointments/AppointmentFormModal";
 import AppointmentDetailsModal from "../components/appointments/AppointmentDetailsModal";
+import { useAppData } from "../components/common/AppDataProvider";
 import { useAppToast } from "../components/common/AppToastProvider";
 import ClientContactActions from "../components/common/ClientContactActions";
 import ConfirmDeleteModal from "../components/common/ConfirmDeleteModal";
 import PageLoader from "../components/common/PageLoader";
-import { mockAppointments, mockOwners, mockPets } from "../data/mockData";
 import useInitialLoading from "../hooks/useInitialLoading";
 import {
   archivePet,
@@ -22,11 +22,18 @@ export default function PetDetailsPage() {
   const navigate = useNavigate();
   const { showToast } = useAppToast();
   const isLoading = useInitialLoading();
+  const {
+    owners,
+    pets,
+    appointments: allAppointments,
+    setPets,
+    setAppointments,
+  } = useAppData();
   const { petId } = useParams();
 
   const initialPet = useMemo(
-    () => mockPets.find((item) => item.id === petId) ?? null,
-    [petId],
+    () => pets.find((item) => item.id === petId) ?? null,
+    [petId, pets],
   );
 
   const [pet, setPet] = useState<Pet | null>(initialPet);
@@ -48,19 +55,20 @@ export default function PetDetailsPage() {
   const [notes, setNotes] = useState("");
   const [isSavingPet, setIsSavingPet] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const originalNotes = pet?.notes.map((note) => note.text).join("\n") ?? "";
 
   useEffect(() => {
     setPet(initialPet);
   }, [initialPet]);
 
   const owner = useMemo(
-    () => mockOwners.find((item) => item.id === pet?.ownerId) ?? null,
-    [pet],
+    () => owners.find((item) => item.id === pet?.ownerId) ?? null,
+    [owners, pet],
   );
 
   const appointments = useMemo(
-    () => mockAppointments.filter((appt) => appt.petId === petId),
-    [petId],
+    () => allAppointments.filter((appt) => appt.petId === petId && !appt.isArchived),
+    [allAppointments, petId],
   );
 
   useEffect(() => {
@@ -102,12 +110,20 @@ export default function PetDetailsPage() {
       weightLbs: weightLbs ? Number(weightLbs) : undefined,
       ageYears: ageYears ? Number(ageYears) : undefined,
       color,
-      notes,
     };
+
+    if (notes !== originalNotes) {
+      payload.notes = notes;
+    }
 
     try {
       const result = await savePet(payload, pet);
       setPet(result.data);
+      setPets((currentPets) =>
+        currentPets.map((currentPet) =>
+          currentPet.id === result.data.id ? result.data : currentPet,
+        ),
+      );
       showToast({
         title: "Pet Updated",
         body:
@@ -215,7 +231,7 @@ export default function PetDetailsPage() {
                 <>
                   {!isBackendConfigured() && (
                     <Alert variant="info" className="mb-3">
-                      MongoDB backend not configured yet. Saves are currently local UI previews only.
+                      Backend not configured yet. Saves are currently local UI previews only.
                     </Alert>
                   )}
 
@@ -374,11 +390,15 @@ export default function PetDetailsPage() {
       <AppointmentFormModal
         show={showScheduleModal}
         onHide={() => setShowScheduleModal(false)}
-        owners={mockOwners}
-        pets={mockPets}
+        owners={owners}
+        pets={pets}
         initialOwnerId={owner.id}
         initialPetId={pet.id}
-        onSaved={() => {
+        onSaved={(appointment) => {
+          setAppointments((currentAppointments) => [
+            ...currentAppointments,
+            appointment,
+          ]);
           showToast({
             title: "Appointment Scheduled",
             body: "The appointment was created and is ready for backend persistence.",
@@ -394,10 +414,17 @@ export default function PetDetailsPage() {
           setSelectedAppointment(null);
         }}
         appointment={selectedAppointment}
-        owners={mockOwners}
-        pets={mockPets}
+        owners={owners}
+        pets={pets}
         onUpdated={(updatedAppointment) => {
           if (updatedAppointment.isArchived) {
+            setAppointments((currentAppointments) =>
+              currentAppointments.map((appointment) =>
+                appointment.id === updatedAppointment.id
+                  ? updatedAppointment
+                  : appointment,
+              ),
+            );
             setPetAppointments((currentAppointments) =>
               currentAppointments.filter(
                 (appointment) => appointment.id !== updatedAppointment.id,
@@ -408,6 +435,13 @@ export default function PetDetailsPage() {
             return;
           }
 
+          setAppointments((currentAppointments) =>
+            currentAppointments.map((appointment) =>
+              appointment.id === updatedAppointment.id
+                ? updatedAppointment
+                : appointment,
+            ),
+          );
           setPetAppointments((currentAppointments) =>
             currentAppointments.map((appointment) =>
               appointment.id === updatedAppointment.id
@@ -418,6 +452,11 @@ export default function PetDetailsPage() {
           setSelectedAppointment(updatedAppointment);
         }}
         onDeleted={(appointmentId) => {
+          setAppointments((currentAppointments) =>
+            currentAppointments.filter(
+              (appointment) => appointment.id !== appointmentId,
+            ),
+          );
           setPetAppointments((currentAppointments) =>
             currentAppointments.filter(
               (appointment) => appointment.id !== appointmentId,
@@ -438,6 +477,11 @@ export default function PetDetailsPage() {
         onCancel={() => setShowArchivePetModal(false)}
         onConfirm={async () => {
           const result = await archivePet(pet);
+          setPets((currentPets) =>
+            currentPets.map((currentPet) =>
+              currentPet.id === result.data.id ? result.data : currentPet,
+            ),
+          );
           showToast({
             title: "Pet Archived",
             body:
@@ -460,6 +504,9 @@ export default function PetDetailsPage() {
         onCancel={() => setShowDeletePetModal(false)}
         onConfirm={async () => {
           const result = await deletePet(pet);
+          setPets((currentPets) =>
+            currentPets.filter((currentPet) => currentPet.id !== result.data.id),
+          );
           showToast({
             title: "Pet Deleted",
             body:

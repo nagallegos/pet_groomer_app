@@ -13,6 +13,7 @@ import {
   isBackendConfigured,
   saveAppointment,
   updateAppointmentStatus,
+  type AppointmentUpsertInput,
 } from "../../lib/crmApi";
 import { useAppToast } from "../common/AppToastProvider";
 import ClientContactActions from "../common/ClientContactActions";
@@ -66,6 +67,7 @@ export default function AppointmentDetailsModal({
   const [pendingLateStatusAction, setPendingLateStatusAction] =
     useState<AppointmentStatus | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const originalNotes = appointment?.notes.map((note) => note.text).join("\n") ?? "";
 
   useEffect(() => {
     if (appointment && show) {
@@ -155,7 +157,7 @@ export default function AppointmentDetailsModal({
       return;
     }
 
-    const updatedAppointment = {
+    const updatedAppointment: AppointmentUpsertInput = {
       ownerId: appointment.ownerId,
       petId: appointment.petId,
       start: nextStart.toISOString(),
@@ -165,8 +167,11 @@ export default function AppointmentDetailsModal({
       customServiceType: customSelected ? customServiceType : undefined,
       cost: Number(cost) || 0,
       status,
-      notes,
     };
+
+    if (notes !== originalNotes) {
+      updatedAppointment.notes = notes;
+    }
 
     try {
       const result = await saveAppointment(updatedAppointment, appointment);
@@ -424,7 +429,7 @@ export default function AppointmentDetailsModal({
           <Modal.Body>
           {showEditableFields && !isBackendConfigured() && (
             <Alert variant="info" className="mb-3">
-              MongoDB backend not configured yet. Saves are currently local UI previews only.
+              Backend not configured yet. Saves are currently local UI previews only.
             </Alert>
           )}
 
@@ -546,7 +551,7 @@ export default function AppointmentDetailsModal({
               </Form.Group>
 
               <Form.Group className="mb-3">
-                <Form.Label>Cost</Form.Label>
+                <Form.Label className="appointment-cost-highlight">Cost</Form.Label>
                 <Form.Control
                   type="number"
                   min="0"
@@ -554,6 +559,7 @@ export default function AppointmentDetailsModal({
                   value={cost}
                   onChange={(e) => setCost(e.target.value)}
                   placeholder="85.00"
+                  className="appointment-cost-input"
                 />
               </Form.Group>
 
@@ -584,7 +590,7 @@ export default function AppointmentDetailsModal({
                 })}
               </div>
               <div><strong>Status:</strong> {status}</div>
-              <div><strong>Projected Cost:</strong> ${Number(cost || appointment.cost).toFixed(2)}</div>
+              <div><strong>Projected Cost:</strong> <span className="appointment-cost-highlight">${Number(cost || appointment.cost).toFixed(2)}</span></div>
               <div><strong>Notes:</strong> {notes || "No notes recorded."}</div>
             </div>
           )}

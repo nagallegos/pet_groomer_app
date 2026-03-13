@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { Card, Col, Row } from "react-bootstrap";
 import { Link } from "react-router-dom";
+import AppointmentDetailsModal from "../components/appointments/AppointmentDetailsModal";
 import UpcomingAppointments from "../components/appointments/UpcomingAppointments";
+import { useAppData } from "../components/common/AppDataProvider";
 import PageLoader from "../components/common/PageLoader";
-import { mockAppointments, mockOwners, mockPets } from "../data/mockData";
 import useInitialLoading from "../hooks/useInitialLoading";
+import type { Appointment } from "../types/models";
 
 const now = new Date();
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -20,18 +23,18 @@ function isProjectedAppointment(start: string, status: string) {
   );
 }
 
-function countUpcomingAppointments(days: number) {
+function countUpcomingAppointments(appointments: Appointment[], days: number) {
   const end = new Date(now);
   end.setDate(end.getDate() + days);
 
-  return mockAppointments.filter((appointment) => {
+  return appointments.filter((appointment) => {
     const start = new Date(appointment.start);
     return start >= now && start <= end;
   }).length;
 }
 
-function countTodayAppointments() {
-  return mockAppointments.filter((appointment) => {
+function countTodayAppointments(appointments: Appointment[]) {
+  return appointments.filter((appointment) => {
     const start = new Date(appointment.start);
 
     return (
@@ -42,14 +45,14 @@ function countTodayAppointments() {
   }).length;
 }
 
-function projectedRevenue(days?: number) {
+function projectedRevenue(appointments: Appointment[], days?: number) {
   const end = new Date(now);
 
   if (days) {
     end.setDate(end.getDate() + days);
   }
 
-  return mockAppointments
+  return appointments
     .filter((appointment) => {
       const start = new Date(appointment.start);
 
@@ -62,41 +65,43 @@ function projectedRevenue(days?: number) {
     .reduce((total, appointment) => total + appointment.cost, 0);
 }
 
-const dashboardStats = [
-  {
-    label: "Active Clients",
-    value: mockOwners.filter((owner) => !owner.isArchived).length,
-    tone: "mint",
-  },
-  {
-    label: "Pets On File",
-    value: mockPets.filter((pet) => !pet.isArchived).length,
-    tone: "gold",
-  },
-  {
-    label: "Appointments Today",
-    value: countTodayAppointments(),
-    tone: "blush",
-  },
-  {
-    label: "Next 7 Days",
-    value: countUpcomingAppointments(7),
-    tone: "foam",
-  },
-  {
-    label: "Projected This Week",
-    value: currencyFormatter.format(projectedRevenue(7)),
-    tone: "gold",
-  },
-  {
-    label: "Upcoming Scheduled Revenue",
-    value: currencyFormatter.format(projectedRevenue()),
-    tone: "mint",
-  },
-];
-
 export default function HomePage() {
   const isLoading = useInitialLoading();
+  const { appointments, owners, pets, setAppointments } = useAppData();
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+
+  const dashboardStats = [
+    {
+      label: "Active Clients",
+      value: owners.filter((owner) => !owner.isArchived).length,
+      tone: "mint",
+    },
+    {
+      label: "Pets On File",
+      value: pets.filter((pet) => !pet.isArchived).length,
+      tone: "gold",
+    },
+    {
+      label: "Appointments Today",
+      value: countTodayAppointments(appointments),
+      tone: "blush",
+    },
+    {
+      label: "Next 7 Days",
+      value: countUpcomingAppointments(appointments, 7),
+      tone: "foam",
+    },
+    {
+      label: "Projected This Week",
+      value: currencyFormatter.format(projectedRevenue(appointments, 7)),
+      tone: "gold",
+    },
+    {
+      label: "Upcoming Scheduled Revenue",
+      value: currencyFormatter.format(projectedRevenue(appointments)),
+      tone: "mint",
+    },
+  ];
 
   if (isLoading) {
     return <PageLoader label="Loading studio overview..." />;
@@ -130,9 +135,10 @@ export default function HomePage() {
           </Row>
 
           <UpcomingAppointments
-            appointments={mockAppointments}
-            owners={mockOwners}
-            pets={mockPets}
+            appointments={appointments}
+            owners={owners}
+            pets={pets}
+            onAppointmentClick={setSelectedAppointment}
           />
         </Col>
 
@@ -183,6 +189,32 @@ export default function HomePage() {
           </Card>
         </Col>
       </Row>
+
+      <AppointmentDetailsModal
+        show={!!selectedAppointment}
+        onHide={() => setSelectedAppointment(null)}
+        appointment={selectedAppointment}
+        owners={owners}
+        pets={pets}
+        onUpdated={(updatedAppointment) => {
+          setAppointments((currentAppointments) =>
+            currentAppointments.map((appointment) =>
+              appointment.id === updatedAppointment.id ? updatedAppointment : appointment,
+            ),
+          );
+          if (updatedAppointment.isArchived) {
+            setSelectedAppointment(null);
+            return;
+          }
+          setSelectedAppointment(updatedAppointment);
+        }}
+        onDeleted={(appointmentId) => {
+          setAppointments((currentAppointments) =>
+            currentAppointments.filter((appointment) => appointment.id !== appointmentId),
+          );
+          setSelectedAppointment(null);
+        }}
+      />
     </>
   );
 }

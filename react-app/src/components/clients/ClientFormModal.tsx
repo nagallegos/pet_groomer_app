@@ -26,6 +26,7 @@ export default function ClientFormModal({
   const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const originalNotes = initialOwner?.notes.map((note) => note.text).join("\n") ?? "";
 
   useEffect(() => {
     if (!show) return;
@@ -52,8 +53,11 @@ export default function ClientFormModal({
       email,
       preferredContactMethod,
       address,
-      notes,
     };
+
+    if (!initialOwner || notes !== originalNotes) {
+      payload.notes = notes;
+    }
 
     try {
       const result = await saveOwner(payload, initialOwner ?? undefined);
@@ -80,7 +84,7 @@ export default function ClientFormModal({
         <Modal.Body>
           {!isBackendConfigured() && (
             <Alert variant="info" className="mb-3">
-              MongoDB backend not configured yet. Saves are currently local UI
+              Backend not configured yet. Saves are currently local UI
               previews only.
             </Alert>
           )}

@@ -1,5 +1,9 @@
 {
+  "scripts": {
+    "netlify:dev": "npx netlify dev"
+  },
   "dependencies": {
+    "@netlify/neon": "^0.1.0",
     "bootstrap": "^5.3.8"
   },
   "devDependencies": {

@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { Button, Card, Collapse, Form } from "react-bootstrap";
+import { useAppData } from "../components/common/AppDataProvider";
 import { useAppToast } from "../components/common/AppToastProvider";
 import PageLoader from "../components/common/PageLoader";
 import PetFormModal from "../components/pets/PetFormModal";
 import PetGrid from "../components/pets/PetGrid";
 import PetQuickViewModal from "../components/pets/PetQuickViewModal";
-import { mockAppointments, mockOwners, mockPets } from "../data/mockData";
 import useInitialLoading from "../hooks/useInitialLoading";
 import type { Owner, Pet } from "../types/models";
 
@@ -18,8 +18,8 @@ type PetGroupMode = "alphabet" | "species" | "owner";
 export default function PetsPage() {
   const { showToast } = useAppToast();
   const isLoading = useInitialLoading();
+  const { owners, pets, appointments, setPets } = useAppData();
   const [selectedPet, setSelectedPet] = useState<Pet | null>(null);
-  const [pets, setPets] = useState<Pet[]>(mockPets);
   const [searchInput, setSearchInput] = useState("");
   const [activeSearchTerm, setActiveSearchTerm] = useState("");
   const [sortField, setSortField] = useState<SortField>("name");
@@ -32,8 +32,8 @@ export default function PetsPage() {
   const [showControls, setShowControls] = useState(false);
 
   const ownersById = useMemo(
-    () => new Map<string, Owner>(mockOwners.map((owner) => [owner.id, owner])),
-    [],
+    () => new Map<string, Owner>(owners.map((owner) => [owner.id, owner])),
+    [owners],
   );
 
   const normalizedSearchInput = searchInput.trim().toLowerCase();
@@ -41,6 +41,10 @@ export default function PetsPage() {
 
   const filteredAndSortedPets = useMemo(() => {
     const filteredPets = pets.filter((pet) => {
+      if (pet.isArchived) {
+        return false;
+      }
+
       if (speciesFilter !== "all" && pet.species !== speciesFilter) {
         return false;
       }
@@ -134,6 +138,10 @@ export default function PetsPage() {
 
     return pets
       .filter((pet) => {
+        if (pet.isArchived) {
+          return false;
+        }
+
         const owner = ownersById.get(pet.ownerId);
         const ownerName = owner
           ? `${owner.firstName} ${owner.lastName}`.toLowerCase()
@@ -169,8 +177,8 @@ export default function PetsPage() {
 
   const selectedPetAppointments = useMemo(() => {
     if (!selectedPet) return [];
-    return mockAppointments.filter((appointment) => appointment.petId === selectedPet.id);
-  }, [selectedPet]);
+    return appointments.filter((appointment) => appointment.petId === selectedPet.id);
+  }, [appointments, selectedPet]);
 
   if (isLoading) {
     return <PageLoader label="Loading pets..." />;
@@ -407,12 +415,34 @@ export default function PetsPage() {
         owner={selectedPetOwner}
         appointments={selectedPetAppointments}
         onHide={() => setSelectedPet(null)}
+        onPetUpdated={(updatedPet) => {
+          setPets((currentPets) =>
+            currentPets.map((pet) =>
+              pet.id === updatedPet.id ? updatedPet : pet,
+            ),
+          );
+          setSelectedPet(updatedPet);
+        }}
+        onPetArchived={(archivedPet) => {
+          setPets((currentPets) =>
+            currentPets.map((pet) =>
+              pet.id === archivedPet.id ? archivedPet : pet,
+            ),
+          );
+          setSelectedPet(null);
+        }}
+        onPetDeleted={(petId) => {
+          setPets((currentPets) =>
+            currentPets.filter((pet) => pet.id !== petId),
+          );
+          setSelectedPet(null);
+        }}
       />
 
       <PetFormModal
         show={showAddPetModal}
         onHide={() => setShowAddPetModal(false)}
-        owners={mockOwners}
+        owners={owners}
         onSaved={(pet) => {
           setPets((currentPets) => [...currentPets, pet]);
           showToast({
