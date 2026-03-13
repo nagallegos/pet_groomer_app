@@ -36,13 +36,25 @@ const API_BASE_URL = getApiBaseUrl();
 async function authRequest(path: string, method: string, body?: unknown) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
+    credentials: "include",
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
 
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({ error: "Request failed." }));
-    throw new Error(payload.error ?? "Request failed.");
+    const responseText = await response.text().catch(() => "");
+    let message = `Request failed with status ${response.status}.`;
+
+    if (responseText) {
+      try {
+        const payload = JSON.parse(responseText) as { error?: string };
+        message = payload.error ?? message;
+      } catch {
+        message = responseText;
+      }
+    }
+
+    throw new Error(message);
   }
 
   return response.json();
