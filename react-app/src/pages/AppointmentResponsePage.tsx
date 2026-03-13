@@ -37,6 +37,16 @@ export default function AppointmentResponsePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const getReceiptMessage = (action: ResponseAction) => {
+    if (action === "cancel") {
+      return "We've received your cancellation request. No further action is needed.";
+    }
+    if (action === "reschedule") {
+      return "We've received your request and will be reaching out to you as soon as possible.";
+    }
+    return "We've received your confirmation. No further action is needed.";
+  };
+
   useEffect(() => {
     if (!token) {
       setError("This appointment response link is missing its token.");
@@ -100,7 +110,7 @@ export default function AppointmentResponsePage() {
         if (!response.ok) {
           throw new Error(payload.error ?? "Unable to process response.");
         }
-        setMessage(payload.status ?? "Your response was received.");
+        setMessage(getReceiptMessage(initialAction));
         setDetails((current) =>
           current
             ? {
@@ -143,7 +153,7 @@ export default function AppointmentResponsePage() {
       if (!response.ok) {
         throw new Error(payload.error ?? "Unable to process response.");
       }
-      setMessage(payload.status ?? "Your response was received.");
+      setMessage(getReceiptMessage(action));
       setDetails((current) =>
         current
           ? {
