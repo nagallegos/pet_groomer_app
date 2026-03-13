@@ -510,8 +510,34 @@ async function ensureSchema() {
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS phone TEXT`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS notify_by_email BOOLEAN NOT NULL DEFAULT TRUE`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS notify_by_text BOOLEAN NOT NULL DEFAULT FALSE`;
-      await sql`ALTER TABLE app_users DROP CONSTRAINT IF EXISTS app_users_role_check`;
-      await sql`ALTER TABLE app_users ADD CONSTRAINT app_users_role_check CHECK (role IN ('admin', 'groomer', 'client'))`;
+      await sql`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            WHERE t.relname = 'app_users'
+              AND c.conname = 'app_users_role_check'
+              AND pg_get_constraintdef(c.oid) NOT LIKE '%client%'
+          ) THEN
+            ALTER TABLE app_users DROP CONSTRAINT app_users_role_check;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            WHERE t.relname = 'app_users'
+              AND c.conname = 'app_users_role_check'
+          ) THEN
+            ALTER TABLE app_users
+            ADD CONSTRAINT app_users_role_check
+            CHECK (role IN ('admin', 'groomer', 'client'));
+          END IF;
+        END
+        $$;
+      `;
       await sql`CREATE INDEX IF NOT EXISTS idx_pets_owner_id ON pets(owner_id)`;
       await sql`CREATE INDEX IF NOT EXISTS idx_appointments_owner_id ON appointments(owner_id)`;
       await sql`CREATE INDEX IF NOT EXISTS idx_appointments_pet_id ON appointments(pet_id)`;
