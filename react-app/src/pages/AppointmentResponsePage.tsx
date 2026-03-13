@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Card, Spinner } from "react-bootstrap";
 import { useSearchParams } from "react-router-dom";
 import { getApiBaseUrl } from "../lib/crmApi";
@@ -30,6 +30,7 @@ export default function AppointmentResponsePage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") ?? "";
   const initialAction = searchParams.get("action") as ResponseAction | null;
+  const attemptedEmailActionRef = useRef(false);
   const [details, setDetails] = useState<AppointmentResponseDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -74,11 +75,19 @@ export default function AppointmentResponsePage() {
   }, [token]);
 
   useEffect(() => {
-    if (!details || !initialAction || !details.availableActions.includes(initialAction) || message || isSubmitting) {
+    if (
+      !details ||
+      !initialAction ||
+      attemptedEmailActionRef.current ||
+      !details.availableActions.includes(initialAction) ||
+      message ||
+      isSubmitting
+    ) {
       return;
     }
 
     void (async () => {
+      attemptedEmailActionRef.current = true;
       setIsSubmitting(true);
       setError(null);
       try {
@@ -112,6 +121,13 @@ export default function AppointmentResponsePage() {
       }
     })();
   }, [details, initialAction, isSubmitting, message, token]);
+
+  const shouldShowActionButtons =
+    Boolean(details) &&
+    !initialAction &&
+    !details?.usedAt &&
+    !details?.isExpired &&
+    (details?.availableActions.length ?? 0) > 0;
 
   const handleAction = async (action: ResponseAction) => {
     setIsSubmitting(true);
@@ -181,9 +197,9 @@ export default function AppointmentResponsePage() {
             </div>
           )}
 
-          {details && !details.usedAt && !details.isExpired && details.availableActions.length > 0 && (
+          {shouldShowActionButtons && (
             <div className="d-grid gap-2">
-              {details.availableActions.map((action) => (
+              {details?.availableActions.map((action) => (
                 <Button
                   key={action}
                   onClick={() => {
@@ -204,13 +220,21 @@ export default function AppointmentResponsePage() {
 
           {details?.usedAt && (
             <div className="text-muted small">
-              This response link has already been used.
+              {initialAction
+                ? "Your response has already been received."
+                : "This response link has already been used."}
             </div>
           )}
 
           {details?.isExpired && !details.usedAt && (
             <div className="text-muted small">
               This response link has expired. Please contact the groomer directly.
+            </div>
+          )}
+
+          {initialAction && !isLoading && !error && !message && (
+            <div className="text-muted small">
+              Processing your response...
             </div>
           )}
         </Card.Body>
