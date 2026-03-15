@@ -1,0 +1,27 @@
+{
+  "name": "Pet Groomer App",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22",
+  "forwardPorts": [5173],
+  "postCreateCommand": "cd react-app && npm install",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+        "eslint.workingDirectories": ["react-app"],
+        "typescript.tsdk": "react-app/node_modules/typescript/lib"
+      },
+      "extensions": [
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+        "ms-vscode.vscode-typescript-next",
+        "dsznajder.es7-react-js-snippets",
+        "github.copilot",
+        "github.copilot-chat"
+      ]
+    }
+  }
+}
