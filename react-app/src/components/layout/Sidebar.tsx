@@ -1,4 +1,5 @@
 import { Nav, Offcanvas } from "react-bootstrap";
+import { BarChart, Calendar, Clipboard, Heart, House, People, Person } from "react-bootstrap-icons";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../common/useAuth";
 import SettingsMenu from "./SettingsMenu";
@@ -12,67 +13,37 @@ const staffNavItems = [
   {
     to: "/home",
     label: "Home",
-    icon: (
-      <svg viewBox="0 0 24 24" focusable="false">
-        <path d="M4 10.5L12 4l8 6.5V20H4v-9.5Z" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />
-        <path d="M9.5 20v-5h5v5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ),
+    icon: <House />,
   },
   {
     to: "/contacts",
     label: "Clients",
-    icon: (
-      <svg viewBox="0 0 24 24" focusable="false">
-        <path d="M6.5 19a4.5 4.5 0 0 1 9 0M11 11.5a3.5 3.5 0 1 0 0-7a3.5 3.5 0 0 0 0 7ZM17.5 8.5a2.5 2.5 0 1 1 0 5M18.5 19a3.4 3.4 0 0 0-2.2-3.18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ),
+    icon: <People />,
   },
   {
     to: "/pets",
     label: "Pets",
-    icon: (
-      <svg viewBox="0 0 24 24" focusable="false">
-        <path d="M8.2 10.7a2 2 0 1 0 0-4a2 2 0 0 0 0 4Zm7.6 0a2 2 0 1 0 0-4a2 2 0 0 0 0 4ZM5.7 15a1.8 1.8 0 1 0 0-3.6A1.8 1.8 0 0 0 5.7 15Zm12.6 0a1.8 1.8 0 1 0 0-3.6a1.8 1.8 0 0 0 0 3.6ZM12 19c2.8 0 5-1.37 5-3.06c0-1.44-1.04-2.2-2.26-2.2c-.96 0-1.36.5-2.74.5s-1.78-.5-2.74-.5C8.04 13.74 7 14.5 7 15.94C7 17.63 9.2 19 12 19Z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ),
+    icon: <Heart />,
   },
   {
     to: "/schedule",
     label: "Appointments",
-    icon: (
-      <svg viewBox="0 0 24 24" focusable="false">
-        <path d="M7 4.5v3M17 4.5v3M4.5 9.5h15M6 7h12a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 18 19H6a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 6 7Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ),
+    icon: <Calendar />,
   },
   {
     to: "/requests",
     label: "Requests",
-    icon: (
-      <svg viewBox="0 0 24 24" focusable="false">
-        <path d="M6.5 6.5h11M6.5 11.5h11M6.5 16.5h7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        <path d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v12A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18V6A1.5 1.5 0 0 1 5 4.5Z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-      </svg>
-    ),
+    icon: <Clipboard />,
   },
   {
     to: "/analysis",
     label: "Analysis",
-    icon: (
-      <svg viewBox="0 0 24 24" focusable="false">
-        <path d="M5 19V10M12 19V5M19 19v-8" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
-      </svg>
-    ),
+    icon: <BarChart />,
   },
   {
     to: "/users",
     label: "Users",
-    icon: (
-      <svg viewBox="0 0 24 24" focusable="false">
-        <path d="M9 11a3 3 0 1 0 0-6a3 3 0 0 0 0 6Zm8 1.5a2.5 2.5 0 1 0 0-5M4.5 19a4.5 4.5 0 0 1 9 0M16 18.5c0-1.75-1.12-3.22-2.68-3.78" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ),
+    icon: <Person />,
   },
 ] as const;
 

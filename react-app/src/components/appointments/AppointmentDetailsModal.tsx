@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button, Dropdown, Form, ListGroup, Modal, Spinner } from "react-bootstrap";
+import { PencilSquare } from "react-bootstrap-icons";
 import { useNavigate } from "react-router-dom";
 import {
   APPOINTMENT_SERVICE_OPTIONS,
@@ -513,7 +514,8 @@ export default function AppointmentDetailsModal({
                           setIsEditing(true);
                         }}
                       >
-                        Edit Appointment
+                        <PencilSquare aria-hidden="true" />
+                        <span className="visually-hidden">Edit appointment</span>
                       </Dropdown.Item>
                     )}
                     <Dropdown.Divider />
@@ -751,9 +753,12 @@ export default function AppointmentDetailsModal({
                             <button
                               type="button"
                               className="pet-row-indicator-button"
+                              aria-label="Edit appointment note"
                               onClick={() => openEditNoteModal(note.id, note.text, note.visibility)}
                             >
-                              <span className="pet-row-indicator">Edit</span>
+                              <span className="pet-row-indicator">
+                                <PencilSquare aria-hidden="true" />
+                              </span>
                             </button>
                             <button
                               type="button"
@@ -1011,7 +1016,16 @@ export default function AppointmentDetailsModal({
                             <div>{note.text}</div>
                           </div>
                           <div className="note-inline-actions">
-                            <button type="button" className="pet-row-indicator-button" onClick={() => openEditNoteModal(note.id, note.text, note.visibility)}><span className="pet-row-indicator">Edit</span></button>
+                            <button
+                              type="button"
+                              className="pet-row-indicator-button"
+                              aria-label="Edit appointment note"
+                              onClick={() => openEditNoteModal(note.id, note.text, note.visibility)}
+                            >
+                              <span className="pet-row-indicator">
+                                <PencilSquare aria-hidden="true" />
+                              </span>
+                            </button>
                             <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "archive"); }}><span className="pet-row-indicator">Archive</span></button>
                             <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "delete"); }}><span className="pet-row-indicator pet-row-indicator-danger">Delete</span></button>
                           </div>

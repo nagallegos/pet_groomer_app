@@ -1198,14 +1198,10 @@ async function listActiveUsersByOwner(ownerId) {
 }
 
 async function sendUserContactNotification(user, { subject, html, text }) {
-  const deliveries = [];
-  if (user.notifyByEmail && user.email) {
-    deliveries.push(deliverEmailNotification({ to: user.email, subject, html, text }));
+  if (!user.email) {
+    return;
   }
-  if (user.notifyByText && user.phone) {
-    deliveries.push(deliverTextNotification({ to: user.phone, message: text }));
-  }
-  await Promise.all(deliveries);
+  await deliverEmailNotification({ to: user.email, subject, html, text });
 }
 
 async function createPasswordToken(userId, purpose, tempPassword) {
@@ -1449,50 +1445,27 @@ async function notifyGroomersOfClientRequest(summary, action, source) {
   const text = `Client response received via ${source}: ${action.toUpperCase()} for ${summary.petName} (${summary.ownerName}) at ${summary.startsAt}.`;
 
   await Promise.all(
-    groomers.flatMap((groomer) => {
-      const deliveries = [];
-      if (groomer.notifyByEmail && groomer.email) {
-        deliveries.push(
-          deliverEmailNotification({
-            to: groomer.email,
-            subject,
-            html: `<p>${text}</p>`,
-            text,
-          }).then((result) =>
-            logAppointmentNotification({
-              appointmentId: summary.appointmentId,
-              ownerId: null,
-              notificationType: `groomer_${action}_request`,
-              recipientType: "groomer",
-              channel: "email",
-              recipientAddress: groomer.email,
-              status: result.status,
-              metadata: { source },
-            }),
-          ),
-        );
-      }
-      if (groomer.notifyByText && groomer.phone) {
-        deliveries.push(
-          deliverTextNotification({
-            to: groomer.phone,
-            message: text,
-          }).then((result) =>
-            logAppointmentNotification({
-              appointmentId: summary.appointmentId,
-              ownerId: null,
-              notificationType: `groomer_${action}_request`,
-              recipientType: "groomer",
-              channel: "text",
-              recipientAddress: groomer.phone,
-              status: result.status,
-              metadata: { source },
-            }),
-          ),
-        );
-      }
-      return deliveries;
-    }),
+    groomers
+      .filter((groomer) => Boolean(groomer.email))
+      .map((groomer) =>
+        deliverEmailNotification({
+          to: groomer.email,
+          subject,
+          html: `<p>${text}</p>`,
+          text,
+        }).then((result) =>
+          logAppointmentNotification({
+            appointmentId: summary.appointmentId,
+            ownerId: null,
+            notificationType: `groomer_${action}_request`,
+            recipientType: "groomer",
+            channel: "email",
+            recipientAddress: groomer.email,
+            status: result.status,
+            metadata: { source },
+          }),
+        ),
+      ),
   );
 }
 
@@ -1505,14 +1478,7 @@ async function sendClientAppointmentNotification(appointmentId, notificationType
   const { appointment, owner, pet } = details;
   const summary = buildAppointmentSummary(appointment, owner, pet);
   const isCancellation = options.isCancellation === true;
-  const preferredChannel =
-    owner.preferredContactMethod === "text" && owner.phone
-      ? "text"
-      : owner.email
-        ? "email"
-        : owner.phone
-          ? "text"
-          : null;
+  const preferredChannel = owner.email ? "email" : null;
 
   if (!preferredChannel) {
     return null;
@@ -1527,51 +1493,28 @@ async function sendClientAppointmentNotification(appointmentId, notificationType
         preferredChannel,
       );
 
-  if (preferredChannel === "email") {
-    const content = buildClientEmailNotification({
-      summary,
-      token,
-      notificationType,
-      isCancellation,
-    });
-    const result = await deliverEmailNotification({
-      to: owner.email,
-      subject: content.subject,
-      html: content.html,
-      text: content.text,
-    });
-    await logAppointmentNotification({
-      appointmentId: appointment.id,
-      ownerId: owner.id,
-      notificationType,
-      recipientType: "client",
-      channel: "email",
-      recipientAddress: owner.email,
-      status: result.status,
-      metadata: { responsePageUrl: content.responsePageUrl },
-    });
-  } else {
-    const message = buildClientTextNotification({
-      summary,
-      token,
-      notificationType,
-      isCancellation,
-    });
-    const result = await deliverTextNotification({
-      to: owner.phone,
-      message,
-    });
-    await logAppointmentNotification({
-      appointmentId: appointment.id,
-      ownerId: owner.id,
-      notificationType,
-      recipientType: "client",
-      channel: "text",
-      recipientAddress: owner.phone,
-      status: result.status,
-      metadata: {},
-    });
-  }
+  const content = buildClientEmailNotification({
+    summary,
+    token,
+    notificationType,
+    isCancellation,
+  });
+  const result = await deliverEmailNotification({
+    to: owner.email,
+    subject: content.subject,
+    html: content.html,
+    text: content.text,
+  });
+  await logAppointmentNotification({
+    appointmentId: appointment.id,
+    ownerId: owner.id,
+    notificationType,
+    recipientType: "client",
+    channel: "email",
+    recipientAddress: owner.email,
+    status: result.status,
+    metadata: { responsePageUrl: content.responsePageUrl },
+  });
 
   await sql`
     UPDATE appointments

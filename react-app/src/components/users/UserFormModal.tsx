@@ -34,7 +34,6 @@ export default function UserFormModal({
   const [role, setRole] = useState<AppUserRole>("groomer");
   const [password, setPassword] = useState("");
   const [notifyByEmail, setNotifyByEmail] = useState(true);
-  const [notifyByText, setNotifyByText] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [ownerId, setOwnerId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -53,7 +52,6 @@ export default function UserFormModal({
     setRole(initialUser?.role ?? "groomer");
     setPassword("");
     setNotifyByEmail(initialUser?.notifyByEmail ?? true);
-    setNotifyByText(initialUser?.notifyByText ?? false);
     setIsActive(initialUser?.isActive ?? true);
     setOwnerId(initialUser?.ownerId ?? "");
     setSaveError(null);
@@ -76,7 +74,7 @@ export default function UserFormModal({
           phone,
           role,
           notifyByEmail,
-          notifyByText,
+          notifyByText: false,
           isActive,
           ownerId: role === "client" ? ownerId || undefined : undefined,
           password: password.trim() ? password : undefined,
@@ -179,13 +177,6 @@ export default function UserFormModal({
                 label="Email notifications enabled"
                 checked={notifyByEmail}
                 onChange={(event) => setNotifyByEmail(event.target.checked)}
-              />
-              <Form.Check
-                type="switch"
-                id="managed-user-text-notify"
-                label="Text notifications enabled"
-                checked={notifyByText}
-                onChange={(event) => setNotifyByText(event.target.checked)}
               />
               <Form.Check
                 type="switch"

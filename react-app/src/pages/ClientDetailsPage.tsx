@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Button, Card, Col, Collapse, Dropdown, Form, ListGroup, Modal, Row, Spinner } from "react-bootstrap";
+import { PencilSquare } from "react-bootstrap-icons";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import AppointmentDetailsModal from "../components/appointments/AppointmentDetailsModal";
 import AppointmentFormModal from "../components/appointments/AppointmentFormModal";
@@ -501,7 +502,10 @@ export default function ClientDetailsPage() {
             <Dropdown align="end">
               <Dropdown.Toggle variant="outline-secondary">Actions</Dropdown.Toggle>
               <Dropdown.Menu>
-                <Dropdown.Item onClick={() => setIsEditMode(true)}>Edit Client</Dropdown.Item>
+                <Dropdown.Item onClick={() => setIsEditMode(true)}>
+                  <PencilSquare aria-hidden="true" />
+                  <span className="visually-hidden">Edit client</span>
+                </Dropdown.Item>
                 <Dropdown.Item onClick={() => setShowNotesModal(true)}>View Notes</Dropdown.Item>
                 <Dropdown.Item onClick={() => setShowScheduleModal(true)}>Schedule Appointment</Dropdown.Item>
                 <Dropdown.Divider />
@@ -650,12 +654,15 @@ export default function ClientDetailsPage() {
                               <button
                                 type="button"
                                 className="pet-row-indicator-button"
+                                aria-label="Edit pet"
                                 onClick={() => {
                                   setSelectedPet(pet);
                                   setShowEditPetModal(true);
                                 }}
                               >
-                                <span className="pet-row-indicator">Edit</span>
+                                <span className="pet-row-indicator">
+                                  <PencilSquare aria-hidden="true" />
+                                </span>
                               </button>
                             </>
                           ) : (
@@ -790,7 +797,16 @@ export default function ClientDetailsPage() {
                           <div>{note.text}</div>
                         </div>
                         <div className="note-inline-actions">
-                          <button type="button" className="pet-row-indicator-button" onClick={() => openEditNoteEditor(note)}><span className="pet-row-indicator">Edit</span></button>
+                          <button
+                            type="button"
+                            className="pet-row-indicator-button"
+                            aria-label="Edit note"
+                            onClick={() => openEditNoteEditor(note)}
+                          >
+                            <span className="pet-row-indicator">
+                              <PencilSquare aria-hidden="true" />
+                            </span>
+                          </button>
                           <button type="button" className="pet-row-indicator-button" disabled={isApplyingNoteAction} onClick={() => { void handleNoteAction(note, "archive"); }}><span className="pet-row-indicator">Archive</span></button>
                           <button type="button" className="pet-row-indicator-button" disabled={isApplyingNoteAction} onClick={() => { void handleNoteAction(note, "delete"); }}><span className="pet-row-indicator pet-row-indicator-danger">Delete</span></button>
                         </div>

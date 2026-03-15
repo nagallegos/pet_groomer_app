@@ -92,7 +92,7 @@ export default function ClientAppointmentsPage() {
                   ))}
                   {visibleNotes.length === 0 && (
                     <div className="text-muted small">
-                      No client-facing appointment notes were shared for this visit.
+                      No notes were shared for this visit.
                     </div>
                   )}
                 </div>
@@ -142,7 +142,7 @@ export default function ClientAppointmentsPage() {
                 <div>${selectedAppointment.cost.toFixed(2)}</div>
               </div>
               <div>
-                <div className="text-muted small mb-2">Client-Facing Notes</div>
+                <div className="text-muted small mb-2">Notes</div>
                 <div className="d-grid gap-2">
                   {selectedAppointment.notes
                     .filter((note) => !note.isArchived && note.visibility === "client")
@@ -155,7 +155,7 @@ export default function ClientAppointmentsPage() {
                       </div>
                     ))}
                   {selectedAppointment.notes.filter((note) => !note.isArchived && note.visibility === "client").length === 0 && (
-                    <div className="text-muted small">No client-facing notes were shared for this appointment.</div>
+                    <div className="text-muted small">No notes were shared for this appointment.</div>
                   )}
                 </div>
               </div>

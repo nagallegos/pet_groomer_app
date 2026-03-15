@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button, Card, Col, Form, Modal, Row } from "react-bootstrap";
+import { PencilSquare } from "react-bootstrap-icons";
 import { useSearchParams } from "react-router-dom";
 import { useAppData } from "../components/common/AppDataProvider";
 import { useAppToast } from "../components/common/AppToastProvider";
@@ -55,6 +56,10 @@ function formatRequestStatus(status: ClientRequest["status"]) {
   return status.replace(/_/g, " ");
 }
 
+function isRequestClosed(status: ClientRequest["status"]) {
+  return status === "resolved" || status === "closed";
+}
+
 function getRequestTypeIcon(type: ClientRequestType) {
   switch (type) {
     case "appointment":
@@ -83,8 +88,10 @@ export default function RequestsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [showModal, setShowModal] = useState(false);
   const [editingRequest, setEditingRequest] = useState<ClientRequest | null>(null);
+  const [isReadOnly, setIsReadOnly] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [requestType, setRequestType] = useState<ClientRequestType>("appointment");
   const [subject, setSubject] = useState("");
   const [clientNote, setClientNote] = useState("");
@@ -155,6 +162,7 @@ export default function RequestsPage() {
 
   const resetForm = () => {
     setEditingRequest(null);
+    setIsReadOnly(false);
     setRequestType("appointment");
     setSubject("");
     setClientNote("");
@@ -165,6 +173,7 @@ export default function RequestsPage() {
     setProfileAttribute("contact_info");
     setPendingPet(emptyPendingPet());
     setSaveError(null);
+    setInfoMessage(null);
   };
 
   const openCreate = (type?: ClientRequestType) => {
@@ -175,8 +184,9 @@ export default function RequestsPage() {
     setShowModal(true);
   };
 
-  const openEdit = (request: ClientRequest) => {
+  function openEdit(request: ClientRequest) {
     setEditingRequest(request);
+    setIsReadOnly(isClient || isRequestClosed(request.status));
     setRequestType(request.requestType);
     setSubject(request.subject);
     setClientNote(request.clientNote);
@@ -194,8 +204,9 @@ export default function RequestsPage() {
       setPetId(NEW_PET_SENTINEL);
     }
     setSaveError(null);
+    setInfoMessage(null);
     setShowModal(true);
-  };
+  }
 
   const updatePendingPet = <K extends keyof PendingPetProfile>(field: K, value: PendingPetProfile[K]) => {
     setPendingPet((current) => ({ ...current, [field]: value }));
@@ -325,6 +336,9 @@ export default function RequestsPage() {
   };
 
   const handleSave = async () => {
+    if (isReadOnly) {
+      return;
+    }
     const validationError = validateForm();
     if (validationError) {
       setSaveError(validationError);
@@ -587,7 +601,7 @@ export default function RequestsPage() {
 
                   <div>
                     <Button size="sm" variant="outline-secondary" onClick={() => openEdit(request)}>
-                      {isClient ? "View Request" : "Update Request"}
+                      {isClient || isRequestClosed(request.status) ? "View Request" : "Update Request"}
                     </Button>
                   </div>
                 </Card.Body>
@@ -623,6 +637,7 @@ export default function RequestsPage() {
           </Modal.Header>
           <Modal.Body className="settings-modal-body">
             {saveError && <Alert variant="danger">{saveError}</Alert>}
+            {infoMessage && <Alert variant="info">{infoMessage}</Alert>}
 
             <div className="settings-form-stack">
               {editingRequest && buildRequestTimeline(editingRequest).length > 0 && (
@@ -668,18 +683,18 @@ export default function RequestsPage() {
 
               <Form.Group>
                 <Form.Label>Request Type</Form.Label>
-                <Form.Select
-                  value={requestType}
-                  onChange={(event) => {
-                    setRequestType(event.target.value as ClientRequestType);
-                    setPetId("");
-                    setPendingPet(emptyPendingPet());
-                  }}
-                  disabled={!!editingRequest && isClient}
-                >
-                  {Object.entries(requestTypeLabels).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
+                  <Form.Select
+                    value={requestType}
+                    onChange={(event) => {
+                      setRequestType(event.target.value as ClientRequestType);
+                      setPetId("");
+                      setPendingPet(emptyPendingPet());
+                    }}
+                  disabled={isReadOnly || (!!editingRequest && isClient)}
+                  >
+                    {Object.entries(requestTypeLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
                     </option>
                   ))}
                 </Form.Select>
@@ -693,7 +708,7 @@ export default function RequestsPage() {
                     setSelectedOwnerId(event.target.value);
                     setPetId("");
                   }}
-                  disabled={isClient}
+                  disabled={isReadOnly || isClient}
                   required
                 >
                   <option value="">Select a client</option>
@@ -711,7 +726,12 @@ export default function RequestsPage() {
                 <>
                   <Form.Group>
                     <Form.Label>Pet</Form.Label>
-                    <Form.Select value={petId} onChange={(event) => setPetId(event.target.value)} required>
+                    <Form.Select
+                      value={petId}
+                      onChange={(event) => setPetId(event.target.value)}
+                      required
+                      disabled={isReadOnly}
+                    >
                       <option value="">No pet selected</option>
                       {availablePets.map((pet) => (
                         <option key={pet.id} value={pet.id}>
@@ -724,7 +744,11 @@ export default function RequestsPage() {
                   {isPendingPetSelected && renderPendingPetFields()}
                   <Form.Group>
                     <Form.Label>Subject</Form.Label>
-                    <Form.Control value={subject} onChange={(event) => setSubject(event.target.value)} />
+                    <Form.Control
+                      value={subject}
+                      onChange={(event) => setSubject(event.target.value)}
+                      disabled={isReadOnly}
+                    />
                   </Form.Group>
                 </>
               )}
@@ -738,6 +762,7 @@ export default function RequestsPage() {
                     <Form.Select
                       value={profileAttribute}
                       onChange={(event) => setProfileAttribute(event.target.value as ProfileRequestAttribute)}
+                      disabled={isReadOnly}
                     >
                       {Object.entries(profileAttributeLabels).map(([value, label]) => (
                         <option key={value} value={value}>
@@ -748,7 +773,12 @@ export default function RequestsPage() {
                   </Form.Group>
                   <Form.Group>
                     <Form.Label>Subject</Form.Label>
-                    <Form.Control value={subject} onChange={(event) => setSubject(event.target.value)} required />
+                    <Form.Control
+                      value={subject}
+                      onChange={(event) => setSubject(event.target.value)}
+                      required
+                      disabled={isReadOnly}
+                    />
                   </Form.Group>
                 </>
               )}
@@ -757,7 +787,11 @@ export default function RequestsPage() {
                 <>
                   <Form.Group>
                     <Form.Label>Related Pet</Form.Label>
-                    <Form.Select value={petId} onChange={(event) => setPetId(event.target.value)}>
+                    <Form.Select
+                      value={petId}
+                      onChange={(event) => setPetId(event.target.value)}
+                      disabled={isReadOnly}
+                    >
                       <option value="">No pet selected</option>
                       {availablePets.map((pet) => (
                         <option key={pet.id} value={pet.id}>
@@ -768,7 +802,12 @@ export default function RequestsPage() {
                   </Form.Group>
                   <Form.Group>
                     <Form.Label>Subject</Form.Label>
-                    <Form.Control value={subject} onChange={(event) => setSubject(event.target.value)} required />
+                    <Form.Control
+                      value={subject}
+                      onChange={(event) => setSubject(event.target.value)}
+                      required
+                      disabled={isReadOnly}
+                    />
                   </Form.Group>
                 </>
               )}
@@ -781,6 +820,7 @@ export default function RequestsPage() {
                   value={clientNote}
                   onChange={(event) => setClientNote(event.target.value)}
                   required
+                  disabled={isReadOnly}
                 />
               </Form.Group>
 
@@ -791,10 +831,10 @@ export default function RequestsPage() {
                     <Form.Select
                       value={status}
                       onChange={(event) => setStatus(event.target.value as ClientRequest["status"])}
+                      disabled={isReadOnly}
                     >
                       <option value="open">Open</option>
                       <option value="in_review">In Review</option>
-                      <option value="resolved">Resolved</option>
                       <option value="closed">Closed</option>
                     </Form.Select>
                   </Form.Group>
@@ -805,6 +845,7 @@ export default function RequestsPage() {
                       rows={4}
                       value={internalNote}
                       onChange={(event) => setInternalNote(event.target.value)}
+                      disabled={isReadOnly}
                     />
                   </Form.Group>
                 </>
@@ -815,9 +856,33 @@ export default function RequestsPage() {
             <Button variant="outline-secondary" onClick={() => setShowModal(false)} disabled={isSaving}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving ? "Saving..." : isClient ? "Submit Request" : "Save"}
-            </Button>
+            {isClient && editingRequest && (
+              <Button
+                variant="outline-primary"
+                disabled={isSaving || isRequestClosed(editingRequest.status)}
+                aria-label="Edit request"
+                onClick={() => {
+                  if (editingRequest.status === "in_review") {
+                    setInfoMessage(
+                      "This request is in review. Please contact your groomer and include your email and phone number.",
+                    );
+                    return;
+                  }
+
+                  if (!isRequestClosed(editingRequest.status)) {
+                    setInfoMessage(null);
+                    setIsReadOnly(false);
+                  }
+                }}
+              >
+                <PencilSquare aria-hidden="true" />
+              </Button>
+            )}
+            {!isReadOnly && (
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? "Saving..." : isClient ? "Submit Request" : "Save"}
+              </Button>
+            )}
           </Modal.Footer>
         </Form>
       </Modal>

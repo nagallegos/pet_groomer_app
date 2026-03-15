@@ -73,7 +73,7 @@ export default function ClientPetsPage() {
                   </div>
 
                   <div>
-                    <h6 className="mb-2">Client-Facing Notes</h6>
+                    <h6 className="mb-2">Notes</h6>
                     <div className="d-grid gap-2">
                       {clientNotes.map((note) => (
                         <Card key={note.id} className="client-note-preview">
@@ -86,7 +86,7 @@ export default function ClientPetsPage() {
                         </Card>
                       ))}
                       {clientNotes.length === 0 && (
-                        <div className="text-muted small">No client-facing notes for this pet.</div>
+                      <div className="text-muted small">No notes for this pet.</div>
                       )}
                     </div>
                   </div>

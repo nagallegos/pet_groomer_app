@@ -1,4 +1,5 @@
 import { Button, ButtonGroup, Dropdown } from "react-bootstrap";
+import { ChevronLeft, ChevronRight } from "react-bootstrap-icons";
 import { Views, type ToolbarProps, type View } from "react-big-calendar";
 
 type CalendarViewName = View | "three_day";
@@ -38,16 +39,7 @@ export default function CustomCalendarToolbar<
           onClick={() => onNavigate("PREV")}
         >
           <span aria-hidden="true" className="calendar-toolbar-nav-icon">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path
-                d="m14.5 6.5-5 5 5 5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <ChevronLeft />
           </span>
           <span className="visually-hidden">Previous</span>
         </Button>
@@ -64,16 +56,7 @@ export default function CustomCalendarToolbar<
           onClick={() => onNavigate("NEXT")}
         >
           <span aria-hidden="true" className="calendar-toolbar-nav-icon">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path
-                d="m9.5 6.5 5 5-5 5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <ChevronRight />
           </span>
           <span className="visually-hidden">Next</span>
         </Button>

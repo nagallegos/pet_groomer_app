@@ -26,7 +26,6 @@ export default function UserSettingsModal({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [notifyByEmail, setNotifyByEmail] = useState(true);
-  const [notifyByText, setNotifyByText] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -40,7 +39,6 @@ export default function UserSettingsModal({
     setEmail(user.email);
     setPhone(user.phone ?? "");
     setNotifyByEmail(user.notifyByEmail);
-    setNotifyByText(user.notifyByText);
     setSaveError(null);
   }, [show, user]);
 
@@ -60,7 +58,7 @@ export default function UserSettingsModal({
         email,
         phone,
         notifyByEmail,
-        notifyByText,
+        notifyByText: false,
       });
       showToast({
         title: "Settings Updated",
@@ -133,7 +131,7 @@ export default function UserSettingsModal({
                 type="tel"
                 value={phone}
                 onChange={(event) => setPhone(event.target.value)}
-                placeholder="Optional unless text notifications are enabled"
+                placeholder="Optional for contact purposes"
               />
             </Form.Group>
           </div>
@@ -148,17 +146,9 @@ export default function UserSettingsModal({
                 checked={notifyByEmail}
                 onChange={(event) => setNotifyByEmail(event.target.checked)}
               />
-              <Form.Check
-                type="switch"
-                id="notify-by-text"
-                label="Receive text notifications"
-                checked={notifyByText}
-                onChange={(event) => setNotifyByText(event.target.checked)}
-              />
             </div>
             <div className="text-muted small mt-2">
-              Text notifications require a phone number. Email notifications use
-              the address above.
+              Email notifications use the address above.
             </div>
           </div>
           <div className="mt-3">

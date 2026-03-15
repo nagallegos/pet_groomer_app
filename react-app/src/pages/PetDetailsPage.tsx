@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Button, Card, Dropdown, Form, ListGroup, Row, Spinner } from "react-bootstrap";
+import { PencilSquare } from "react-bootstrap-icons";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import AppointmentFormModal from "../components/appointments/AppointmentFormModal";
 import AppointmentDetailsModal from "../components/appointments/AppointmentDetailsModal";
@@ -309,7 +310,8 @@ export default function PetDetailsPage() {
               </Dropdown.Toggle>
               <Dropdown.Menu>
                 <Dropdown.Item onClick={() => setIsEditMode(true)}>
-                  Edit Pet
+                  <PencilSquare aria-hidden="true" />
+                  <span className="visually-hidden">Edit pet</span>
                 </Dropdown.Item>
                 <Dropdown.Item onClick={() => setShowScheduleModal(true)}>
                   Schedule Appointment
@@ -474,13 +476,16 @@ export default function PetDetailsPage() {
                                 <button
                                   type="button"
                                   className="pet-row-indicator-button"
+                                  aria-label="Edit note"
                                   onClick={() => {
                                     setEditingDraftId(note.id);
                                     setNoteDraftText(note.text);
                                     setNoteDraftVisibility(note.visibility);
                                   }}
                                 >
-                                  <span className="pet-row-indicator">Edit</span>
+                                  <span className="pet-row-indicator">
+                                    <PencilSquare aria-hidden="true" />
+                                  </span>
                                 </button>
                                 <button
                                   type="button"

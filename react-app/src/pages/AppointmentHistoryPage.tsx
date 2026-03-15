@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button, Card, Collapse, Form, ListGroup } from "react-bootstrap";
+import { PencilSquare } from "react-bootstrap-icons";
 import { useSearchParams } from "react-router-dom";
 import AppointmentDetailsModal from "../components/appointments/AppointmentDetailsModal";
 import { useAppData } from "../components/common/AppDataProvider";
@@ -405,12 +406,13 @@ export default function AppointmentHistoryPage() {
                         <Button
                           size="sm"
                           variant="outline-primary"
+                          aria-label="Edit appointment"
                           onClick={(event) => {
                             event.stopPropagation();
                             setSelectedAppointment(appointment);
                           }}
                         >
-                          Edit
+                          <PencilSquare aria-hidden="true" />
                         </Button>
                       </div>
                     </div>

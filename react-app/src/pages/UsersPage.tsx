@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button, Card, Collapse, Form, ListGroup } from "react-bootstrap";
+import { PencilSquare } from "react-bootstrap-icons";
 import { ChevronDownIcon, SearchIcon } from "../components/common/AppIcons";
 import ConfirmDeleteModal from "../components/common/ConfirmDeleteModal";
 import PageLoader from "../components/common/PageLoader";
@@ -300,8 +301,7 @@ export default function UsersPage() {
                     <div className="text-muted small">
                       {managedUser.username ? `@${managedUser.username} | ` : ""}
                       {managedUser.phone || "No phone"} | Email{" "}
-                      {managedUser.notifyByEmail ? "on" : "off"} | Text{" "}
-                      {managedUser.notifyByText ? "on" : "off"}
+                      {managedUser.notifyByEmail ? "on" : "off"}
                     </div>
                     {managedUser.lockedAt && (
                       <div className="text-danger small mt-1">
@@ -313,12 +313,13 @@ export default function UsersPage() {
                     <Button
                       size="sm"
                       variant="outline-secondary"
+                      aria-label="Edit user"
                       onClick={() => {
                         setSelectedUser(managedUser);
                         setShowUserModal(true);
                       }}
                     >
-                      Edit
+                      <PencilSquare aria-hidden="true" />
                     </Button>
                     {managedUser.lockedAt && (
                       <Button

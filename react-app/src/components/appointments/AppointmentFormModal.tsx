@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Button, Card, Form, Modal, Spinner } from "react-bootstrap";
+import { PencilSquare } from "react-bootstrap-icons";
 import { useAppToast } from "../common/AppToastProvider";
 import {
   APPOINTMENT_SERVICE_OPTIONS,
@@ -427,13 +428,16 @@ export default function AppointmentFormModal({
                         <button
                           type="button"
                           className="pet-row-indicator-button"
+                          aria-label="Edit note"
                           onClick={() => {
                             setEditingDraftId(note.id);
                             setNoteDraftText(note.text);
                             setNoteDraftVisibility(note.visibility);
                           }}
                         >
-                          <span className="pet-row-indicator">Edit</span>
+                          <span className="pet-row-indicator">
+                            <PencilSquare aria-hidden="true" />
+                          </span>
                         </button>
                         <button
                           type="button"

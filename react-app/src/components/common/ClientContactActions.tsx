@@ -1,3 +1,5 @@
+import { ChatDots, Envelope, Telephone } from "react-bootstrap-icons";
+
 interface ClientContactActionsProps {
   phone: string;
   email: string;
@@ -28,14 +30,10 @@ export default function ClientContactActions({
         <span className="client-contact-value">{phone}</span>
         <div className="client-contact-buttons">
           <a href={`tel:${normalizedPhone}`} className="client-contact-icon-btn" aria-label={`Call ${phone}`} title="Call">
-            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-              <path d="M6.6 3.5h2.8l1.2 4.1l-1.8 1.8a15.8 15.8 0 0 0 5.8 5.8l1.8-1.8l4.1 1.2v2.8c0 .8-.6 1.5-1.5 1.5C10.4 19 5 13.6 5 5a1.5 1.5 0 0 1 1.6-1.5Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <Telephone aria-hidden="true" />
           </a>
           <a href={`sms:${normalizedPhone}`} className="client-contact-icon-btn" aria-label={`Text ${phone}`} title="Text">
-            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-              <path d="M5 6.5h14A1.5 1.5 0 0 1 20.5 8v8A1.5 1.5 0 0 1 19 17.5H9l-4.5 3v-4H5A1.5 1.5 0 0 1 3.5 15V8A1.5 1.5 0 0 1 5 6.5Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <ChatDots aria-hidden="true" />
           </a>
         </div>
       </div>
@@ -43,10 +41,7 @@ export default function ClientContactActions({
         <span className="client-contact-value text-break">{email}</span>
         <div className="client-contact-buttons">
           <a href={`mailto:${email}`} className="client-contact-icon-btn" aria-label={`Email ${email}`} title="Email">
-            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-              <path d="M4.5 7.5h15A1.5 1.5 0 0 1 21 9v6a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 15V9a1.5 1.5 0 0 1 1.5-1.5Z" fill="none" stroke="currentColor" strokeWidth="1.8" />
-              <path d="m4 8 8 6 8-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <Envelope aria-hidden="true" />
           </a>
         </div>
       </div>

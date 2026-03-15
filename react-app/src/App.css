@@ -283,15 +283,19 @@ a {
 
 @media (max-width: 575.98px) {
   .notification-dropdown-menu {
-    width: min(22rem, calc(100vw - 1.5rem));
-    right: 0;
-    left: auto;
+    position: fixed;
+    width: auto;
+    left: max(0.5rem, env(safe-area-inset-left));
+    right: max(0.5rem, env(safe-area-inset-right));
+    top: calc(var(--safe-area-top) + 4.75rem);
+    transform: none;
   }
 
   .notification-dropdown-menu[data-bs-popper] {
-    right: 0;
-    left: auto;
-    transform: translate3d(0, var(--bs-dropdown-spacer), 0) !important;
+    right: max(0.5rem, env(safe-area-inset-right));
+    left: max(0.5rem, env(safe-area-inset-left));
+    top: calc(var(--safe-area-top) + 4.75rem);
+    transform: none !important;
   }
 }
 
@@ -2860,6 +2864,22 @@ textarea.form-control {
   justify-content: space-between;
   gap: 1rem;
   align-items: center;
+}
+
+.client-summary-link {
+  text-decoration: none;
+  color: inherit;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.85rem;
+  border: 1px solid transparent;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.client-summary-link:hover,
+.client-summary-link:focus-visible {
+  background: rgba(255, 255, 255, 0.65);
+  border-color: rgba(148, 163, 184, 0.35);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
 }
 
 .client-note-preview {

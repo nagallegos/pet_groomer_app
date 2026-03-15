@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button, Card, Modal } from "react-bootstrap";
+import { PencilSquare } from "react-bootstrap-icons";
 import {
   Calendar,
   dateFnsLocalizer,
@@ -166,12 +167,13 @@ function MobileAgendaStyleEvent({
         size="sm"
         variant="link"
         className="agenda-event-edit-btn"
+        aria-label="Edit appointment"
         onClick={(clickEvent) => {
           clickEvent.stopPropagation();
           onEdit(event);
         }}
       >
-        Edit
+        <PencilSquare aria-hidden="true" />
       </Button>
     </div>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Button, Dropdown, Form, ListGroup, Modal, Spinner } from "react-bootstrap";
+import { PencilSquare } from "react-bootstrap-icons";
 import { useNavigate } from "react-router-dom";
 import AppointmentFormModal from "../appointments/AppointmentFormModal";
 import {
@@ -310,7 +311,8 @@ export default function ClientQuickViewModal({
                 </Dropdown.Toggle>
                 <Dropdown.Menu>
                   <Dropdown.Item onClick={() => setIsEditing(true)}>
-                    Edit Client
+                    <PencilSquare aria-hidden="true" />
+                    <span className="visually-hidden">Edit client</span>
                   </Dropdown.Item>
                   <Dropdown.Item
                     onClick={() => {
@@ -445,8 +447,15 @@ export default function ClientQuickViewModal({
                             <div>{note.text}</div>
                           </div>
                           <div className="note-inline-actions">
-                            <button type="button" className="pet-row-indicator-button" onClick={() => openEditNoteModal(note.id, note.text, note.visibility)}>
-                              <span className="pet-row-indicator">Edit</span>
+                            <button
+                              type="button"
+                              className="pet-row-indicator-button"
+                              aria-label="Edit note"
+                              onClick={() => openEditNoteModal(note.id, note.text, note.visibility)}
+                            >
+                              <span className="pet-row-indicator">
+                                <PencilSquare aria-hidden="true" />
+                              </span>
                             </button>
                             <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "archive"); }}>
                               <span className="pet-row-indicator">Archive</span>
@@ -777,8 +786,15 @@ export default function ClientQuickViewModal({
                             <div>{note.text}</div>
                           </div>
                           <div className="note-inline-actions">
-                            <button type="button" className="pet-row-indicator-button" onClick={() => openEditNoteModal(note.id, note.text, note.visibility)}>
-                              <span className="pet-row-indicator">Edit</span>
+                            <button
+                              type="button"
+                              className="pet-row-indicator-button"
+                              aria-label="Edit note"
+                              onClick={() => openEditNoteModal(note.id, note.text, note.visibility)}
+                            >
+                              <span className="pet-row-indicator">
+                                <PencilSquare aria-hidden="true" />
+                              </span>
                             </button>
                             <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "archive"); }}>
                               <span className="pet-row-indicator">Archive</span>

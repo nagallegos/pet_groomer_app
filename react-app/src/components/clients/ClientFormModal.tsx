@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, Card, Form, Modal, Spinner } from "react-bootstrap";
+import { PencilSquare } from "react-bootstrap-icons";
 import {
   addOwnerNote,
   deleteOwnerNoteItem,
@@ -283,12 +284,15 @@ export default function ClientFormModal({
                         <button
                           type="button"
                           className="pet-row-indicator-button"
+                          aria-label="Edit note"
                           onClick={() => {
                             setEditingDraftId(note.id);
                             setNoteDraftText(note.text);
                           }}
                         >
-                          <span className="pet-row-indicator">Edit</span>
+                          <span className="pet-row-indicator">
+                            <PencilSquare aria-hidden="true" />
+                          </span>
                         </button>
                         <button
                           type="button"

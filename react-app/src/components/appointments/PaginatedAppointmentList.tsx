@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button, Card, ListGroup } from "react-bootstrap";
+import { PencilSquare } from "react-bootstrap-icons";
 import { Link } from "react-router-dom";
 import { formatAppointmentServices } from "../../lib/appointmentServices";
 import type { Appointment, Owner, Pet } from "../../types/models";
@@ -135,12 +136,13 @@ export default function PaginatedAppointmentList({
                       <Button
                         size="sm"
                         variant="outline-primary"
+                        aria-label="Edit appointment"
                         onClick={(event) => {
                           event.stopPropagation();
                           onAppointmentClick(appointment);
                         }}
                       >
-                        Edit
+                        <PencilSquare aria-hidden="true" />
                       </Button>
                     </div>
                   </div>

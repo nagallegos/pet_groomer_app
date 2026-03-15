@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge, Dropdown } from "react-bootstrap";
+import { Bell } from "react-bootstrap-icons";
 import { useNavigate } from "react-router-dom";
 import { listUserNotifications, markUserNotificationRead } from "../../lib/crmApi";
 import type { UserNotification } from "../../types/models";
@@ -85,16 +86,7 @@ export default function NotificationBell() {
     <Dropdown align="end">
       <Dropdown.Toggle variant="outline-light" className="notification-bell-btn">
         <span aria-hidden="true" className="notification-bell-icon">
-          <svg viewBox="0 0 24 24" focusable="false">
-            <path
-              d="M6.5 17.5h11l-1.3-1.7a2.5 2.5 0 0 1-.5-1.5V10a3.7 3.7 0 0 0-7.4 0v4.3a2.5 2.5 0 0 1-.5 1.5L6.5 17.5Z"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.7"
-              strokeLinejoin="round"
-            />
-            <path d="M10 18.5a2 2 0 0 0 4 0" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-          </svg>
+          <Bell />
         </span>
         {unreadCount > 0 && (
           <Badge pill bg="danger" className="notification-bell-badge">
