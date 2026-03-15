@@ -251,14 +251,19 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 999px;
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #6d28d9;
 }
 
 .notification-bell-icon {
-  width: 1rem;
-  height: 1rem;
+  width: 1.25rem;
+  height: 1.25rem;
   display: inline-flex;
 }
 
@@ -272,6 +277,10 @@ a {
   top: -0.15rem;
   right: -0.15rem;
   font-size: 0.65rem;
+}
+
+.topbar-mobile .notification-bell-btn {
+  color: #fff8ee;
 }
 
 .notification-dropdown-menu {
