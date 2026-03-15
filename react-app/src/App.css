@@ -281,6 +281,20 @@ a {
   padding: 0;
 }
 
+@media (max-width: 575.98px) {
+  .notification-dropdown-menu {
+    width: min(22rem, calc(100vw - 1.5rem));
+    right: 0;
+    left: auto;
+  }
+
+  .notification-dropdown-menu[data-bs-popper] {
+    right: 0;
+    left: auto;
+    transform: translate3d(0, var(--bs-dropdown-spacer), 0) !important;
+  }
+}
+
 .notification-dropdown-header {
   padding: 0.75rem 1rem;
   font-weight: 700;

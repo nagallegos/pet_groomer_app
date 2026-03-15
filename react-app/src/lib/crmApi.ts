@@ -109,9 +109,18 @@ export function getApiBaseUrl() {
 }
 
 const API_BASE_URL = getApiBaseUrl();
+let backendAvailableOverride: boolean | null = null;
 
 export function isBackendConfigured() {
+  if (backendAvailableOverride !== null) {
+    return backendAvailableOverride;
+  }
+
   return Boolean(API_BASE_URL);
+}
+
+export function setBackendAvailable(isAvailable: boolean) {
+  backendAvailableOverride = isAvailable;
 }
 
 async function request<T>(path: string, method: string, body?: unknown): Promise<T> {
@@ -124,7 +133,32 @@ async function request<T>(path: string, method: string, body?: unknown): Promise
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`);
+    const contentType = response.headers.get("Content-Type") || "";
+    let message = `Request failed with status ${response.status}`;
+
+    try {
+      if (contentType.includes("application/json")) {
+        const data = await response.json();
+        if (data?.error) {
+          message = data.error;
+        } else if (data?.message) {
+          message = data.message;
+        } else if (typeof data === "string") {
+          message = data;
+        } else {
+          message = JSON.stringify(data);
+        }
+      } else {
+        const text = await response.text();
+        if (text) {
+          message = text;
+        }
+      }
+    } catch {
+      // Fall back to the status-based message.
+    }
+
+    throw new Error(message);
   }
 
   return (await response.json()) as T;
@@ -270,6 +304,33 @@ function normalizeAppointment(
     confirmedAt: existingAppointment?.confirmedAt,
     isArchived: existingAppointment?.isArchived ?? false,
     archivedAt: existingAppointment?.archivedAt,
+  };
+}
+
+function normalizeClientRequest(
+  input: ClientRequestUpsertInput,
+  existingRequest?: ClientRequest,
+): ClientRequest {
+  const now = new Date().toISOString();
+  const status = input.status ?? existingRequest?.status ?? "open";
+  const resolvedAt =
+    status === "resolved" || status === "closed" ? now : existingRequest?.resolvedAt;
+
+  return {
+    id: existingRequest?.id ?? `request-local-${Date.now()}`,
+    ownerId: input.ownerId,
+    petId: input.petId,
+    createdByUserId: existingRequest?.createdByUserId,
+    requestType: input.requestType,
+    status,
+    subject: input.subject,
+    clientNote: input.clientNote,
+    internalNote: input.internalNote,
+    details: input.details,
+    events: existingRequest?.events ?? [],
+    createdAt: existingRequest?.createdAt ?? now,
+    updatedAt: now,
+    resolvedAt,
   };
 }
 
@@ -515,6 +576,10 @@ export async function saveClientRequest(
   input: ClientRequestUpsertInput,
   existingRequest?: ClientRequest,
 ): Promise<ClientRequest> {
+  if (!isBackendConfigured()) {
+    return normalizeClientRequest(input, existingRequest);
+  }
+
   return existingRequest
     ? request<ClientRequest>(`/requests/${existingRequest.id}`, "PUT", input)
     : request<ClientRequest>("/requests", "POST", input);

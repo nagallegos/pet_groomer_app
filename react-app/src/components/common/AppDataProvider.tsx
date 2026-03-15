@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { mockAppointments, mockOwners, mockPets } from "../../data/mockData";
-import { getApiBaseUrl } from "../../lib/crmApi";
+import { getApiBaseUrl, setBackendAvailable } from "../../lib/crmApi";
 import type { Appointment, ClientRequest, Owner, Pet } from "../../types/models";
 
 interface BootstrapPayload {
@@ -60,12 +60,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setAppointments(payload.appointments);
       setRequests(payload.requests ?? []);
       setDataMode("api");
+      setBackendAvailable(true);
     } catch {
       setOwners(mockOwners);
       setPets(mockPets);
       setAppointments(mockAppointments);
       setRequests([]);
       setDataMode("mock");
+      setBackendAvailable(false);
     } finally {
       setIsBootstrapping(false);
     }
