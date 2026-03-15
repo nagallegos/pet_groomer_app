@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { Button, Container } from "react-bootstrap";
+import { Container } from "react-bootstrap";
 import { AppToastProvider } from "../common/AppToastProvider";
 import { Outlet } from "react-router-dom";
 import { useAuth } from "../common/useAuth";
 import NotificationBell from "./NotificationBell";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
-import { List } from "react-bootstrap-icons";
 
 export default function AppLayout() {
   const [showSidebar, setShowSidebar] = useState(false);
@@ -29,14 +28,6 @@ export default function AppLayout() {
             {user && (
               <div className="desktop-user-banner d-none d-lg-flex">
                 <div className="desktop-user-banner-actions">
-                  <Button
-                    variant="outline-secondary"
-                    className="desktop-menu-btn"
-                    aria-label="Open menu"
-                    onClick={() => setShowSidebar(true)}
-                  >
-                    <List aria-hidden="true" />
-                  </Button>
                   <NotificationBell />
                 </div>
                 <div className="desktop-user-banner-text">

@@ -73,7 +73,37 @@ export default function Sidebar({ show, onHide }: SidebarProps) {
 
   return (
     <>
-      <Offcanvas show={show} onHide={onHide} className="sidebar-offcanvas">
+      <aside className="sidebar-desktop d-none d-lg-flex flex-column">
+        <div className="sidebar-top">
+          <div className="sidebar-brand">
+            <span className="sidebar-brand-mark" aria-hidden="true">🐶</span>
+            <div>
+              <p className="sidebar-eyebrow mb-1">Pet Grooming Manager</p>
+              <h4 className="sidebar-title mb-0">Barks Bubbles & Love</h4>
+            </div>
+          </div>
+          <div className="sidebar-settings-wrap">
+            <SettingsMenu />
+          </div>
+        </div>
+
+        <Nav className="sidebar-nav flex-column gap-2">
+          {visibleNavItems.map((item) => (
+            <Nav.Link key={item.to} as={NavLink} to={item.to} className="sidebar-link">
+              <span aria-hidden="true" className="sidebar-link-icon">
+                {item.icon}
+              </span>
+              <span>{item.label}</span>
+            </Nav.Link>
+          ))}
+        </Nav>
+
+        <div className="sidebar-footer mt-auto">
+          <small>Warm, polished client care for every bath, brush, and bow.</small>
+        </div>
+      </aside>
+
+      <Offcanvas show={show} onHide={onHide} className="d-lg-none sidebar-offcanvas">
         <Offcanvas.Header closeButton>
           <div className="sidebar-offcanvas-header-main">
             {user && (
