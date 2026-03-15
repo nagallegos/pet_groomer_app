@@ -28,3 +28,6 @@ dist-ssr
 react-app/.netlify
 
 .agent.md
+
+# QA artifacts
+docs/qa/
