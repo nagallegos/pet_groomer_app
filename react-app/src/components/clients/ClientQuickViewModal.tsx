@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Collapse, Dropdown, Form, ListGroup, Modal, Spinner } from "react-bootstrap";
+import { Alert, Button, Dropdown, Form, ListGroup, Modal, Spinner } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
+import AppointmentFormModal from "../appointments/AppointmentFormModal";
 import {
   addOwnerNote,
   archiveOwner,
@@ -17,7 +18,7 @@ import { useAppToast } from "../common/AppToastProvider";
 import ClientContactActions from "../common/ClientContactActions";
 import ConfirmDeleteModal from "../common/ConfirmDeleteModal";
 import PetQuickViewModal from "../pets/PetQuickViewModal";
-import type { Appointment, ContactMethod, Owner, Pet } from "../../types/models";
+import type { Appointment, ContactMethod, NoteVisibility, Owner, Pet } from "../../types/models";
 
 interface ClientQuickViewModalProps {
   show: boolean;
@@ -50,6 +51,7 @@ export default function ClientQuickViewModal({
   const { showToast } = useAppToast();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [selectedPet, setSelectedPet] = useState<Pet | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [firstName, setFirstName] = useState("");
@@ -59,14 +61,20 @@ export default function ClientQuickViewModal({
   const [preferredContactMethod, setPreferredContactMethod] =
     useState<ContactMethod>("text");
   const [address, setAddress] = useState("");
-  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
+  const [noteVisibility, setNoteVisibility] = useState<NoteVisibility>("internal");
   const [noteError, setNoteError] = useState<string | null>(null);
   const [isSavingNote, setIsSavingNote] = useState(false);
-  const [showArchivedNotes, setShowArchivedNotes] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
+  const [showNewNoteModal, setShowNewNoteModal] = useState(false);
+  const [showAllNotesModal, setShowAllNotesModal] = useState(false);
+  const [showEditNoteModal, setShowEditNoteModal] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingNoteText, setEditingNoteText] = useState("");
+  const [editingNoteVisibility, setEditingNoteVisibility] =
+    useState<NoteVisibility>("internal");
 
   useEffect(() => {
     if (!show || !owner) {
@@ -79,15 +87,22 @@ export default function ClientQuickViewModal({
     setEmail(owner.email);
     setPreferredContactMethod(owner.preferredContactMethod);
     setAddress(owner.address ?? "");
-    setSelectedNoteId(null);
     setNoteText("");
+    setNoteVisibility("internal");
     setNoteError(null);
+    setShowEditNoteModal(false);
+    setShowNewNoteModal(false);
+    setShowAllNotesModal(false);
+    setEditingNoteId(null);
+    setEditingNoteText("");
+    setEditingNoteVisibility("internal");
     setIsEditing(false);
     setSaveError(null);
   }, [owner, show]);
 
   const activeNotes = useMemo(() => owner?.notes.filter((note) => !note.isArchived) ?? [], [owner]);
   const archivedNotes = useMemo(() => owner?.notes.filter((note) => note.isArchived) ?? [], [owner]);
+  const previewNotes = useMemo(() => activeNotes.slice(0, 3), [activeNotes]);
 
   if (!owner) return null;
 
@@ -159,9 +174,19 @@ export default function ClientQuickViewModal({
     : [];
 
   const resetNoteEditor = () => {
-    setSelectedNoteId(null);
     setNoteText("");
+    setNoteVisibility("internal");
     setNoteError(null);
+  };
+
+  const openNewNoteModal = () => {
+    resetNoteEditor();
+    setShowNewNoteModal(true);
+  };
+
+  const closeNewNoteModal = () => {
+    setShowNewNoteModal(false);
+    resetNoteEditor();
   };
 
   const handleSaveNote = async () => {
@@ -173,13 +198,11 @@ export default function ClientQuickViewModal({
     setNoteError(null);
 
     try {
-      const result = selectedNoteId
-        ? await updateOwnerNote(owner, selectedNoteId, noteText.trim())
-        : await addOwnerNote(owner, noteText.trim());
+      const result = await addOwnerNote(owner, noteText.trim(), noteVisibility);
       onOwnerUpdated?.(result.data);
-      resetNoteEditor();
+      closeNewNoteModal();
       showToast({
-        title: selectedNoteId ? "Note Updated" : "Note Added",
+        title: "Note Added",
         body: "The client note was saved successfully.",
         variant: "success",
       });
@@ -202,7 +225,7 @@ export default function ClientQuickViewModal({
             ? await unarchiveOwnerNote(owner, noteId)
             : await deleteOwnerNoteItem(owner, noteId);
       onOwnerUpdated?.(result.data);
-      if (selectedNoteId === noteId) {
+      if (editingNoteId === noteId) {
         resetNoteEditor();
       }
       showToast({
@@ -212,6 +235,54 @@ export default function ClientQuickViewModal({
       });
     } catch (error) {
       setNoteError(error instanceof Error ? error.message : "Unable to update note.");
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
+
+  const openEditNoteModal = (
+    noteId: string,
+    text: string,
+    visibility: NoteVisibility,
+  ) => {
+    setEditingNoteId(noteId);
+    setEditingNoteText(text);
+    setEditingNoteVisibility(visibility);
+    setNoteError(null);
+    setShowEditNoteModal(true);
+  };
+
+  const closeEditNoteModal = () => {
+    setShowEditNoteModal(false);
+    setEditingNoteId(null);
+    setEditingNoteText("");
+    setEditingNoteVisibility("internal");
+  };
+
+  const handleSaveEditedNote = async () => {
+    if (!editingNoteId || !editingNoteText.trim()) {
+      return;
+    }
+
+    setIsSavingNote(true);
+    setNoteError(null);
+
+    try {
+      const result = await updateOwnerNote(
+        owner,
+        editingNoteId,
+        editingNoteText.trim(),
+        editingNoteVisibility,
+      );
+      onOwnerUpdated?.(result.data);
+      closeEditNoteModal();
+      showToast({
+        title: "Note Updated",
+        body: "The client note was saved successfully.",
+        variant: "success",
+      });
+    } catch (error) {
+      setNoteError(error instanceof Error ? error.message : "Unable to save note.");
     } finally {
       setIsSavingNote(false);
     }
@@ -243,8 +314,7 @@ export default function ClientQuickViewModal({
                   </Dropdown.Item>
                   <Dropdown.Item
                     onClick={() => {
-                      onHide();
-                      navigate("/schedule");
+                      setShowScheduleModal(true);
                     }}
                   >
                     Schedule Appointment
@@ -341,51 +411,41 @@ export default function ClientQuickViewModal({
               <div>
                 <div className="d-flex justify-content-between align-items-center gap-2 mb-2">
                   <Form.Label className="mb-0">Client Notes</Form.Label>
-                  <Button size="sm" variant="outline-secondary" onClick={resetNoteEditor}>
-                    New Note
-                  </Button>
+                  <div className="d-flex gap-2">
+                    {(activeNotes.length + archivedNotes.length) > 3 && (
+                      <Button size="sm" variant="outline-secondary" onClick={() => setShowAllNotesModal(true)}>
+                        View All Notes
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline-secondary" onClick={openNewNoteModal}>
+                      New Note
+                    </Button>
+                  </div>
                 </div>
                 {noteError && (
                   <Alert variant="danger" className="mb-3">
                     {noteError}
                   </Alert>
                 )}
-                <Form.Group className="mb-3">
-                  <Form.Control
-                    as="textarea"
-                    rows={3}
-                    value={noteText}
-                    onChange={(event) => setNoteText(event.target.value)}
-                    placeholder="Add or edit a client note..."
-                  />
-                </Form.Group>
-                <div className="d-flex justify-content-end gap-2 mb-3">
-                  {selectedNoteId && (
-                    <Button size="sm" variant="outline-secondary" onClick={resetNoteEditor}>
-                      Cancel Note Edit
-                    </Button>
-                  )}
-                  <Button size="sm" variant="primary" onClick={() => void handleSaveNote()} disabled={!noteText.trim() || isSavingNote}>
-                    {isSavingNote && <Spinner animation="border" size="sm" className="me-2" />}
-                    Save Note
-                  </Button>
-                </div>
                 {activeNotes.length === 0 ? (
                   <p className="text-muted mb-0">No active client notes.</p>
                 ) : (
                   <ListGroup className="compact-note-list">
-                    {activeNotes.map((note) => (
+                    {previewNotes.map((note) => (
                       <ListGroup.Item key={note.id}>
                         <div className="d-flex justify-content-between align-items-start gap-3">
                           <div className="client-note-item">
                             <div className="client-note-meta">
+                              <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
+                                {note.visibility === "client" ? "Client-facing" : "Internal"}
+                              </span>
                               <span>{new Date(note.createdAt).toLocaleDateString()}</span>
                               {note.updatedAt && <span>Updated {new Date(note.updatedAt).toLocaleDateString()}</span>}
                             </div>
                             <div>{note.text}</div>
                           </div>
                           <div className="note-inline-actions">
-                            <button type="button" className="pet-row-indicator-button" onClick={() => { setSelectedNoteId(note.id); setNoteText(note.text); }}>
+                            <button type="button" className="pet-row-indicator-button" onClick={() => openEditNoteModal(note.id, note.text, note.visibility)}>
                               <span className="pet-row-indicator">Edit</span>
                             </button>
                             <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "archive"); }}>
@@ -399,39 +459,6 @@ export default function ClientQuickViewModal({
                       </ListGroup.Item>
                     ))}
                   </ListGroup>
-                )}
-                {archivedNotes.length > 0 && (
-                  <div className="mt-3">
-                    <Button size="sm" variant="outline-secondary" onClick={() => setShowArchivedNotes((current) => !current)}>
-                      {showArchivedNotes ? "Hide Archived Notes" : `Show Archived Notes (${archivedNotes.length})`}
-                    </Button>
-                    <Collapse in={showArchivedNotes}>
-                      <div className="mt-3">
-                        <ListGroup className="compact-note-list">
-                          {archivedNotes.map((note) => (
-                            <ListGroup.Item key={note.id}>
-                              <div className="d-flex justify-content-between align-items-start gap-3">
-                                <div className="client-note-item">
-                                  <div className="client-note-meta">
-                                    <span>Archived {note.archivedAt ? new Date(note.archivedAt).toLocaleDateString() : ""}</span>
-                                  </div>
-                                  <div>{note.text}</div>
-                                </div>
-                                <div className="note-inline-actions">
-                                  <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "restore"); }}>
-                                    <span className="pet-row-indicator">Restore</span>
-                                  </button>
-                                  <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "delete"); }}>
-                                    <span className="pet-row-indicator pet-row-indicator-danger">Delete</span>
-                                  </button>
-                                </div>
-                              </div>
-                            </ListGroup.Item>
-                          ))}
-                        </ListGroup>
-                      </div>
-                    </Collapse>
-                  </div>
                 )}
               </div>
               <p className="text-muted small mt-3 mb-0">
@@ -636,7 +663,188 @@ export default function ClientQuickViewModal({
           </Button>
         </Modal.Footer>
       </Modal>
+      <Modal show={showEditNoteModal} onHide={closeEditNoteModal} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Edit Client Note</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {noteError && (
+            <Alert variant="danger" className="mb-3">
+              {noteError}
+            </Alert>
+          )}
+          <Form.Group className="mb-3">
+            <Form.Label>Note</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={4}
+              value={editingNoteText}
+              onChange={(event) => setEditingNoteText(event.target.value)}
+              placeholder="Update this client note..."
+            />
+          </Form.Group>
+          <Form.Group>
+            <Form.Label>Visibility</Form.Label>
+            <Form.Select
+              value={editingNoteVisibility}
+              onChange={(event) =>
+                setEditingNoteVisibility(event.target.value as NoteVisibility)
+              }
+            >
+              <option value="internal">Internal only</option>
+              <option value="client">Client-facing</option>
+            </Form.Select>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={closeEditNoteModal}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => void handleSaveEditedNote()}
+            disabled={!editingNoteText.trim() || isSavingNote}
+          >
+            {isSavingNote && <Spinner animation="border" size="sm" className="me-2" />}
+            Save Note
+          </Button>
+        </Modal.Footer>
+      </Modal>
+      <Modal show={showNewNoteModal} onHide={closeNewNoteModal} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>New Client Note</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {noteError && (
+            <Alert variant="danger" className="mb-3">
+              {noteError}
+            </Alert>
+          )}
+          <Form.Group className="mb-3">
+            <Form.Label>Visibility</Form.Label>
+            <Form.Select
+              value={noteVisibility}
+              onChange={(event) => setNoteVisibility(event.target.value as NoteVisibility)}
+            >
+              <option value="internal">Internal only</option>
+              <option value="client">Client-facing</option>
+            </Form.Select>
+          </Form.Group>
+          <Form.Group>
+            <Form.Label>Note</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={4}
+              value={noteText}
+              onChange={(event) => setNoteText(event.target.value)}
+              placeholder="Add a client note..."
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={closeNewNoteModal}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={() => void handleSaveNote()} disabled={!noteText.trim() || isSavingNote}>
+            {isSavingNote && <Spinner animation="border" size="sm" className="me-2" />}
+            Save Note
+          </Button>
+        </Modal.Footer>
+      </Modal>
+      <Modal show={showAllNotesModal} onHide={() => setShowAllNotesModal(false)} centered scrollable>
+        <Modal.Header closeButton>
+          <Modal.Title>All Client Notes</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {activeNotes.length === 0 && archivedNotes.length === 0 ? (
+            <p className="text-muted mb-0">No client notes.</p>
+          ) : (
+            <>
+              {activeNotes.length > 0 && (
+                <>
+                  <div className="fw-semibold mb-2">Active Notes</div>
+                  <ListGroup className="compact-note-list mb-3">
+                    {activeNotes.map((note) => (
+                      <ListGroup.Item key={note.id}>
+                        <div className="d-flex justify-content-between align-items-start gap-3">
+                          <div className="client-note-item">
+                            <div className="client-note-meta">
+                              <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
+                                {note.visibility === "client" ? "Client-facing" : "Internal"}
+                              </span>
+                              <span>{new Date(note.createdAt).toLocaleDateString()}</span>
+                            </div>
+                            <div>{note.text}</div>
+                          </div>
+                          <div className="note-inline-actions">
+                            <button type="button" className="pet-row-indicator-button" onClick={() => openEditNoteModal(note.id, note.text, note.visibility)}>
+                              <span className="pet-row-indicator">Edit</span>
+                            </button>
+                            <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "archive"); }}>
+                              <span className="pet-row-indicator">Archive</span>
+                            </button>
+                            <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "delete"); }}>
+                              <span className="pet-row-indicator pet-row-indicator-danger">Delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      </ListGroup.Item>
+                    ))}
+                  </ListGroup>
+                </>
+              )}
+              {archivedNotes.length > 0 && (
+                <>
+                  <div className="fw-semibold mb-2">Archived Notes</div>
+                  <ListGroup className="compact-note-list">
+                    {archivedNotes.map((note) => (
+                      <ListGroup.Item key={note.id}>
+                        <div className="d-flex justify-content-between align-items-start gap-3">
+                          <div className="client-note-item">
+                            <div className="client-note-meta">
+                              <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
+                                {note.visibility === "client" ? "Client-facing" : "Internal"}
+                              </span>
+                              <span>Archived {note.archivedAt ? new Date(note.archivedAt).toLocaleDateString() : ""}</span>
+                            </div>
+                            <div>{note.text}</div>
+                          </div>
+                          <div className="note-inline-actions">
+                            <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "restore"); }}>
+                              <span className="pet-row-indicator">Restore</span>
+                            </button>
+                            <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "delete"); }}>
+                              <span className="pet-row-indicator pet-row-indicator-danger">Delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      </ListGroup.Item>
+                    ))}
+                  </ListGroup>
+                </>
+              )}
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowAllNotesModal(false)}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </Modal>
+
+      <AppointmentFormModal
+        show={showScheduleModal}
+        onHide={() => setShowScheduleModal(false)}
+        owners={[owner]}
+        pets={pets}
+        lockedOwnerId={owner.id}
+        initialOwnerId={owner.id}
+        onSaved={() => {
+          setShowScheduleModal(false);
+        }}
+      />
 
       <PetQuickViewModal
         show={show && !!selectedPet}

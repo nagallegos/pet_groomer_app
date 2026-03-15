@@ -10,13 +10,24 @@ import ConfirmDeleteModal from "../components/common/ConfirmDeleteModal";
 import PageLoader from "../components/common/PageLoader";
 import useInitialLoading from "../hooks/useInitialLoading";
 import {
+  addPetNote,
   archivePet,
+  deletePetNoteItem,
   deletePet,
   isBackendConfigured,
   savePet,
+  updatePetNote,
   type PetUpsertInput,
 } from "../lib/crmApi";
-import type { Appointment, Pet, Species } from "../types/models";
+import { formatPetAge, toDateInputValue } from "../lib/petAge";
+import type { Appointment, NoteVisibility, Pet, Species } from "../types/models";
+
+interface DraftPetNote {
+  id: string;
+  sourceNoteId?: string;
+  text: string;
+  visibility: NoteVisibility;
+}
 
 export default function PetDetailsPage() {
   const navigate = useNavigate();
@@ -50,12 +61,15 @@ export default function PetDetailsPage() {
   const [species, setSpecies] = useState<Species>("dog");
   const [breed, setBreed] = useState("");
   const [weightLbs, setWeightLbs] = useState("");
-  const [ageYears, setAgeYears] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [isBirthDateEstimated, setIsBirthDateEstimated] = useState(false);
   const [color, setColor] = useState("");
-  const [notes, setNotes] = useState("");
+  const [draftNotes, setDraftNotes] = useState<DraftPetNote[]>([]);
+  const [noteDraftText, setNoteDraftText] = useState("");
+  const [noteDraftVisibility, setNoteDraftVisibility] = useState<NoteVisibility>("internal");
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [isSavingPet, setIsSavingPet] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const originalNotes = pet?.notes.map((note) => note.text).join("\n") ?? "";
 
   useEffect(() => {
     setPet(initialPet);
@@ -84,11 +98,58 @@ export default function PetDetailsPage() {
     setSpecies(pet.species);
     setBreed(pet.breed);
     setWeightLbs(pet.weightLbs?.toString() ?? "");
-    setAgeYears(pet.ageYears?.toString() ?? "");
+    setBirthDate(toDateInputValue(pet.birthDate));
+    setIsBirthDateEstimated(pet.isBirthDateEstimated ?? false);
     setColor(pet.color ?? "");
-    setNotes(pet.notes.map((note) => note.text).join("\n"));
+    setDraftNotes(
+      pet.notes
+        .filter((note) => !note.isArchived)
+        .map((note) => ({
+          id: `existing-${note.id}`,
+          sourceNoteId: note.id,
+          text: note.text,
+          visibility: note.visibility,
+        })),
+    );
+    setNoteDraftText("");
+    setNoteDraftVisibility("internal");
+    setEditingDraftId(null);
     setSaveError(null);
   }, [pet]);
+
+  const resetDraftEditor = () => {
+    setNoteDraftText("");
+    setNoteDraftVisibility("internal");
+    setEditingDraftId(null);
+  };
+
+  const saveDraftNote = () => {
+    const trimmed = noteDraftText.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    if (editingDraftId) {
+      setDraftNotes((current) =>
+        current.map((note) =>
+          note.id === editingDraftId
+            ? { ...note, text: trimmed, visibility: noteDraftVisibility }
+            : note,
+        ),
+      );
+    } else {
+      setDraftNotes((current) => [
+        ...current,
+        {
+          id: `draft-${Date.now()}`,
+          text: trimmed,
+          visibility: noteDraftVisibility,
+        },
+      ]);
+    }
+
+    resetDraftEditor();
+  };
 
   if (isLoading) {
     return <PageLoader label="Loading pet profile..." />;
@@ -108,20 +169,57 @@ export default function PetDetailsPage() {
       species,
       breed,
       weightLbs: weightLbs ? Number(weightLbs) : undefined,
-      ageYears: ageYears ? Number(ageYears) : undefined,
+      birthDate: birthDate ? new Date(birthDate).toISOString() : undefined,
+      isBirthDateEstimated,
       color,
     };
 
-    if (notes !== originalNotes) {
-      payload.notes = notes;
-    }
-
     try {
       const result = await savePet(payload, pet);
-      setPet(result.data);
+      const savedPet = result.data;
+      const originalActiveNotes = pet.notes.filter((note) => !note.isArchived);
+      const retainedIds = new Set(
+        draftNotes
+          .map((note) => note.sourceNoteId)
+          .filter((noteId): noteId is string => Boolean(noteId)),
+      );
+
+      for (const existingNote of originalActiveNotes) {
+        if (!retainedIds.has(existingNote.id)) {
+          await deletePetNoteItem(savedPet, existingNote.id);
+        }
+      }
+
+      let reconciledPet = savedPet;
+      for (const draftNote of draftNotes) {
+        if (draftNote.sourceNoteId) {
+          const originalNote = originalActiveNotes.find((note) => note.id === draftNote.sourceNoteId);
+          if (
+            originalNote &&
+            (originalNote.text !== draftNote.text || originalNote.visibility !== draftNote.visibility)
+          ) {
+            const noteResult = await updatePetNote(
+              reconciledPet,
+              draftNote.sourceNoteId,
+              draftNote.text,
+              draftNote.visibility,
+            );
+            reconciledPet = noteResult.data;
+          }
+        } else {
+          const noteResult = await addPetNote(
+            reconciledPet,
+            draftNote.text,
+            draftNote.visibility,
+          );
+          reconciledPet = noteResult.data;
+        }
+      }
+
+      setPet(reconciledPet);
       setPets((currentPets) =>
         currentPets.map((currentPet) =>
-          currentPet.id === result.data.id ? result.data : currentPet,
+          currentPet.id === reconciledPet.id ? reconciledPet : currentPet,
         ),
       );
       showToast({
@@ -147,9 +245,20 @@ export default function PetDetailsPage() {
     setSpecies(pet.species);
     setBreed(pet.breed);
     setWeightLbs(pet.weightLbs?.toString() ?? "");
-    setAgeYears(pet.ageYears?.toString() ?? "");
+    setBirthDate(toDateInputValue(pet.birthDate));
+    setIsBirthDateEstimated(pet.isBirthDateEstimated ?? false);
     setColor(pet.color ?? "");
-    setNotes(pet.notes.map((note) => note.text).join("\n"));
+    setDraftNotes(
+      pet.notes
+        .filter((note) => !note.isArchived)
+        .map((note) => ({
+          id: `existing-${note.id}`,
+          sourceNoteId: note.id,
+          text: note.text,
+          visibility: note.visibility,
+        })),
+    );
+    resetDraftEditor();
     setSaveError(null);
     setIsEditMode(false);
   };
@@ -283,17 +392,24 @@ export default function PetDetailsPage() {
                     </div>
                     <div className="col-sm-6">
                       <Form.Group>
-                        <Form.Label>Age (years)</Form.Label>
+                        <Form.Label>{isBirthDateEstimated ? "Estimated DOB" : "DOB"}</Form.Label>
                         <Form.Control
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={ageYears}
-                          onChange={(event) => setAgeYears(event.target.value)}
+                          type="date"
+                          value={birthDate}
+                          onChange={(event) => setBirthDate(event.target.value)}
                         />
                       </Form.Group>
                     </div>
                   </div>
+
+                  <Form.Check
+                    className="mt-3"
+                    type="switch"
+                    id="pet-details-estimated-dob"
+                    label="DOB is estimated"
+                    checked={isBirthDateEstimated}
+                    onChange={(event) => setIsBirthDateEstimated(event.target.checked)}
+                  />
 
                   <Form.Group className="mt-3 mb-3">
                     <Form.Label>Color</Form.Label>
@@ -303,15 +419,88 @@ export default function PetDetailsPage() {
                     />
                   </Form.Group>
 
-                  <Form.Group>
-                    <Form.Label>Pet Notes</Form.Label>
-                    <Form.Control
-                      as="textarea"
-                      rows={5}
-                      value={notes}
-                      onChange={(event) => setNotes(event.target.value)}
-                    />
-                  </Form.Group>
+                  <div className="d-grid gap-3">
+                    <div className="d-flex justify-content-between align-items-center gap-2">
+                      <Form.Label className="mb-0">Pet Notes</Form.Label>
+                      <Button variant="outline-secondary" size="sm" onClick={resetDraftEditor}>
+                        New Note
+                      </Button>
+                    </div>
+                    <Form.Group>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        value={noteDraftText}
+                        onChange={(event) => setNoteDraftText(event.target.value)}
+                        placeholder="Temperament, handling notes, coat concerns..."
+                      />
+                    </Form.Group>
+                    <Form.Group>
+                      <Form.Label>Visibility</Form.Label>
+                      <Form.Select
+                        value={noteDraftVisibility}
+                        onChange={(event) => setNoteDraftVisibility(event.target.value as NoteVisibility)}
+                      >
+                        <option value="internal">Internal only</option>
+                        <option value="client">Client-facing</option>
+                      </Form.Select>
+                    </Form.Group>
+                    <div className="d-flex justify-content-end gap-2">
+                      {editingDraftId && (
+                        <Button variant="outline-secondary" size="sm" onClick={resetDraftEditor}>
+                          Cancel Edit
+                        </Button>
+                      )}
+                      <Button variant="primary" size="sm" onClick={saveDraftNote} disabled={!noteDraftText.trim()}>
+                        Save Note Card
+                      </Button>
+                    </div>
+                    <div className="d-grid gap-2">
+                      {draftNotes.length === 0 ? (
+                        <div className="text-muted small">No pet notes added yet.</div>
+                      ) : (
+                        draftNotes.map((note) => (
+                          <Card key={note.id} className="client-note-preview">
+                            <Card.Body className="d-flex justify-content-between align-items-start gap-3">
+                              <div className="client-note-item">
+                                <div className="client-note-meta">
+                                  <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
+                                    {note.visibility === "client" ? "Client-facing" : "Internal"}
+                                  </span>
+                                </div>
+                                <div>{note.text}</div>
+                              </div>
+                              <div className="note-inline-actions">
+                                <button
+                                  type="button"
+                                  className="pet-row-indicator-button"
+                                  onClick={() => {
+                                    setEditingDraftId(note.id);
+                                    setNoteDraftText(note.text);
+                                    setNoteDraftVisibility(note.visibility);
+                                  }}
+                                >
+                                  <span className="pet-row-indicator">Edit</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="pet-row-indicator-button"
+                                  onClick={() => {
+                                    setDraftNotes((current) => current.filter((item) => item.id !== note.id));
+                                    if (editingDraftId === note.id) {
+                                      resetDraftEditor();
+                                    }
+                                  }}
+                                >
+                                  <span className="pet-row-indicator pet-row-indicator-danger">Remove</span>
+                                </button>
+                              </div>
+                            </Card.Body>
+                          </Card>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 </>
               ) : (
                 <>
@@ -325,20 +514,35 @@ export default function PetDetailsPage() {
                     <strong>Weight:</strong> {pet.weightLbs ?? "—"} lbs
                   </p>
                   <p className="mb-1">
-                    <strong>Age:</strong> {pet.ageYears ?? "—"} years
+                    <strong>Age:</strong> {formatPetAge(pet, "—")}
+                  </p>
+                  <p className="mb-1">
+                    <strong>DOB:</strong> {pet.birthDate ? toDateInputValue(pet.birthDate) : "—"}
                   </p>
                   <p className="mb-3">
                     <strong>Color:</strong> {pet.color ?? "—"}
                   </p>
 
                   <h6>Notes</h6>
-                  {pet.notes.length === 0 ? (
+                  {pet.notes.filter((note) => !note.isArchived).length === 0 ? (
                     <p className="text-muted mb-0">No pet notes.</p>
                   ) : (
-                    <ListGroup>
-                      {pet.notes.map((note) => (
-                        <ListGroup.Item key={note.id}>{note.text}</ListGroup.Item>
-                      ))}
+                    <ListGroup className="compact-note-list">
+                      {pet.notes
+                        .filter((note) => !note.isArchived)
+                        .map((note) => (
+                          <ListGroup.Item key={note.id}>
+                            <div className="client-note-item">
+                              <div className="client-note-meta">
+                                <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
+                                  {note.visibility === "client" ? "Client-facing" : "Internal"}
+                                </span>
+                                <span>{new Date(note.createdAt).toLocaleDateString()}</span>
+                              </div>
+                              <div>{note.text}</div>
+                            </div>
+                          </ListGroup.Item>
+                        ))}
                     </ListGroup>
                   )}
                 </>

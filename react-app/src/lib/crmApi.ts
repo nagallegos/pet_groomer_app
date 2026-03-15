@@ -1,11 +1,17 @@
 import type {
   Appointment,
   AppointmentStatus,
+  ClientRequest,
+  ClientRequestDetails,
+  ClientRequestStatus,
+  ClientRequestType,
   ContactMethod,
+  NoteVisibility,
   NoteItem,
   Owner,
   Pet,
   Species,
+  UserNotification,
 } from "../types/models";
 
 export type AppUserRole = "admin" | "groomer" | "client";
@@ -13,6 +19,7 @@ export type AppUserRole = "admin" | "groomer" | "client";
 export interface ManagedUser {
   id: string;
   email: string;
+  username?: string;
   role: AppUserRole;
   name: string;
   firstName: string;
@@ -21,6 +28,9 @@ export interface ManagedUser {
   notifyByEmail: boolean;
   notifyByText: boolean;
   isActive: boolean;
+  failedLoginAttempts?: number;
+  lockedAt?: string;
+  ownerId?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -29,11 +39,13 @@ export interface ManagedUserUpsertInput {
   firstName: string;
   lastName: string;
   email: string;
+  username?: string;
   phone: string;
   role: AppUserRole;
   notifyByEmail: boolean;
   notifyByText: boolean;
   isActive: boolean;
+  ownerId?: string;
   password?: string;
 }
 import { derivePrimaryServiceType } from "./appointmentServices";
@@ -55,6 +67,8 @@ export interface PetUpsertInput {
   breed: string;
   weightLbs?: number;
   ageYears?: number;
+  birthDate?: string;
+  isBirthDateEstimated?: boolean;
   color?: string;
   notes?: string;
 }
@@ -70,6 +84,17 @@ export interface AppointmentUpsertInput {
   cost: number;
   notes?: string;
   status?: AppointmentStatus;
+}
+
+export interface ClientRequestUpsertInput {
+  ownerId: string;
+  petId?: string;
+  requestType: ClientRequestType;
+  subject: string;
+  clientNote: string;
+  internalNote?: string;
+  status?: ClientRequestStatus;
+  details?: ClientRequestDetails;
 }
 
 type NoteSaveResult<T> = SaveResult<T>;
@@ -122,6 +147,44 @@ export async function deleteManagedUser(userId: string): Promise<ManagedUser> {
   return request<ManagedUser>(`/users/${userId}`, "DELETE", {});
 }
 
+export async function unlockManagedUser(userId: string): Promise<ManagedUser> {
+  return request<ManagedUser>(`/users/${userId}/unlock`, "POST", {});
+}
+
+export async function sendUserSetup(userId: string): Promise<{ ok: true }> {
+  return request<{ ok: true }>(`/users/${userId}/send-setup`, "POST", {});
+}
+
+export async function sendUserPasswordReset(userId: string): Promise<{ ok: true }> {
+  return request<{ ok: true }>(`/users/${userId}/send-password-reset`, "POST", {});
+}
+
+export async function listUserNotifications(): Promise<UserNotification[]> {
+  return request<UserNotification[]>("/notifications", "GET");
+}
+
+export async function markUserNotificationRead(notificationId: string): Promise<UserNotification> {
+  return request<UserNotification>(`/notifications/${notificationId}/read`, "POST", {});
+}
+
+export async function requestPasswordReset(email: string): Promise<{ ok: true }> {
+  return request<{ ok: true }>("/auth/request-password-reset", "POST", { email });
+}
+
+export async function resetPassword(token: string, password: string): Promise<{ ok: true }> {
+  return request<{ ok: true }>("/auth/reset-password", "POST", { token, password });
+}
+
+export async function completeAccountSetup(input: {
+  token: string;
+  tempPassword: string;
+  password: string;
+  username?: string;
+  useEmail?: boolean;
+}): Promise<{ ok: true }> {
+  return request<{ ok: true }>("/auth/complete-setup", "POST", input);
+}
+
 function normalizeOwner(input: OwnerUpsertInput, existingOwner?: Owner): Owner {
   return {
     id: existingOwner?.id ?? `owner-local-${Date.now()}`,
@@ -136,6 +199,7 @@ function normalizeOwner(input: OwnerUpsertInput, existingOwner?: Owner): Owner {
           {
             id: existingOwner?.notes[0]?.id ?? `owner-note-local-${Date.now()}`,
             text: input.notes,
+            visibility: "internal",
             createdAt:
               existingOwner?.notes[0]?.createdAt ?? new Date().toISOString(),
           },
@@ -155,12 +219,15 @@ function normalizePet(input: PetUpsertInput, existingPet?: Pet): Pet {
     breed: input.breed,
     weightLbs: input.weightLbs,
     ageYears: input.ageYears,
+    birthDate: input.birthDate,
+    isBirthDateEstimated: input.isBirthDateEstimated,
     color: input.color,
     notes: input.notes
       ? [
           {
             id: existingPet?.notes[0]?.id ?? `pet-note-local-${Date.now()}`,
             text: input.notes,
+            visibility: "internal",
             createdAt:
               existingPet?.notes[0]?.createdAt ?? new Date().toISOString(),
           },
@@ -193,6 +260,7 @@ function normalizeAppointment(
             id:
               existingAppointment?.notes[0]?.id ?? `appt-note-local-${Date.now()}`,
             text: input.notes,
+            visibility: "internal",
             createdAt:
               existingAppointment?.notes[0]?.createdAt ?? new Date().toISOString(),
           },
@@ -439,16 +507,31 @@ export async function deleteAppointment(
   return { data, mode: "api" };
 }
 
+export async function listClientRequests(): Promise<ClientRequest[]> {
+  return request<ClientRequest[]>("/requests", "GET");
+}
+
+export async function saveClientRequest(
+  input: ClientRequestUpsertInput,
+  existingRequest?: ClientRequest,
+): Promise<ClientRequest> {
+  return existingRequest
+    ? request<ClientRequest>(`/requests/${existingRequest.id}`, "PUT", input)
+    : request<ClientRequest>("/requests", "POST", input);
+}
+
 function updateExistingNote(
   notes: NoteItem[],
   noteId: string,
   text: string,
+  visibility?: NoteVisibility,
 ): NoteItem[] {
   return notes.map((note) =>
     note.id === noteId
       ? {
           ...note,
           text,
+          visibility: visibility ?? note.visibility,
           updatedAt: new Date().toISOString(),
         }
       : note,
@@ -476,11 +559,17 @@ function deleteExistingNote(notes: NoteItem[], noteId: string): NoteItem[] {
   return notes.filter((note) => note.id !== noteId);
 }
 
-function appendNewNote(notes: NoteItem[], prefix: string, text: string): NoteItem[] {
+function appendNewNote(
+  notes: NoteItem[],
+  prefix: string,
+  text: string,
+  visibility: NoteVisibility,
+): NoteItem[] {
   return [
     {
       id: `${prefix}-${Date.now()}`,
       text,
+      visibility,
       createdAt: new Date().toISOString(),
       isArchived: false,
     },
@@ -491,18 +580,22 @@ function appendNewNote(notes: NoteItem[], prefix: string, text: string): NoteIte
 export async function addOwnerNote(
   owner: Owner,
   text: string,
+  visibility: NoteVisibility = "internal",
 ): Promise<NoteSaveResult<Owner>> {
   if (!isBackendConfigured()) {
     return {
       data: {
         ...owner,
-        notes: appendNewNote(owner.notes, "owner-note-local", text),
+        notes: appendNewNote(owner.notes, "owner-note-local", text, visibility),
       },
       mode: "mock",
     };
   }
 
-  const data = await request<Owner>(`/owners/${owner.id}/notes`, "POST", { text });
+  const data = await request<Owner>(`/owners/${owner.id}/notes`, "POST", {
+    text,
+    visibility,
+  });
   return { data, mode: "api" };
 }
 
@@ -510,12 +603,13 @@ export async function updateOwnerNote(
   owner: Owner,
   noteId: string,
   text: string,
+  visibility?: NoteVisibility,
 ): Promise<NoteSaveResult<Owner>> {
   if (!isBackendConfigured()) {
     return {
       data: {
         ...owner,
-        notes: updateExistingNote(owner.notes, noteId, text),
+        notes: updateExistingNote(owner.notes, noteId, text, visibility),
       },
       mode: "mock",
     };
@@ -523,6 +617,7 @@ export async function updateOwnerNote(
 
   const data = await request<Owner>(`/owners/${owner.id}/notes/${noteId}`, "PUT", {
     text,
+    visibility,
   });
   return { data, mode: "api" };
 }
@@ -584,18 +679,22 @@ export async function deleteOwnerNoteItem(
 export async function addPetNote(
   pet: Pet,
   text: string,
+  visibility: NoteVisibility = "internal",
 ): Promise<NoteSaveResult<Pet>> {
   if (!isBackendConfigured()) {
     return {
       data: {
         ...pet,
-        notes: appendNewNote(pet.notes, "pet-note-local", text),
+        notes: appendNewNote(pet.notes, "pet-note-local", text, visibility),
       },
       mode: "mock",
     };
   }
 
-  const data = await request<Pet>(`/pets/${pet.id}/notes`, "POST", { text });
+  const data = await request<Pet>(`/pets/${pet.id}/notes`, "POST", {
+    text,
+    visibility,
+  });
   return { data, mode: "api" };
 }
 
@@ -603,12 +702,13 @@ export async function updatePetNote(
   pet: Pet,
   noteId: string,
   text: string,
+  visibility?: NoteVisibility,
 ): Promise<NoteSaveResult<Pet>> {
   if (!isBackendConfigured()) {
     return {
       data: {
         ...pet,
-        notes: updateExistingNote(pet.notes, noteId, text),
+        notes: updateExistingNote(pet.notes, noteId, text, visibility),
       },
       mode: "mock",
     };
@@ -616,6 +716,7 @@ export async function updatePetNote(
 
   const data = await request<Pet>(`/pets/${pet.id}/notes/${noteId}`, "PUT", {
     text,
+    visibility,
   });
   return { data, mode: "api" };
 }
@@ -677,12 +778,18 @@ export async function deletePetNoteItem(
 export async function addAppointmentNote(
   appointment: Appointment,
   text: string,
+  visibility: NoteVisibility = "internal",
 ): Promise<NoteSaveResult<Appointment>> {
   if (!isBackendConfigured()) {
     return {
       data: {
         ...appointment,
-        notes: appendNewNote(appointment.notes, "appointment-note-local", text),
+        notes: appendNewNote(
+          appointment.notes,
+          "appointment-note-local",
+          text,
+          visibility,
+        ),
       },
       mode: "mock",
     };
@@ -691,7 +798,7 @@ export async function addAppointmentNote(
   const data = await request<Appointment>(
     `/appointments/${appointment.id}/notes`,
     "POST",
-    { text },
+    { text, visibility },
   );
   return { data, mode: "api" };
 }
@@ -700,12 +807,13 @@ export async function updateAppointmentNote(
   appointment: Appointment,
   noteId: string,
   text: string,
+  visibility?: NoteVisibility,
 ): Promise<NoteSaveResult<Appointment>> {
   if (!isBackendConfigured()) {
     return {
       data: {
         ...appointment,
-        notes: updateExistingNote(appointment.notes, noteId, text),
+        notes: updateExistingNote(appointment.notes, noteId, text, visibility),
       },
       mode: "mock",
     };
@@ -714,7 +822,7 @@ export async function updateAppointmentNote(
   const data = await request<Appointment>(
     `/appointments/${appointment.id}/notes/${noteId}`,
     "PUT",
-    { text },
+    { text, visibility },
   );
   return { data, mode: "api" };
 }

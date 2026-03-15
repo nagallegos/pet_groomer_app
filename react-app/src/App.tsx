@@ -16,6 +16,24 @@ import ClientDetailsPage from "./pages/ClientDetailsPage";
 import PetDetailsPage from "./pages/PetDetailsPage";
 import UsersPage from "./pages/UsersPage";
 import AppointmentResponsePage from "./pages/AppointmentResponsePage";
+import ClientHomePage from "./pages/ClientHomePage";
+import ClientPetsPage from "./pages/ClientPetsPage";
+import ClientAppointmentsPage from "./pages/ClientAppointmentsPage";
+import RequestsPage from "./pages/RequestsPage";
+import RequestPasswordResetPage from "./pages/RequestPasswordResetPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import AccountSetupPage from "./pages/AccountSetupPage";
+import { useAuth } from "./components/common/useAuth";
+
+function HomeRoute() {
+  const { user } = useAuth();
+  return user?.role === "client" ? <ClientHomePage /> : <HomePage />;
+}
+
+function PetsRoute() {
+  const { user } = useAuth();
+  return user?.role === "client" ? <ClientPetsPage /> : <PetsPage />;
+}
 
 const App = () => {
   return (
@@ -24,6 +42,9 @@ const App = () => {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<RequestPasswordResetPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/account-setup" element={<AccountSetupPage />} />
             <Route path="/appointment-response" element={<AppointmentResponsePage />} />
             <Route
               element={
@@ -38,15 +59,21 @@ const App = () => {
                 }
               >
                 <Route path="/" element={<Navigate to="/home" replace />} />
-                <Route path="home" element={<HomePage />} />
-                <Route path="analysis" element={<AnalysisPage />} />
-                <Route path="contacts" element={<ContactsPage />} />
-                <Route path="pets" element={<PetsPage />} />
-                <Route path="schedule" element={<SchedulePage />} />
-                <Route path="appointments/history" element={<AppointmentHistoryPage />} />
-                <Route path="archives/:archiveType" element={<ArchivePage />} />
-                <Route path="clients/:clientId" element={<ClientDetailsPage />} />
-                <Route path="pets/:petId" element={<PetDetailsPage />} />
+                <Route path="home" element={<HomeRoute />} />
+                <Route path="pets" element={<PetsRoute />} />
+                <Route path="requests" element={<RequestsPage />} />
+                <Route path="appointments" element={<RequireAuth allowedRoles={["client"]} />}>
+                  <Route index element={<ClientAppointmentsPage />} />
+                </Route>
+                <Route element={<RequireAuth allowedRoles={["admin", "groomer"]} />}>
+                  <Route path="analysis" element={<AnalysisPage />} />
+                  <Route path="contacts" element={<ContactsPage />} />
+                  <Route path="schedule" element={<SchedulePage />} />
+                  <Route path="appointments/history" element={<AppointmentHistoryPage />} />
+                  <Route path="archives/:archiveType" element={<ArchivePage />} />
+                  <Route path="clients/:clientId" element={<ClientDetailsPage />} />
+                  <Route path="pets/:petId" element={<PetDetailsPage />} />
+                </Route>
                 <Route element={<RequireAuth allowedRoles={["admin"]} />}>
                   <Route path="users" element={<UsersPage />} />
                 </Route>

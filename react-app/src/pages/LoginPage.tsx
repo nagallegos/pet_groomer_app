@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Alert, Button, Card, Form, Spinner } from "react-bootstrap";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../components/common/useAuth";
 
 export default function LoginPage() {
@@ -44,8 +44,8 @@ export default function LoginPage() {
             }}
           >
             <Form.Group className="mb-3">
-              <Form.Label>Email</Form.Label>
-              <Form.Control type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+              <Form.Label>Email or Username</Form.Label>
+              <Form.Control value={email} onChange={(event) => setEmail(event.target.value)} required />
             </Form.Group>
             <Form.Group className="mb-4">
               <Form.Label>Password</Form.Label>
@@ -56,6 +56,9 @@ export default function LoginPage() {
               Sign In
             </Button>
           </Form>
+          <div className="mt-3 text-center">
+            <Link to="/forgot-password">Forgot password?</Link>
+          </div>
         </Card.Body>
       </Card>
     </div>

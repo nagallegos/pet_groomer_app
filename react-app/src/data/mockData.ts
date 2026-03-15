@@ -602,6 +602,7 @@ function createNote(id: string, text: string): NoteItem {
   return {
     id,
     text,
+    visibility: "internal",
     createdAt: BASE_NOTE_DATE,
   };
 }

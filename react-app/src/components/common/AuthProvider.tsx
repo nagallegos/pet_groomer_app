@@ -5,6 +5,7 @@ import { AuthContext } from "./authContext";
 export interface AppUser {
   id: string;
   email: string;
+  username?: string;
   role: AppUserRole;
   name: string;
   firstName: string;
@@ -12,6 +13,8 @@ export interface AppUser {
   phone: string;
   notifyByEmail: boolean;
   notifyByText: boolean;
+  lockedAt?: string;
+  ownerId?: string;
 }
 
 export interface UserProfileInput {

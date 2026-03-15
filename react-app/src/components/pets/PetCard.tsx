@@ -1,4 +1,5 @@
 import { Badge, Button, Card } from "react-bootstrap";
+import { formatPetAge } from "../../lib/petAge";
 import type { Owner, Pet } from "../../types/models";
 
 interface PetCardProps {
@@ -19,14 +20,12 @@ export default function PetCard({ pet, owner, onClick }: PetCardProps) {
             </Card.Text>
           </div>
 
-          <Badge bg={pet.species === "dog" ? "primary" : "secondary"}>
-            {pet.species}
-          </Badge>
+          <Badge bg={pet.species === "dog" ? "primary" : "secondary"}>{pet.species}</Badge>
         </div>
 
         <Card.Text className="mb-1">{pet.breed}</Card.Text>
         <Card.Text className="text-muted small mb-3">
-          {pet.ageYears ?? "?"} yrs • {pet.weightLbs ?? "?"} lbs
+          {formatPetAge(pet, "?")} • {pet.weightLbs ?? "?"} lbs
         </Card.Text>
 
         <div className="mt-auto d-grid">

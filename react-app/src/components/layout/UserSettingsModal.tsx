@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, Form, Modal } from "react-bootstrap";
+import { Link } from "react-router-dom";
 import { useAppToast } from "../common/AppToastProvider";
 import { useAuth } from "../common/useAuth";
 
@@ -159,6 +160,11 @@ export default function UserSettingsModal({
               Text notifications require a phone number. Email notifications use
               the address above.
             </div>
+          </div>
+          <div className="mt-3">
+            <Link to="/forgot-password" onClick={onHide}>
+              Request a password reset
+            </Link>
           </div>
         </Modal.Body>
         <Modal.Footer>

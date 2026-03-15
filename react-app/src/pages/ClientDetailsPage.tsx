@@ -35,7 +35,7 @@ import {
   updatePetNote,
   type OwnerUpsertInput,
 } from "../lib/crmApi";
-import type { Appointment, ContactMethod, Owner, Pet } from "../types/models";
+import type { Appointment, ContactMethod, NoteVisibility, Owner, Pet } from "../types/models";
 
 type ClientNoteEntityType = "client" | "pet" | "appointment";
 
@@ -45,6 +45,7 @@ interface ClientTimelineNote {
   entityType: ClientNoteEntityType;
   entityLabel: string;
   text: string;
+  visibility: NoteVisibility;
   createdAt: string;
   updatedAt?: string;
   isArchived?: boolean;
@@ -97,10 +98,15 @@ export default function ClientDetailsPage() {
   const [selectedNoteEntityType, setSelectedNoteEntityType] = useState<ClientNoteEntityType>("client");
   const [selectedNoteEntityId, setSelectedNoteEntityId] = useState("");
   const [noteText, setNoteText] = useState("");
+  const [noteVisibility, setNoteVisibility] = useState<NoteVisibility>("internal");
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [noteSaveError, setNoteSaveError] = useState<string | null>(null);
   const [showArchivedNotes, setShowArchivedNotes] = useState(false);
   const [isApplyingNoteAction, setIsApplyingNoteAction] = useState(false);
+  const [showQuickEditNoteModal, setShowQuickEditNoteModal] = useState(false);
+  const [quickEditNote, setQuickEditNote] = useState<ClientTimelineNote | null>(null);
+  const [quickEditText, setQuickEditText] = useState("");
+  const [quickEditVisibility, setQuickEditVisibility] = useState<NoteVisibility>("internal");
 
   useEffect(() => setOwner(initialOwner), [initialOwner]);
   useEffect(() => setPets(initialPets), [initialPets]);
@@ -147,6 +153,7 @@ export default function ClientDetailsPage() {
               entityType: "client" as const,
               entityLabel: `${owner.firstName} ${owner.lastName}`,
               text: note.text,
+              visibility: note.visibility,
               createdAt: note.createdAt,
               updatedAt: note.updatedAt,
               isArchived: note.isArchived,
@@ -159,6 +166,7 @@ export default function ClientDetailsPage() {
                 entityType: "pet" as const,
                 entityLabel: pet.name,
                 text: note.text,
+                visibility: note.visibility,
                 createdAt: note.createdAt,
                 updatedAt: note.updatedAt,
                 isArchived: note.isArchived,
@@ -173,6 +181,7 @@ export default function ClientDetailsPage() {
                 entityType: "appointment" as const,
                 entityLabel: `${appointmentPet?.name ?? "Pet"} | ${new Date(appointment.start).toLocaleDateString()}`,
                 text: note.text,
+                visibility: note.visibility,
                 createdAt: note.createdAt,
                 updatedAt: note.updatedAt,
                 isArchived: note.isArchived,
@@ -281,6 +290,7 @@ export default function ClientDetailsPage() {
     setSelectedNoteEntityType("client");
     setSelectedNoteEntityId(owner.id);
     setNoteText("");
+    setNoteVisibility("internal");
     setNoteSaveError(null);
   };
 
@@ -294,12 +304,18 @@ export default function ClientDetailsPage() {
   };
 
   const openEditNoteEditor = (note: ClientTimelineNote) => {
-    setSelectedNoteId(note.id);
-    setSelectedNoteEntityType(note.entityType);
-    setSelectedNoteEntityId(note.entityId);
-    setNoteText(note.text);
+    setQuickEditNote(note);
+    setQuickEditText(note.text);
+    setQuickEditVisibility(note.visibility);
     setNoteSaveError(null);
-    setNotesEditMode(true);
+    setShowQuickEditNoteModal(true);
+  };
+
+  const closeQuickEditNoteModal = () => {
+    setShowQuickEditNoteModal(false);
+    setQuickEditNote(null);
+    setQuickEditText("");
+    setQuickEditVisibility("internal");
   };
 
   const handleSaveNote = async () => {
@@ -313,8 +329,8 @@ export default function ClientDetailsPage() {
     try {
       if (selectedNoteEntityType === "client") {
         const result = selectedNoteId
-          ? await updateOwnerNote(owner, selectedNoteId, noteText.trim())
-          : await addOwnerNote(owner, noteText.trim());
+          ? await updateOwnerNote(owner, selectedNoteId, noteText.trim(), noteVisibility)
+          : await addOwnerNote(owner, noteText.trim(), noteVisibility);
         replaceOwnerInState(result.data);
       } else if (selectedNoteEntityType === "pet") {
         const currentPet = pets.find((pet) => pet.id === selectedNoteEntityId);
@@ -323,8 +339,8 @@ export default function ClientDetailsPage() {
         }
 
         const result = selectedNoteId
-          ? await updatePetNote(currentPet, selectedNoteId, noteText.trim())
-          : await addPetNote(currentPet, noteText.trim());
+          ? await updatePetNote(currentPet, selectedNoteId, noteText.trim(), noteVisibility)
+          : await addPetNote(currentPet, noteText.trim(), noteVisibility);
         replacePetInState(result.data);
       } else {
         const currentAppointment = clientAppointments.find((appointment) => appointment.id === selectedNoteEntityId);
@@ -333,14 +349,57 @@ export default function ClientDetailsPage() {
         }
 
         const result = selectedNoteId
-          ? await updateAppointmentNote(currentAppointment, selectedNoteId, noteText.trim())
-          : await addAppointmentNote(currentAppointment, noteText.trim());
+          ? await updateAppointmentNote(currentAppointment, selectedNoteId, noteText.trim(), noteVisibility)
+          : await addAppointmentNote(currentAppointment, noteText.trim(), noteVisibility);
         replaceAppointmentInState(result.data);
       }
 
       resetNotesEditor();
       showToast({
         title: selectedNoteId ? "Note Updated" : "Note Added",
+        body: "The note was saved successfully.",
+        variant: "success",
+      });
+    } catch (error) {
+      setNoteSaveError(error instanceof Error ? error.message : "Unable to save note.");
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
+
+  const handleSaveQuickEditNote = async () => {
+    if (!quickEditNote || !quickEditText.trim()) {
+      return;
+    }
+
+    setIsSavingNote(true);
+    setNoteSaveError(null);
+
+    try {
+      if (quickEditNote.entityType === "client") {
+        const result = await updateOwnerNote(owner, quickEditNote.id, quickEditText.trim(), quickEditVisibility);
+        replaceOwnerInState(result.data);
+      } else if (quickEditNote.entityType === "pet") {
+        const currentPet = pets.find((pet) => pet.id === quickEditNote.entityId);
+        if (!currentPet) {
+          return;
+        }
+
+        const result = await updatePetNote(currentPet, quickEditNote.id, quickEditText.trim(), quickEditVisibility);
+        replacePetInState(result.data);
+      } else {
+        const currentAppointment = clientAppointments.find((appointment) => appointment.id === quickEditNote.entityId);
+        if (!currentAppointment) {
+          return;
+        }
+
+        const result = await updateAppointmentNote(currentAppointment, quickEditNote.id, quickEditText.trim(), quickEditVisibility);
+        replaceAppointmentInState(result.data);
+      }
+
+      closeQuickEditNoteModal();
+      showToast({
+        title: "Note Updated",
         body: "The note was saved successfully.",
         variant: "success",
       });
@@ -580,28 +639,29 @@ export default function ClientDetailsPage() {
                         </div>
                         <div className="pet-row-actions">
                           {isEditMode ? (
-                            <button type="button" className="pet-row-indicator-button" onClick={() => setViewingPet(pet)}>
-                              <span className="pet-row-indicator">View</span>
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                className="pet-row-indicator-button"
+                                onClick={() => setViewingPet(pet)}
+                              >
+                                <span className="pet-row-indicator">View</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="pet-row-indicator-button"
+                                onClick={() => {
+                                  setSelectedPet(pet);
+                                  setShowEditPetModal(true);
+                                }}
+                              >
+                                <span className="pet-row-indicator">Edit</span>
+                              </button>
+                            </>
                           ) : (
                             <Link to={`/pets/${pet.id}`} className="pet-row-indicator-link">
                               <span className="pet-row-indicator">View</span>
                             </Link>
-                          )}
-                          {isEditMode && (
-                            <>
-                              <button type="button" className="pet-row-indicator-button" onClick={() => { setSelectedPet(pet); setShowEditPetModal(true); }}>
-                                <span className="pet-row-indicator">Edit</span>
-                              </button>
-                              <Button size="sm" variant="warning" className="action-button-wide" onClick={() => { setSelectedPet(pet); setShowArchivePetModal(true); }}>
-                                Archive
-                              </Button>
-                              <Button size="sm" variant="outline-danger" className="icon-action-button" onClick={() => { setSelectedPet(pet); setShowDeletePetModal(true); }} aria-label={`Delete ${pet.name}`} title={`Delete ${pet.name}`}>
-                                <svg aria-hidden="true" viewBox="0 0 16 16" fill="currentColor" width="16" height="16">
-                                  <path d="M6.5 1h3l.5 1H13a.5.5 0 0 1 0 1h-.6l-.7 9.1A2 2 0 0 1 9.7 14H6.3a2 2 0 0 1-2-1.9L3.6 3H3a.5.5 0 0 1 0-1h3zm-1.2 2 .7 9.1a1 1 0 0 0 1 .9h3.4a1 1 0 0 0 1-.9L10.7 3zM6 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 6 5m4.5.5v5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 1 0M8 5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 8 5" />
-                                </svg>
-                              </Button>
-                            </>
                           )}
                         </div>
                       </div>
@@ -648,8 +708,8 @@ export default function ClientDetailsPage() {
         setShowEditPetModal(false);
         setSelectedPet(null);
       }} />
-      <PetQuickViewModal show={!!viewingPet} pet={viewingPet} owner={owner} appointments={viewingPetAppointments} onHide={() => setViewingPet(null)} onBack={() => setViewingPet(null)} allowPageNavigation={!isEditMode} returnToParentOnSave={isEditMode} onPetUpdated={(updatedPet) => { replacePetInState(updatedPet); if (isEditMode) setViewingPet(null); }} onPetArchived={(archivedPet) => { replacePetInState(archivedPet); setViewingPet(null); }} onPetDeleted={(petId) => { setAllPets((currentPets) => currentPets.filter((pet) => pet.id !== petId)); setPets((currentPets) => currentPets.filter((pet) => pet.id !== petId)); setViewingPet(null); }} />
-      <AppointmentFormModal show={showScheduleModal} onHide={() => setShowScheduleModal(false)} owners={owners} pets={pets} initialOwnerId={owner.id} onSaved={(appointment) => { setAllAppointments((currentAppointments) => [...currentAppointments, appointment]); showToast({ title: "Appointment Scheduled", body: "The appointment was created and is ready for backend persistence.", variant: "success" }); }} />
+      <PetQuickViewModal show={!!viewingPet} pet={viewingPet} owner={owner} appointments={viewingPetAppointments} onHide={() => setViewingPet(null)} onBack={() => setViewingPet(null)} allowPageNavigation returnToParentOnSave={false} onPetUpdated={(updatedPet) => { replacePetInState(updatedPet); }} onPetArchived={(archivedPet) => { replacePetInState(archivedPet); setViewingPet(null); }} onPetDeleted={(petId) => { setAllPets((currentPets) => currentPets.filter((pet) => pet.id !== petId)); setPets((currentPets) => currentPets.filter((pet) => pet.id !== petId)); setViewingPet(null); }} />
+      <AppointmentFormModal show={showScheduleModal} onHide={() => setShowScheduleModal(false)} owners={owners} pets={pets} lockedOwnerId={owner.id} initialOwnerId={owner.id} onSaved={(appointment) => { setAllAppointments((currentAppointments) => [...currentAppointments, appointment]); showToast({ title: "Appointment Scheduled", body: "The appointment was created and is ready for backend persistence.", variant: "success" }); }} />
       <AppointmentDetailsModal show={showAppointmentDetailsModal} onHide={() => { setShowAppointmentDetailsModal(false); setSelectedAppointment(null); }} appointment={selectedAppointment} owners={owners} pets={allPets} onUpdated={(updatedAppointment) => {
         if (updatedAppointment.isArchived) {
           setAllAppointments((currentAppointments) => currentAppointments.map((appointment) => appointment.id === updatedAppointment.id ? updatedAppointment : appointment));
@@ -703,6 +763,13 @@ export default function ClientDetailsPage() {
                 <Form.Label>Note</Form.Label>
                 <Form.Control as="textarea" rows={6} value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder="Enter note details..." />
               </Form.Group>
+              <Form.Group className="mt-3">
+                <Form.Label>Visibility</Form.Label>
+                <Form.Select value={noteVisibility} onChange={(event) => setNoteVisibility(event.target.value as NoteVisibility)}>
+                  <option value="internal">Internal only</option>
+                  <option value="client">Client-facing</option>
+                </Form.Select>
+              </Form.Group>
             </>
           ) : (
             <>
@@ -714,6 +781,9 @@ export default function ClientDetailsPage() {
                         <div className="client-note-item">
                           <div className="client-note-meta">
                             <span className={`client-note-type client-note-type-${note.entityType}`}>{note.entityType}</span>
+                            <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
+                              {note.visibility === "client" ? "Client-facing" : "Internal"}
+                            </span>
                             <span>{note.entityLabel}</span>
                             <span>{new Date(note.createdAt).toLocaleString()}{note.updatedAt ? ` | Updated ${new Date(note.updatedAt).toLocaleString()}` : ""}</span>
                           </div>
@@ -743,6 +813,9 @@ export default function ClientDetailsPage() {
                               <div className="client-note-item">
                                 <div className="client-note-meta">
                                   <span className={`client-note-type client-note-type-${note.entityType}`}>{note.entityType}</span>
+                                  <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
+                                    {note.visibility === "client" ? "Client-facing" : "Internal"}
+                                  </span>
                                   <span>{note.entityLabel}</span>
                                   <span>Archived {note.archivedAt ? new Date(note.archivedAt).toLocaleString() : ""}</span>
                                 </div>
@@ -775,6 +848,49 @@ export default function ClientDetailsPage() {
           ) : (
             <Button variant="secondary" onClick={() => setShowNotesModal(false)}>Close</Button>
           )}
+        </Modal.Footer>
+      </Modal>
+      <Modal show={showQuickEditNoteModal} onHide={closeQuickEditNoteModal} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Edit Note</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {noteSaveError && (
+            <Alert variant="danger" className="mb-3">
+              {noteSaveError}
+            </Alert>
+          )}
+          {quickEditNote && (
+            <p className="text-muted small">
+              Editing note on {quickEditNote.entityLabel}
+            </p>
+          )}
+          <Form.Group className="mb-3">
+            <Form.Label>Note</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={5}
+              value={quickEditText}
+              onChange={(event) => setQuickEditText(event.target.value)}
+              placeholder="Update note details..."
+            />
+          </Form.Group>
+          <Form.Group>
+            <Form.Label>Visibility</Form.Label>
+            <Form.Select value={quickEditVisibility} onChange={(event) => setQuickEditVisibility(event.target.value as NoteVisibility)}>
+              <option value="internal">Internal only</option>
+              <option value="client">Client-facing</option>
+            </Form.Select>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={closeQuickEditNoteModal}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={() => void handleSaveQuickEditNote()} disabled={!quickEditText.trim() || isSavingNote}>
+            {isSavingNote && <Spinner animation="border" size="sm" className="me-2" />}
+            Save Note
+          </Button>
         </Modal.Footer>
       </Modal>
     </div>

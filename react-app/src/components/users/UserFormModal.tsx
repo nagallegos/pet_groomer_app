@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, Form, Modal } from "react-bootstrap";
 import type { AppUserRole, ManagedUser, ManagedUserUpsertInput } from "../../lib/crmApi";
+import type { Owner } from "../../types/models";
 
 interface UserFormModalProps {
   show: boolean;
@@ -8,6 +9,7 @@ interface UserFormModalProps {
   initialUser?: ManagedUser | null;
   onSave: (input: ManagedUserUpsertInput, existingUser?: ManagedUser) => Promise<void>;
   currentUserId: string;
+  owners: Owner[];
 }
 
 const roleOptions: { value: AppUserRole; label: string }[] = [
@@ -22,16 +24,19 @@ export default function UserFormModal({
   initialUser = null,
   onSave,
   currentUserId,
+  owners,
 }: UserFormModalProps) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState<AppUserRole>("groomer");
   const [password, setPassword] = useState("");
   const [notifyByEmail, setNotifyByEmail] = useState(true);
   const [notifyByText, setNotifyByText] = useState(false);
   const [isActive, setIsActive] = useState(true);
+  const [ownerId, setOwnerId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -43,12 +48,14 @@ export default function UserFormModal({
     setFirstName(initialUser?.firstName ?? "");
     setLastName(initialUser?.lastName ?? "");
     setEmail(initialUser?.email ?? "");
+    setUsername(initialUser?.username ?? "");
     setPhone(initialUser?.phone ?? "");
     setRole(initialUser?.role ?? "groomer");
     setPassword("");
     setNotifyByEmail(initialUser?.notifyByEmail ?? true);
     setNotifyByText(initialUser?.notifyByText ?? false);
     setIsActive(initialUser?.isActive ?? true);
+    setOwnerId(initialUser?.ownerId ?? "");
     setSaveError(null);
   }, [initialUser, show]);
 
@@ -65,11 +72,13 @@ export default function UserFormModal({
           firstName,
           lastName,
           email,
+          username: username || undefined,
           phone,
           role,
           notifyByEmail,
           notifyByText,
           isActive,
+          ownerId: role === "client" ? ownerId || undefined : undefined,
           password: password.trim() ? password : undefined,
         },
         initialUser ?? undefined,
@@ -115,6 +124,10 @@ export default function UserFormModal({
               <Form.Control type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
             </Form.Group>
             <Form.Group>
+              <Form.Label>Username</Form.Label>
+              <Form.Control value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Optional until account setup is completed" />
+            </Form.Group>
+            <Form.Group>
               <Form.Label>Phone Number</Form.Label>
               <Form.Control type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} />
             </Form.Group>
@@ -128,6 +141,23 @@ export default function UserFormModal({
                 ))}
               </Form.Select>
             </Form.Group>
+            {role === "client" && (
+              <Form.Group>
+                <Form.Label>Linked Client</Form.Label>
+                <Form.Select
+                  value={ownerId}
+                  onChange={(event) => setOwnerId(event.target.value)}
+                  required
+                >
+                  <option value="">Select a client record</option>
+                  {owners.map((owner) => (
+                    <option key={owner.id} value={owner.id}>
+                      {owner.lastName}, {owner.firstName}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+            )}
             <Form.Group>
               <Form.Label>{initialUser ? "Reset Password" : "Temporary Password"}</Form.Label>
               <Form.Control

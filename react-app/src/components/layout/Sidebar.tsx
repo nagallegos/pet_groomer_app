@@ -8,7 +8,7 @@ interface SidebarProps {
   onHide: () => void;
 }
 
-const navItems = [
+const staffNavItems = [
   {
     to: "/home",
     label: "Home",
@@ -47,6 +47,16 @@ const navItems = [
     ),
   },
   {
+    to: "/requests",
+    label: "Requests",
+    icon: (
+      <svg viewBox="0 0 24 24" focusable="false">
+        <path d="M6.5 6.5h11M6.5 11.5h11M6.5 16.5h7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v12A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18V6A1.5 1.5 0 0 1 5 4.5Z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  {
     to: "/analysis",
     label: "Analysis",
     icon: (
@@ -66,9 +76,21 @@ const navItems = [
   },
 ] as const;
 
+const clientNavItems = [
+  staffNavItems[0],
+  staffNavItems[2],
+  {
+    to: "/appointments",
+    label: "Appointments",
+    icon: staffNavItems[3].icon,
+  },
+  staffNavItems[4],
+] as const;
+
 export default function Sidebar({ show, onHide }: SidebarProps) {
   const { user } = useAuth();
-  const visibleNavItems = navItems.filter(
+  const baseNavItems = user?.role === "client" ? clientNavItems : staffNavItems;
+  const visibleNavItems = baseNavItems.filter(
     (item) => item.to !== "/users" || user?.role === "admin",
   );
   const roleLabel =

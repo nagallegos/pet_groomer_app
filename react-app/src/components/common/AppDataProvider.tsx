@@ -8,24 +8,27 @@ import {
 } from "react";
 import { mockAppointments, mockOwners, mockPets } from "../../data/mockData";
 import { getApiBaseUrl } from "../../lib/crmApi";
-import type { Appointment, Owner, Pet } from "../../types/models";
+import type { Appointment, ClientRequest, Owner, Pet } from "../../types/models";
 
 interface BootstrapPayload {
   owners: Owner[];
   pets: Pet[];
   appointments: Appointment[];
+  requests: ClientRequest[];
 }
 
 interface AppDataContextValue {
   owners: Owner[];
   pets: Pet[];
   appointments: Appointment[];
+  requests: ClientRequest[];
   isBootstrapping: boolean;
   dataMode: "mock" | "api";
   refreshData: () => Promise<void>;
   setOwners: React.Dispatch<React.SetStateAction<Owner[]>>;
   setPets: React.Dispatch<React.SetStateAction<Pet[]>>;
   setAppointments: React.Dispatch<React.SetStateAction<Appointment[]>>;
+  setRequests: React.Dispatch<React.SetStateAction<ClientRequest[]>>;
 }
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
@@ -43,6 +46,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [owners, setOwners] = useState<Owner[]>(mockOwners);
   const [pets, setPets] = useState<Pet[]>(mockPets);
   const [appointments, setAppointments] = useState<Appointment[]>(mockAppointments);
+  const [requests, setRequests] = useState<ClientRequest[]>([]);
   const [isBootstrapping, setIsBootstrapping] = useState(false);
   const [dataMode, setDataMode] = useState<"mock" | "api">("mock");
 
@@ -54,11 +58,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setOwners(payload.owners);
       setPets(payload.pets);
       setAppointments(payload.appointments);
+      setRequests(payload.requests ?? []);
       setDataMode("api");
     } catch {
       setOwners(mockOwners);
       setPets(mockPets);
       setAppointments(mockAppointments);
+      setRequests([]);
       setDataMode("mock");
     } finally {
       setIsBootstrapping(false);
@@ -74,14 +80,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       owners,
       pets,
       appointments,
+      requests,
       isBootstrapping,
       dataMode,
       refreshData,
       setOwners,
       setPets,
       setAppointments,
+      setRequests,
     }),
-    [appointments, dataMode, isBootstrapping, owners, pets],
+    [appointments, dataMode, isBootstrapping, owners, pets, requests],
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

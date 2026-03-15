@@ -18,11 +18,21 @@ const appointmentStatuses = new Set([
   "no-show",
 ]);
 const appUserRoles = new Set(["admin", "groomer", "client"]);
+const noteVisibilities = new Set(["internal", "client"]);
+const clientRequestTypes = new Set([
+  "appointment",
+  "new_pet",
+  "profile_update",
+  "general",
+]);
+const clientRequestStatuses = new Set(["open", "in_review", "resolved", "closed"]);
 
 let schemaReadyPromise;
 const SESSION_COOKIE = "pet_grooming_session";
 const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 14;
 const RESPONSE_TOKEN_DURATION_MS = 1000 * 60 * 60 * 24 * 7;
+const PASSWORD_TOKEN_DURATION_MS = 1000 * 60 * 60 * 24;
+const LOGIN_LOCK_THRESHOLD = 5;
 const CRON_SECRET = process.env.NOTIFICATION_CRON_SECRET ?? "";
 
 function json(statusCode, body, extraHeaders = {}) {
@@ -117,6 +127,16 @@ function optionalNumber(value, fieldName) {
   return value;
 }
 
+function optionalObject(value, fieldName) {
+  if (value == null) {
+    return {};
+  }
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${fieldName} must be an object.`);
+  }
+  return value;
+}
+
 function requiredDate(value, fieldName) {
   const parsed = new Date(requiredString(value, fieldName));
   if (Number.isNaN(parsed.getTime())) {
@@ -185,6 +205,7 @@ function mapNoteRow(row) {
   return {
     id: row.id,
     text: row.text,
+    visibility: row.visibility ?? "internal",
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
     isArchived: row.is_archived ?? false,
@@ -196,6 +217,7 @@ function mapAppUser(row) {
   return {
     id: row.id,
     email: row.email,
+    username: row.username ?? undefined,
     role: row.role,
     name: row.display_name,
     firstName: row.first_name,
@@ -204,8 +226,60 @@ function mapAppUser(row) {
     notifyByEmail: row.notify_by_email ?? true,
     notifyByText: row.notify_by_text ?? false,
     isActive: row.is_active ?? true,
+    failedLoginAttempts: row.failed_login_attempts ?? 0,
+    lockedAt: toIso(row.locked_at),
+    ownerId: row.owner_id ?? undefined,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
+  };
+}
+
+function mapUserNotificationRow(row) {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    type: row.type,
+    title: row.title,
+    body: row.body,
+    href: row.href ?? undefined,
+    metadata: row.metadata ?? {},
+    isRead: row.is_read ?? false,
+    readAt: toIso(row.read_at),
+    createdAt: toIso(row.created_at),
+  };
+}
+
+function mapClientRequestRow(row) {
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    petId: row.pet_id ?? undefined,
+    createdByUserId: row.created_by_user_id ?? undefined,
+    requestType: row.request_type,
+    status: row.status,
+    subject: row.subject,
+    clientNote: row.client_note,
+    internalNote: row.internal_note ?? undefined,
+    details: row.details ?? {},
+    events: row.events ?? undefined,
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
+    resolvedAt: toIso(row.resolved_at),
+  };
+}
+
+function mapClientRequestEventRow(row) {
+  return {
+    id: row.id,
+    requestId: row.request_id,
+    actorUserId: row.actor_user_id ?? undefined,
+    actorRole: row.actor_role ?? undefined,
+    actorName: row.actor_name ?? undefined,
+    eventType: row.event_type,
+    title: row.title,
+    detail: row.detail ?? undefined,
+    audience: row.audience,
+    createdAt: toIso(row.created_at),
   };
 }
 
@@ -233,6 +307,8 @@ function mapPetRow(row, notes = []) {
     breed: row.breed,
     weightLbs: row.weight_lbs == null ? undefined : Number(row.weight_lbs),
     ageYears: row.age_years == null ? undefined : Number(row.age_years),
+    birthDate: toIso(row.birth_date),
+    isBirthDateEstimated: row.is_birth_date_estimated ?? undefined,
     color: row.color ?? undefined,
     notes,
     isArchived: row.is_archived,
@@ -374,6 +450,8 @@ async function ensureSchema() {
           breed TEXT NOT NULL,
           weight_lbs NUMERIC(8, 2),
           age_years NUMERIC(8, 2),
+          birth_date DATE,
+          is_birth_date_estimated BOOLEAN NOT NULL DEFAULT FALSE,
           color TEXT,
           is_archived BOOLEAN NOT NULL DEFAULT FALSE,
           archived_at TIMESTAMPTZ,
@@ -407,6 +485,7 @@ async function ensureSchema() {
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           owner_id UUID NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
           text TEXT NOT NULL,
+          visibility TEXT NOT NULL DEFAULT 'internal' CHECK (visibility IN ('internal', 'client')),
           is_archived BOOLEAN NOT NULL DEFAULT FALSE,
           archived_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -418,6 +497,7 @@ async function ensureSchema() {
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           pet_id UUID NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
           text TEXT NOT NULL,
+          visibility TEXT NOT NULL DEFAULT 'internal' CHECK (visibility IN ('internal', 'client')),
           is_archived BOOLEAN NOT NULL DEFAULT FALSE,
           archived_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -429,6 +509,7 @@ async function ensureSchema() {
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           appointment_id UUID NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
           text TEXT NOT NULL,
+          visibility TEXT NOT NULL DEFAULT 'internal' CHECK (visibility IN ('internal', 'client')),
           is_archived BOOLEAN NOT NULL DEFAULT FALSE,
           archived_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -439,14 +520,19 @@ async function ensureSchema() {
         CREATE TABLE IF NOT EXISTS app_users (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           email TEXT NOT NULL UNIQUE,
+          username TEXT UNIQUE,
           password_hash TEXT NOT NULL,
           role TEXT NOT NULL CHECK (role IN ('admin', 'groomer', 'client')),
           display_name TEXT NOT NULL,
           first_name TEXT NOT NULL DEFAULT '',
           last_name TEXT NOT NULL DEFAULT '',
           phone TEXT,
+          owner_id UUID REFERENCES owners(id) ON DELETE SET NULL,
           notify_by_email BOOLEAN NOT NULL DEFAULT TRUE,
           notify_by_text BOOLEAN NOT NULL DEFAULT FALSE,
+          failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+          locked_at TIMESTAMPTZ,
+          last_login_at TIMESTAMPTZ,
           is_active BOOLEAN NOT NULL DEFAULT TRUE,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -458,6 +544,32 @@ async function ensureSchema() {
           user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
           session_token TEXT NOT NULL UNIQUE,
           expires_at TIMESTAMPTZ NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS user_notifications (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          body TEXT NOT NULL,
+          href TEXT,
+          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+          is_read BOOLEAN NOT NULL DEFAULT FALSE,
+          read_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS user_password_tokens (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+          purpose TEXT NOT NULL CHECK (purpose IN ('setup', 'password_reset')),
+          token TEXT NOT NULL UNIQUE,
+          temp_password_hash TEXT,
+          expires_at TIMESTAMPTZ NOT NULL,
+          used_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `;
@@ -499,17 +611,59 @@ async function ensureSchema() {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS client_requests (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          owner_id UUID NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
+          pet_id UUID REFERENCES pets(id) ON DELETE SET NULL,
+          created_by_user_id UUID REFERENCES app_users(id) ON DELETE SET NULL,
+          request_type TEXT NOT NULL CHECK (request_type IN ('appointment', 'new_pet', 'profile_update', 'general')),
+          status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_review', 'resolved', 'closed')),
+          subject TEXT NOT NULL,
+          client_note TEXT NOT NULL,
+          internal_note TEXT,
+          details JSONB NOT NULL DEFAULT '{}'::jsonb,
+          resolved_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS client_request_events (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          request_id UUID NOT NULL REFERENCES client_requests(id) ON DELETE CASCADE,
+          actor_user_id UUID REFERENCES app_users(id) ON DELETE SET NULL,
+          actor_role TEXT CHECK (actor_role IN ('admin', 'groomer', 'client')),
+          actor_name TEXT,
+          event_type TEXT NOT NULL CHECK (event_type IN ('created', 'updated', 'status_changed', 'client_note_updated', 'internal_note_updated', 'resolved', 'reopened')),
+          title TEXT NOT NULL,
+          detail TEXT,
+          audience TEXT NOT NULL DEFAULT 'all' CHECK (audience IN ('all', 'staff')),
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
       await sql`ALTER TABLE owner_notes ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`ALTER TABLE owner_notes ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`;
+      await sql`ALTER TABLE owner_notes ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'internal'`;
       await sql`ALTER TABLE pet_notes ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`ALTER TABLE pet_notes ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`;
+      await sql`ALTER TABLE pet_notes ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'internal'`;
       await sql`ALTER TABLE appointment_notes ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`ALTER TABLE appointment_notes ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`;
+      await sql`ALTER TABLE appointment_notes ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'internal'`;
+      await sql`ALTER TABLE pets ADD COLUMN IF NOT EXISTS birth_date DATE`;
+      await sql`ALTER TABLE pets ADD COLUMN IF NOT EXISTS is_birth_date_estimated BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT ''`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT ''`;
+      await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS username TEXT UNIQUE`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS phone TEXT`;
+      await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES owners(id) ON DELETE SET NULL`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS notify_by_email BOOLEAN NOT NULL DEFAULT TRUE`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS notify_by_text BOOLEAN NOT NULL DEFAULT FALSE`;
+      await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER NOT NULL DEFAULT 0`;
+      await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ`;
+      await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`;
+      await sql`ALTER TABLE client_requests ADD COLUMN IF NOT EXISTS details JSONB NOT NULL DEFAULT '{}'::jsonb`;
       await sql`
         DO $$
         BEGIN
@@ -547,11 +701,20 @@ async function ensureSchema() {
       await sql`CREATE INDEX IF NOT EXISTS idx_appointment_notes_appointment_id ON appointment_notes(appointment_id)`;
       await sql`CREATE INDEX IF NOT EXISTS idx_app_sessions_user_id ON app_sessions(user_id)`;
       await sql`CREATE INDEX IF NOT EXISTS idx_app_sessions_expires_at ON app_sessions(expires_at)`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_user_notifications_user_id ON user_notifications(user_id)`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_user_notifications_is_read ON user_notifications(is_read)`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_user_password_tokens_user_id ON user_password_tokens(user_id)`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_user_password_tokens_token ON user_password_tokens(token)`;
       await sql`CREATE INDEX IF NOT EXISTS idx_appointment_response_tokens_token ON appointment_response_tokens(token)`;
       await sql`CREATE INDEX IF NOT EXISTS idx_appointment_response_tokens_appointment_id ON appointment_response_tokens(appointment_id)`;
       await sql`CREATE INDEX IF NOT EXISTS idx_appointment_notifications_appointment_id ON appointment_notifications(appointment_id)`;
       await sql`CREATE INDEX IF NOT EXISTS idx_appointment_notifications_type ON appointment_notifications(notification_type)`;
       await sql`CREATE INDEX IF NOT EXISTS idx_appointment_response_requests_appointment_id ON appointment_response_requests(appointment_id)`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_app_users_owner_id ON app_users(owner_id)`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_client_requests_owner_id ON client_requests(owner_id)`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_client_requests_pet_id ON client_requests(pet_id)`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_client_requests_status ON client_requests(status)`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_client_request_events_request_id ON client_request_events(request_id)`;
       await seedDefaultUsers();
     })();
   }
@@ -562,7 +725,7 @@ async function ensureSchema() {
 async function fetchOwnerNotes(ownerId) {
   if (ownerId) {
     return sql`
-      SELECT id::text AS id, owner_id::text AS owner_id, text, is_archived, archived_at, created_at, updated_at
+      SELECT id::text AS id, owner_id::text AS owner_id, text, visibility, is_archived, archived_at, created_at, updated_at
       FROM owner_notes
       WHERE owner_id = ${ownerId}::uuid
       ORDER BY created_at ASC
@@ -570,7 +733,7 @@ async function fetchOwnerNotes(ownerId) {
   }
 
   return sql`
-    SELECT id::text AS id, owner_id::text AS owner_id, text, is_archived, archived_at, created_at, updated_at
+    SELECT id::text AS id, owner_id::text AS owner_id, text, visibility, is_archived, archived_at, created_at, updated_at
     FROM owner_notes
     ORDER BY created_at ASC
   `;
@@ -579,7 +742,7 @@ async function fetchOwnerNotes(ownerId) {
 async function fetchPetNotes(petId) {
   if (petId) {
     return sql`
-      SELECT id::text AS id, pet_id::text AS pet_id, text, is_archived, archived_at, created_at, updated_at
+      SELECT id::text AS id, pet_id::text AS pet_id, text, visibility, is_archived, archived_at, created_at, updated_at
       FROM pet_notes
       WHERE pet_id = ${petId}::uuid
       ORDER BY created_at ASC
@@ -587,7 +750,7 @@ async function fetchPetNotes(petId) {
   }
 
   return sql`
-    SELECT id::text AS id, pet_id::text AS pet_id, text, is_archived, archived_at, created_at, updated_at
+    SELECT id::text AS id, pet_id::text AS pet_id, text, visibility, is_archived, archived_at, created_at, updated_at
     FROM pet_notes
     ORDER BY created_at ASC
   `;
@@ -596,7 +759,7 @@ async function fetchPetNotes(petId) {
 async function fetchAppointmentNotes(appointmentId) {
   if (appointmentId) {
     return sql`
-      SELECT id::text AS id, appointment_id::text AS appointment_id, text, is_archived, archived_at, created_at, updated_at
+      SELECT id::text AS id, appointment_id::text AS appointment_id, text, visibility, is_archived, archived_at, created_at, updated_at
       FROM appointment_notes
       WHERE appointment_id = ${appointmentId}::uuid
       ORDER BY created_at ASC
@@ -604,10 +767,96 @@ async function fetchAppointmentNotes(appointmentId) {
   }
 
   return sql`
-    SELECT id::text AS id, appointment_id::text AS appointment_id, text, is_archived, archived_at, created_at, updated_at
+    SELECT id::text AS id, appointment_id::text AS appointment_id, text, visibility, is_archived, archived_at, created_at, updated_at
     FROM appointment_notes
     ORDER BY created_at ASC
   `;
+}
+
+async function listClientRequestEventsByRequestIds(requestIds, { includeStaffOnly = false } = {}) {
+  if (!requestIds.length) {
+    return new Map();
+  }
+
+  const rows = includeStaffOnly
+    ? await sql`
+        SELECT id::text AS id, request_id::text AS request_id, actor_user_id::text AS actor_user_id,
+               actor_role, actor_name, event_type, title, detail, audience, created_at
+        FROM client_request_events
+        WHERE request_id = ANY(${requestIds})
+        ORDER BY created_at ASC
+      `
+    : await sql`
+        SELECT id::text AS id, request_id::text AS request_id, actor_user_id::text AS actor_user_id,
+               actor_role, actor_name, event_type, title, detail, audience, created_at
+        FROM client_request_events
+        WHERE request_id = ANY(${requestIds})
+          AND audience = 'all'
+        ORDER BY created_at ASC
+      `;
+
+  return rows.reduce((map, row) => {
+    const event = mapClientRequestEventRow(row);
+    const current = map.get(event.requestId) ?? [];
+    current.push(event);
+    map.set(event.requestId, current);
+    return map;
+  }, new Map());
+}
+
+async function listClientRequests({ ownerId, includeStaffOnly = false } = {}) {
+  const rows = ownerId
+    ? await sql`
+        SELECT id::text AS id, owner_id::text AS owner_id, pet_id::text AS pet_id,
+               created_by_user_id::text AS created_by_user_id, request_type, status,
+               subject, client_note, internal_note, details, resolved_at, created_at, updated_at
+        FROM client_requests
+        WHERE owner_id = ${ownerId}::uuid
+        ORDER BY created_at DESC
+      `
+    : await sql`
+        SELECT id::text AS id, owner_id::text AS owner_id, pet_id::text AS pet_id,
+               created_by_user_id::text AS created_by_user_id, request_type, status,
+               subject, client_note, internal_note, details, resolved_at, created_at, updated_at
+        FROM client_requests
+        ORDER BY created_at DESC
+      `;
+
+  const eventMap = await listClientRequestEventsByRequestIds(
+    rows.map((row) => row.id),
+    { includeStaffOnly },
+  );
+
+  return rows.map((row) =>
+    mapClientRequestRow({
+      ...row,
+      events: eventMap.get(row.id) ?? [],
+    }),
+  );
+}
+
+async function getClientRequest(requestId, { includeStaffOnly = false } = {}) {
+  const rows = await sql`
+    SELECT id::text AS id, owner_id::text AS owner_id, pet_id::text AS pet_id,
+           created_by_user_id::text AS created_by_user_id, request_type, status,
+           subject, client_note, internal_note, details, resolved_at, created_at, updated_at
+    FROM client_requests
+    WHERE id = ${requestId}::uuid
+    LIMIT 1
+  `;
+
+  if (!rows[0]) {
+    return null;
+  }
+
+  const eventMap = await listClientRequestEventsByRequestIds([rows[0].id], {
+    includeStaffOnly,
+  });
+
+  return mapClientRequestRow({
+    ...rows[0],
+    events: eventMap.get(rows[0].id) ?? [],
+  });
 }
 
 async function listOwners() {
@@ -644,7 +893,7 @@ async function listPets() {
   const [petRows, noteRows] = await Promise.all([
     sql`
       SELECT id::text AS id, owner_id::text AS owner_id, name, species, breed, weight_lbs,
-             age_years, color, is_archived, archived_at
+             age_years, birth_date, is_birth_date_estimated, color, is_archived, archived_at
       FROM pets
       ORDER BY name ASC
     `,
@@ -658,7 +907,7 @@ async function listPets() {
 async function getPet(id) {
   const rows = await sql`
     SELECT id::text AS id, owner_id::text AS owner_id, name, species, breed,
-           weight_lbs, age_years, color, is_archived, archived_at
+           weight_lbs, age_years, birth_date, is_birth_date_estimated, color, is_archived, archived_at
     FROM pets
     WHERE id = ${id}::uuid
   `;
@@ -704,19 +953,24 @@ async function getAppointment(id) {
   return mapAppointmentRow(rows[0], noteRows.map(mapNoteRow));
 }
 
-async function getUserByEmail(email) {
+async function getUserByIdentifier(identifier) {
+  const normalized = identifier.trim().toLowerCase();
   const rows = await sql`
-    SELECT id::text AS id, email, password_hash, role, display_name, first_name, last_name, phone, notify_by_email, notify_by_text, is_active
+    SELECT id::text AS id, email, username, password_hash, role, display_name, first_name,
+           last_name, phone, owner_id::text AS owner_id, notify_by_email,
+           notify_by_text, is_active, failed_login_attempts, locked_at
     FROM app_users
-    WHERE email = ${email.trim().toLowerCase()}
+    WHERE LOWER(email) = ${normalized}
+       OR LOWER(COALESCE(username, '')) = ${normalized}
   `;
   return rows[0] ?? null;
 }
 
 async function listAppUsers() {
   const rows = await sql`
-    SELECT id::text AS id, email, role, display_name, first_name, last_name, phone,
-           notify_by_email, notify_by_text, is_active, created_at, updated_at
+    SELECT id::text AS id, email, username, role, display_name, first_name, last_name, phone,
+           owner_id::text AS owner_id, notify_by_email, notify_by_text, is_active,
+           failed_login_attempts, locked_at, created_at, updated_at
     FROM app_users
     ORDER BY last_name ASC, first_name ASC, email ASC
   `;
@@ -745,7 +999,7 @@ async function getAppointmentWithRelations(appointmentId) {
     LIMIT 1
   `;
   const petRows = await sql`
-    SELECT id::text AS id, owner_id::text AS owner_id, name, species, breed, weight_lbs, age_years, color, is_archived, archived_at
+    SELECT id::text AS id, owner_id::text AS owner_id, name, species, breed, weight_lbs, age_years, birth_date, is_birth_date_estimated, color, is_archived, archived_at
     FROM pets
     WHERE id = ${appointment.petId}::uuid
     LIMIT 1
@@ -888,6 +1142,88 @@ async function deliverTextNotification(payload) {
   return { status: "sent" };
 }
 
+async function createUserNotification(userId, type, title, body, href = null, metadata = {}) {
+  const rows = await sql`
+    INSERT INTO user_notifications (user_id, type, title, body, href, metadata)
+    VALUES (${userId}::uuid, ${type}, ${title}, ${body}, ${href}, ${metadata})
+    RETURNING id::text AS id, user_id::text AS user_id, type, title, body, href, metadata, is_read, read_at, created_at
+  `;
+  return mapUserNotificationRow(rows[0]);
+}
+
+async function listUserNotifications(userId) {
+  const rows = await sql`
+    SELECT id::text AS id, user_id::text AS user_id, type, title, body, href, metadata, is_read, read_at, created_at
+    FROM user_notifications
+    WHERE user_id = ${userId}::uuid
+    ORDER BY created_at DESC
+    LIMIT 50
+  `;
+  return rows.map(mapUserNotificationRow);
+}
+
+async function markUserNotificationRead(userId, notificationId) {
+  const rows = await sql`
+    UPDATE user_notifications
+    SET is_read = TRUE, read_at = COALESCE(read_at, NOW())
+    WHERE id = ${notificationId}::uuid
+      AND user_id = ${userId}::uuid
+    RETURNING id::text AS id, user_id::text AS user_id, type, title, body, href, metadata, is_read, read_at, created_at
+  `;
+  return rows[0] ? mapUserNotificationRow(rows[0]) : null;
+}
+
+async function listActiveUsersByRoles(roles) {
+  const rows = await sql`
+    SELECT id::text AS id, email, username, role, display_name, first_name, last_name, phone,
+           owner_id::text AS owner_id, notify_by_email, notify_by_text, is_active,
+           failed_login_attempts, locked_at, created_at, updated_at
+    FROM app_users
+    WHERE role = ANY(${roles})
+      AND is_active = TRUE
+  `;
+  return rows.map(mapAppUser);
+}
+
+async function listActiveUsersByOwner(ownerId) {
+  const rows = await sql`
+    SELECT id::text AS id, email, username, role, display_name, first_name, last_name, phone,
+           owner_id::text AS owner_id, notify_by_email, notify_by_text, is_active,
+           failed_login_attempts, locked_at, created_at, updated_at
+    FROM app_users
+    WHERE owner_id = ${ownerId}::uuid
+      AND is_active = TRUE
+  `;
+  return rows.map(mapAppUser);
+}
+
+async function sendUserContactNotification(user, { subject, html, text }) {
+  const deliveries = [];
+  if (user.notifyByEmail && user.email) {
+    deliveries.push(deliverEmailNotification({ to: user.email, subject, html, text }));
+  }
+  if (user.notifyByText && user.phone) {
+    deliveries.push(deliverTextNotification({ to: user.phone, message: text }));
+  }
+  await Promise.all(deliveries);
+}
+
+async function createPasswordToken(userId, purpose, tempPassword) {
+  const token = randomBytes(24).toString("hex");
+  const rows = await sql`
+    INSERT INTO user_password_tokens (user_id, purpose, token, temp_password_hash, expires_at)
+    VALUES (
+      ${userId}::uuid,
+      ${purpose},
+      ${token},
+      ${tempPassword ? hashPassword(tempPassword) : null},
+      ${new Date(Date.now() + PASSWORD_TOKEN_DURATION_MS).toISOString()}
+    )
+    RETURNING id::text AS id, token
+  `;
+  return rows[0].token;
+}
+
 function buildAppointmentSummary(appointment, owner, pet) {
   return {
     appointmentId: appointment.id,
@@ -988,6 +1324,94 @@ function buildClientTextNotification({ summary, token, notificationType, isCance
     .map((action) => action.toUpperCase())
     .join(", or ");
   return `${prefix} ${summary.petName} on ${summary.startsAt}. Reply ${actions}.${responsePageUrl ? ` Manage online: ${responsePageUrl}` : ""}`;
+}
+
+function getRequestTypeLabel(requestType) {
+  switch (requestType) {
+    case "new_pet":
+      return "New Pet Request";
+    case "profile_update":
+      return "Profile Update";
+    case "general":
+      return "General Request";
+    default:
+      return "Appointment Request";
+  }
+}
+
+async function notifyStaffOfRequest(requestRecord) {
+  const recipients = await listActiveUsersByRoles(["admin", "groomer"]);
+  const title = `${getRequestTypeLabel(requestRecord.requestType)} received`;
+  const body = requestRecord.subject;
+  const href = `/requests?requestId=${requestRecord.id}`;
+  await Promise.all(
+    recipients.map(async (recipient) => {
+      await createUserNotification(recipient.id, "request_created", title, body, href, {
+        requestId: requestRecord.id,
+        requestType: requestRecord.requestType,
+      });
+      await sendUserContactNotification(recipient, {
+        subject: title,
+        html: `<p>${body}</p><p><a href="${buildAppUrl(href)}">Open request</a></p>`,
+        text: `${body}. Open request: ${buildAppUrl(href)}`,
+      });
+    }),
+  );
+}
+
+async function notifyClientUsersOfRequestUpdate(requestRecord) {
+  const recipients = await listActiveUsersByOwner(requestRecord.ownerId);
+  const title = `${getRequestTypeLabel(requestRecord.requestType)} updated`;
+  const body = requestRecord.subject;
+  const href = `/requests?requestId=${requestRecord.id}`;
+  await Promise.all(
+    recipients.map(async (recipient) => {
+      await createUserNotification(recipient.id, "request_updated", title, body, href, {
+        requestId: requestRecord.id,
+        requestType: requestRecord.requestType,
+      });
+      await sendUserContactNotification(recipient, {
+        subject: title,
+        html: `<p>${body}</p><p><a href="${buildAppUrl(href)}">View request</a></p>`,
+        text: `${body}. View request: ${buildAppUrl(href)}`,
+      });
+    }),
+  );
+}
+
+async function notifyClientUsersOfScheduledAppointment(appointment) {
+  const recipients = await listActiveUsersByOwner(appointment.ownerId);
+  const href = `/appointments?appointmentId=${appointment.id}`;
+  await Promise.all(
+    recipients.map((recipient) =>
+      createUserNotification(
+        recipient.id,
+        "appointment_scheduled",
+        "Appointment Scheduled",
+        `An appointment was scheduled for ${new Date(appointment.start).toLocaleString()}.`,
+        href,
+        { appointmentId: appointment.id },
+      ),
+    ),
+  );
+}
+
+async function notifyAdminsOfLockout(user) {
+  const admins = await listActiveUsersByRoles(["admin"]);
+  const title = "User account locked";
+  const body = `${user.firstName} ${user.lastName}`.trim() || user.email;
+  await Promise.all(
+    admins.map(async (admin) => {
+      await createUserNotification(admin.id, "account_locked", title, body, "/users", {
+        userId: user.id,
+      });
+      await sendUserContactNotification(admin, {
+        subject: title,
+        html: `<p>${body} has been locked after repeated sign-in failures.</p><p><a href="${buildAppUrl("/users")}">Open users</a></p>`,
+        text: `${body} has been locked after repeated sign-in failures. Open users: ${buildAppUrl("/users")}`,
+      });
+    }),
+  );
 }
 
 async function updateAppointmentConfirmationState(appointmentId) {
@@ -1173,6 +1597,37 @@ async function deleteSession(token) {
   await sql`DELETE FROM app_sessions WHERE session_token = ${token}`;
 }
 
+async function clearUserSessions(userId) {
+  await sql`DELETE FROM app_sessions WHERE user_id = ${userId}::uuid`;
+}
+
+async function resetFailedLoginState(userId) {
+  await sql`
+    UPDATE app_users
+    SET failed_login_attempts = 0,
+        locked_at = NULL,
+        last_login_at = NOW(),
+        updated_at = NOW()
+    WHERE id = ${userId}::uuid
+  `;
+}
+
+async function incrementFailedLoginAttempt(user) {
+  const nextCount = (user.failed_login_attempts ?? 0) + 1;
+  const shouldLock = nextCount >= LOGIN_LOCK_THRESHOLD;
+  const rows = await sql`
+    UPDATE app_users
+    SET failed_login_attempts = ${nextCount},
+        locked_at = CASE WHEN ${shouldLock} THEN NOW() ELSE locked_at END,
+        updated_at = NOW()
+    WHERE id = ${user.id}::uuid
+    RETURNING id::text AS id, email, username, role, display_name, first_name, last_name, phone,
+              owner_id::text AS owner_id, notify_by_email, notify_by_text, is_active,
+              failed_login_attempts, locked_at, created_at, updated_at
+  `;
+  return rows[0] ? mapAppUser(rows[0]) : null;
+}
+
 async function getCurrentUser(event) {
   const cookies = parseCookies(event);
   const token = cookies[SESSION_COOKIE];
@@ -1181,7 +1636,9 @@ async function getCurrentUser(event) {
   }
 
   const rows = await sql`
-    SELECT u.id::text AS id, u.email, u.role, u.display_name, u.first_name, u.last_name, u.phone, u.notify_by_email, u.notify_by_text, u.is_active
+    SELECT u.id::text AS id, u.email, u.username, u.role, u.display_name, u.first_name,
+           u.last_name, u.phone, u.owner_id::text AS owner_id, u.notify_by_email,
+           u.notify_by_text, u.is_active, u.failed_login_attempts, u.locked_at
     FROM app_sessions s
     JOIN app_users u ON u.id = s.user_id
     WHERE s.session_token = ${token}
@@ -1219,11 +1676,13 @@ function validateManagedUserPayload(payload, { isNew = false } = {}) {
   const firstName = requiredString(payload.firstName, "firstName");
   const lastName = requiredString(payload.lastName, "lastName");
   const email = requiredEmail(payload.email, "email");
+  const username = optionalString(payload.username)?.toLowerCase() ?? null;
   const phone = optionalString(payload.phone) ?? "";
   const role = requiredString(payload.role, "role");
   const notifyByEmail = optionalBoolean(payload.notifyByEmail, "notifyByEmail");
   const notifyByText = optionalBoolean(payload.notifyByText, "notifyByText");
   const isActive = optionalBoolean(payload.isActive, "isActive");
+  const ownerId = optionalString(payload.ownerId);
 
   if (!appUserRoles.has(role)) {
     throw new Error("role is invalid.");
@@ -1231,6 +1690,10 @@ function validateManagedUserPayload(payload, { isNew = false } = {}) {
 
   if (notifyByText && !phone) {
     throw new Error("A phone number is required when text notifications are enabled.");
+  }
+
+  if (role === "client" && !ownerId) {
+    throw new Error("A linked client record is required for client users.");
   }
 
   let password;
@@ -1244,11 +1707,13 @@ function validateManagedUserPayload(payload, { isNew = false } = {}) {
     firstName,
     lastName,
     email,
+    username,
     phone,
     role,
     notifyByEmail,
     notifyByText,
     isActive,
+    ownerId: role === "client" ? ownerId : null,
     password,
   };
 }
@@ -1280,7 +1745,9 @@ async function updateCurrentUserProfile(userId, payload) {
         notify_by_text = ${input.notifyByText},
         updated_at = NOW()
     WHERE id = ${userId}::uuid
-    RETURNING id::text AS id, email, role, display_name, first_name, last_name, phone, notify_by_email, notify_by_text
+    RETURNING id::text AS id, email, username, role, display_name, first_name, last_name,
+              phone, owner_id::text AS owner_id, notify_by_email, notify_by_text,
+              failed_login_attempts, locked_at
   `;
 
   return rows[0] ? mapAppUser(rows[0]) : null;
@@ -1300,25 +1767,40 @@ async function createAppUser(payload) {
     throw new Error("That email address is already in use.");
   }
 
+  if (input.username) {
+    const duplicateUsername = await sql`
+      SELECT id::text AS id
+      FROM app_users
+      WHERE username = ${input.username}
+      LIMIT 1
+    `;
+    if (duplicateUsername.length > 0) {
+      throw new Error("That username is already in use.");
+    }
+  }
+
   const rows = await sql`
     INSERT INTO app_users (
-      email, password_hash, role, display_name, first_name, last_name, phone,
-      notify_by_email, notify_by_text, is_active
+      email, username, password_hash, role, display_name, first_name, last_name, phone,
+      owner_id, notify_by_email, notify_by_text, is_active
     )
     VALUES (
       ${input.email},
+      ${input.username},
       ${hashPassword(input.password)},
       ${input.role},
       ${displayName},
       ${input.firstName},
       ${input.lastName},
       ${input.phone},
+      ${input.ownerId}::uuid,
       ${input.notifyByEmail},
       ${input.notifyByText},
       ${input.isActive}
     )
-    RETURNING id::text AS id, email, role, display_name, first_name, last_name, phone,
-              notify_by_email, notify_by_text, is_active, created_at, updated_at
+    RETURNING id::text AS id, email, username, role, display_name, first_name, last_name,
+              phone, owner_id::text AS owner_id, notify_by_email, notify_by_text,
+              is_active, failed_login_attempts, locked_at, created_at, updated_at
   `;
 
   return mapAppUser(rows[0]);
@@ -1358,14 +1840,29 @@ async function updateAppUser(userId, payload, currentUserId) {
     throw new Error("That email address is already in use.");
   }
 
+  if (input.username) {
+    const duplicateUsername = await sql`
+      SELECT id::text AS id
+      FROM app_users
+      WHERE username = ${input.username}
+        AND id <> ${userId}::uuid
+      LIMIT 1
+    `;
+    if (duplicateUsername.length > 0) {
+      throw new Error("That username is already in use.");
+    }
+  }
+
   await sql`
     UPDATE app_users
     SET email = ${input.email},
+        username = ${input.username},
         role = ${input.role},
         display_name = ${displayName},
         first_name = ${input.firstName},
         last_name = ${input.lastName},
         phone = ${input.phone},
+        owner_id = ${input.ownerId}::uuid,
         notify_by_email = ${input.notifyByEmail},
         notify_by_text = ${input.notifyByText},
         is_active = ${input.isActive},
@@ -1382,8 +1879,9 @@ async function updateAppUser(userId, payload, currentUserId) {
   }
 
   const rows = await sql`
-    SELECT id::text AS id, email, role, display_name, first_name, last_name, phone,
-           notify_by_email, notify_by_text, is_active, created_at, updated_at
+    SELECT id::text AS id, email, username, role, display_name, first_name, last_name, phone,
+           owner_id::text AS owner_id, notify_by_email, notify_by_text,
+           is_active, failed_login_attempts, locked_at, created_at, updated_at
     FROM app_users
     WHERE id = ${userId}::uuid
   `;
@@ -1399,11 +1897,147 @@ async function deleteAppUser(userId, currentUserId) {
   const rows = await sql`
     DELETE FROM app_users
     WHERE id = ${userId}::uuid
-    RETURNING id::text AS id, email, role, display_name, first_name, last_name, phone,
-              notify_by_email, notify_by_text, is_active, created_at, updated_at
+    RETURNING id::text AS id, email, username, role, display_name, first_name, last_name,
+              phone, owner_id::text AS owner_id, notify_by_email, notify_by_text,
+              is_active, failed_login_attempts, locked_at, created_at, updated_at
   `;
 
   return rows[0] ? mapAppUser(rows[0]) : null;
+}
+
+async function unlockAppUser(userId) {
+  const rows = await sql`
+    UPDATE app_users
+    SET failed_login_attempts = 0,
+        locked_at = NULL,
+        updated_at = NOW()
+    WHERE id = ${userId}::uuid
+    RETURNING id::text AS id, email, username, role, display_name, first_name, last_name,
+              phone, owner_id::text AS owner_id, notify_by_email, notify_by_text,
+              is_active, failed_login_attempts, locked_at, created_at, updated_at
+  `;
+  return rows[0] ? mapAppUser(rows[0]) : null;
+}
+
+async function getAppUser(userId) {
+  const rows = await sql`
+    SELECT id::text AS id, email, username, role, display_name, first_name, last_name,
+           phone, owner_id::text AS owner_id, notify_by_email, notify_by_text,
+           is_active, failed_login_attempts, locked_at, created_at, updated_at
+    FROM app_users
+    WHERE id = ${userId}::uuid
+    LIMIT 1
+  `;
+  return rows[0] ? mapAppUser(rows[0]) : null;
+}
+
+async function sendSetupEmailToUser(userId) {
+  const user = await getAppUser(userId);
+  if (!user || !user.email) {
+    throw new Error("User not found.");
+  }
+  const temporaryPassword = randomBytes(6).toString("base64url");
+  const token = await createPasswordToken(userId, "setup", temporaryPassword);
+  const href = buildAppUrl(`/account-setup?token=${token}`);
+  await sendUserContactNotification(user, {
+    subject: "Finish Setting Up Your Account",
+    html: `<p>Your account is ready.</p><p>Temporary password: <strong>${temporaryPassword}</strong></p><p><a href="${href}">Finish account setup</a></p>`,
+    text: `Your account is ready. Temporary password: ${temporaryPassword}. Finish setup: ${href}`,
+  });
+  await createUserNotification(userId, "account_setup", "Finish account setup", "Complete your account setup using the link we sent.", href, { tokenPurpose: "setup" });
+  return { ok: true };
+}
+
+async function sendPasswordResetToUser(userId) {
+  const user = await getAppUser(userId);
+  if (!user || !user.email) {
+    throw new Error("User not found.");
+  }
+  const token = await createPasswordToken(userId, "password_reset", null);
+  const href = buildAppUrl(`/reset-password?token=${token}`);
+  await sendUserContactNotification(user, {
+    subject: "Reset Your Password",
+    html: `<p>We received a password reset request.</p><p><a href="${href}">Reset password</a></p>`,
+    text: `Reset your password: ${href}`,
+  });
+  await createUserNotification(userId, "password_reset", "Password reset requested", "Use the link we sent to reset your password.", href, { tokenPurpose: "password_reset" });
+  return { ok: true };
+}
+
+async function requestPasswordResetByEmail(email) {
+  const user = await getUserByIdentifier(email);
+  if (user?.id) {
+    await sendPasswordResetToUser(user.id);
+  }
+  return { ok: true };
+}
+
+async function completePasswordToken(token, payload, purpose) {
+  const rows = await sql`
+    SELECT id::text AS id, user_id::text AS user_id, purpose, token, temp_password_hash, expires_at, used_at
+    FROM user_password_tokens
+    WHERE token = ${token}
+    LIMIT 1
+  `;
+  const tokenRecord = rows[0];
+  if (!tokenRecord || tokenRecord.purpose !== purpose) {
+    throw new Error("That link is invalid.");
+  }
+  if (tokenRecord.used_at) {
+    throw new Error("That link has already been used.");
+  }
+  if (new Date(tokenRecord.expires_at) < new Date()) {
+    throw new Error("That link has expired.");
+  }
+
+  const password = requiredString(payload.password, "password");
+  let username = null;
+  if (purpose === "setup") {
+    const tempPassword = requiredString(payload.tempPassword, "tempPassword");
+    if (!tokenRecord.temp_password_hash || !verifyPassword(tempPassword, tokenRecord.temp_password_hash)) {
+      throw new Error("Temporary password is invalid.");
+    }
+    username = payload.useEmail ? null : optionalString(payload.username)?.toLowerCase();
+    if (!payload.useEmail && !username) {
+      throw new Error("username is required unless useEmail is selected.");
+    }
+  }
+
+  const user = await getAppUser(tokenRecord.user_id);
+  if (!user) {
+    throw new Error("User not found.");
+  }
+
+  const nextUsername = purpose === "setup" ? (payload.useEmail ? user.email.toLowerCase() : username) : user.username ?? null;
+  if (nextUsername) {
+    const duplicateUsername = await sql`
+      SELECT id::text AS id
+      FROM app_users
+      WHERE username = ${nextUsername}
+        AND id <> ${tokenRecord.user_id}::uuid
+      LIMIT 1
+    `;
+    if (duplicateUsername.length > 0) {
+      throw new Error("That username is already in use.");
+    }
+  }
+
+  await sql`
+    UPDATE app_users
+    SET username = ${nextUsername},
+        password_hash = ${hashPassword(password)},
+        failed_login_attempts = 0,
+        locked_at = NULL,
+        updated_at = NOW()
+    WHERE id = ${tokenRecord.user_id}::uuid
+  `;
+  await sql`
+    UPDATE user_password_tokens
+    SET used_at = NOW()
+    WHERE id = ${tokenRecord.id}::uuid
+  `;
+  await clearUserSessions(tokenRecord.user_id);
+  return { ok: true };
 }
 
 async function getResponseTokenRecord(token) {
@@ -1586,24 +2220,32 @@ async function clearAppointmentNotes(appointmentId) {
   await sql`DELETE FROM appointment_notes WHERE appointment_id = ${appointmentId}::uuid`;
 }
 
-async function addOwnerNote(ownerId, text) {
+function validateNoteVisibility(value, defaultValue = "internal") {
+  const visibility = value == null ? defaultValue : requiredString(value, "visibility");
+  if (!noteVisibilities.has(visibility)) {
+    throw new Error("visibility is invalid.");
+  }
+  return visibility;
+}
+
+async function addOwnerNote(ownerId, text, visibility = "internal") {
   await sql`
-    INSERT INTO owner_notes (owner_id, text)
-    VALUES (${ownerId}::uuid, ${requiredString(text, "text")})
+    INSERT INTO owner_notes (owner_id, text, visibility)
+    VALUES (${ownerId}::uuid, ${requiredString(text, "text")}, ${validateNoteVisibility(visibility)})
   `;
 }
 
-async function addPetNote(petId, text) {
+async function addPetNote(petId, text, visibility = "internal") {
   await sql`
-    INSERT INTO pet_notes (pet_id, text)
-    VALUES (${petId}::uuid, ${requiredString(text, "text")})
+    INSERT INTO pet_notes (pet_id, text, visibility)
+    VALUES (${petId}::uuid, ${requiredString(text, "text")}, ${validateNoteVisibility(visibility)})
   `;
 }
 
-async function addAppointmentNote(appointmentId, text) {
+async function addAppointmentNote(appointmentId, text, visibility = "internal") {
   await sql`
-    INSERT INTO appointment_notes (appointment_id, text)
-    VALUES (${appointmentId}::uuid, ${requiredString(text, "text")})
+    INSERT INTO appointment_notes (appointment_id, text, visibility)
+    VALUES (${appointmentId}::uuid, ${requiredString(text, "text")}, ${validateNoteVisibility(visibility)})
   `;
 }
 
@@ -1628,34 +2270,265 @@ async function replaceAppointmentNotes(appointmentId, text) {
   }
 }
 
-async function updateOwnerNote(ownerId, noteId, text) {
+async function updateOwnerNote(ownerId, noteId, text, visibility) {
   const rows = await sql`
     UPDATE owner_notes
-    SET text = ${requiredString(text, "text")}, updated_at = NOW()
+    SET text = ${requiredString(text, "text")},
+        visibility = ${validateNoteVisibility(visibility)},
+        updated_at = NOW()
     WHERE id = ${noteId}::uuid AND owner_id = ${ownerId}::uuid
     RETURNING id::text AS id
   `;
   return rows.length > 0;
 }
 
-async function updatePetNote(petId, noteId, text) {
+async function updatePetNote(petId, noteId, text, visibility) {
   const rows = await sql`
     UPDATE pet_notes
-    SET text = ${requiredString(text, "text")}, updated_at = NOW()
+    SET text = ${requiredString(text, "text")},
+        visibility = ${validateNoteVisibility(visibility)},
+        updated_at = NOW()
     WHERE id = ${noteId}::uuid AND pet_id = ${petId}::uuid
     RETURNING id::text AS id
   `;
   return rows.length > 0;
 }
 
-async function updateAppointmentNote(appointmentId, noteId, text) {
+async function updateAppointmentNote(appointmentId, noteId, text, visibility) {
   const rows = await sql`
     UPDATE appointment_notes
-    SET text = ${requiredString(text, "text")}, updated_at = NOW()
+    SET text = ${requiredString(text, "text")},
+        visibility = ${validateNoteVisibility(visibility)},
+        updated_at = NOW()
     WHERE id = ${noteId}::uuid AND appointment_id = ${appointmentId}::uuid
     RETURNING id::text AS id
   `;
   return rows.length > 0;
+}
+
+function getRequestActorContext(currentUser) {
+  const actorName =
+    currentUser?.display_name ??
+    ([currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(" ") || undefined);
+
+  return {
+    actorUserId: currentUser?.id ?? null,
+    actorRole: currentUser?.role ?? null,
+    actorName,
+  };
+}
+
+async function createClientRequestEvent(requestId, payload, currentUser) {
+  const actor = getRequestActorContext(currentUser);
+  const rows = await sql`
+    INSERT INTO client_request_events (
+      request_id, actor_user_id, actor_role, actor_name, event_type, title, detail, audience
+    )
+    VALUES (
+      ${requestId}::uuid,
+      ${actor.actorUserId}::uuid,
+      ${actor.actorRole},
+      ${actor.actorName},
+      ${payload.eventType},
+      ${payload.title},
+      ${payload.detail ?? null},
+      ${payload.audience ?? "all"}
+    )
+    RETURNING id::text AS id, request_id::text AS request_id, actor_user_id::text AS actor_user_id,
+              actor_role, actor_name, event_type, title, detail, audience, created_at
+  `;
+
+  return mapClientRequestEventRow(rows[0]);
+}
+
+async function createRequestUpdateEvents(previousRequest, nextRequest, currentUser) {
+  const events = [];
+
+  if (!previousRequest) {
+    return events;
+  }
+
+  if (previousRequest.status !== nextRequest.status) {
+    events.push(
+      await createClientRequestEvent(
+        nextRequest.id,
+        {
+          eventType:
+            nextRequest.status === "resolved" || nextRequest.status === "closed"
+              ? "resolved"
+              : previousRequest.status === "resolved" || previousRequest.status === "closed"
+                ? "reopened"
+                : "status_changed",
+          title: "Status updated",
+          detail: `${previousRequest.status.replace(/_/g, " ")} to ${nextRequest.status.replace(/_/g, " ")}`,
+          audience: "all",
+        },
+        currentUser,
+      ),
+    );
+  }
+
+  if (previousRequest.clientNote !== nextRequest.clientNote) {
+    events.push(
+      await createClientRequestEvent(
+        nextRequest.id,
+        {
+          eventType: "client_note_updated",
+          title: currentUser?.role === "client" ? "Client updated request details" : "Request details updated",
+          detail: "Client-facing request details were changed.",
+          audience: "all",
+        },
+        currentUser,
+      ),
+    );
+  }
+
+  if ((previousRequest.internalNote ?? "") !== (nextRequest.internalNote ?? "")) {
+    events.push(
+      await createClientRequestEvent(
+        nextRequest.id,
+        {
+          eventType: "internal_note_updated",
+          title: "Internal note updated",
+          detail: "Staff-only request notes were changed.",
+          audience: "staff",
+        },
+        currentUser,
+      ),
+    );
+  }
+
+  if (
+    previousRequest.subject !== nextRequest.subject ||
+    previousRequest.requestType !== nextRequest.requestType ||
+    previousRequest.petId !== nextRequest.petId ||
+    JSON.stringify(previousRequest.details ?? {}) !== JSON.stringify(nextRequest.details ?? {})
+  ) {
+    events.push(
+      await createClientRequestEvent(
+        nextRequest.id,
+        {
+          eventType: "updated",
+          title: "Request details updated",
+          detail: "The request summary or related details were changed.",
+          audience: "all",
+        },
+        currentUser,
+      ),
+    );
+  }
+
+  return events;
+}
+
+function validateClientRequestPayload(payload, { isNew = false } = {}) {
+  const requestType = requiredString(payload.requestType, "requestType");
+  if (!clientRequestTypes.has(requestType)) {
+    throw new Error("requestType is invalid.");
+  }
+
+  const status = payload.status ? requiredString(payload.status, "status") : "open";
+  if (!clientRequestStatuses.has(status)) {
+    throw new Error("status is invalid.");
+  }
+
+  const ownerId = requiredString(payload.ownerId, "ownerId");
+  const petId = optionalString(payload.petId);
+  const subject = requiredString(payload.subject, "subject");
+  const clientNote = requiredString(payload.clientNote, "clientNote");
+  const internalNote = optionalString(payload.internalNote);
+  const details = optionalObject(payload.details, "details");
+
+  if (!isNew && !payload.status) {
+    throw new Error("status is required.");
+  }
+
+  return {
+    ownerId,
+    petId,
+    requestType,
+    status,
+    subject,
+    clientNote,
+    internalNote,
+    details,
+  };
+}
+
+async function createClientRequest(payload, currentUser) {
+  const input = validateClientRequestPayload(payload, { isNew: true });
+  const rows = await sql`
+    INSERT INTO client_requests (
+      owner_id, pet_id, created_by_user_id, request_type, status, subject, client_note, internal_note, details
+    )
+    VALUES (
+      ${input.ownerId}::uuid,
+      ${input.petId}::uuid,
+      ${currentUser?.id ?? null}::uuid,
+      ${input.requestType},
+      ${input.status},
+      ${input.subject},
+      ${input.clientNote},
+      ${input.internalNote},
+      ${JSON.stringify(input.details)}
+    )
+    RETURNING id::text AS id, owner_id::text AS owner_id, pet_id::text AS pet_id,
+              created_by_user_id::text AS created_by_user_id, request_type, status,
+              subject, client_note, internal_note, details, resolved_at, created_at, updated_at
+  `;
+  const requestRecord = mapClientRequestRow(rows[0]);
+  const createdEvent = await createClientRequestEvent(
+    requestRecord.id,
+    {
+      eventType: "created",
+      title: "Request created",
+      detail: `New ${requestRecord.requestType.replace(/_/g, " ")} request logged.`,
+      audience: "all",
+    },
+    currentUser,
+  );
+  requestRecord.events = [createdEvent];
+  await notifyStaffOfRequest(requestRecord);
+  return requestRecord;
+}
+
+async function updateClientRequest(requestId, payload, currentUser) {
+  const existingRequest = await getClientRequest(requestId, { includeStaffOnly: true });
+  const input = validateClientRequestPayload(payload);
+  const resolvedAt =
+    input.status === "resolved" || input.status === "closed"
+      ? new Date().toISOString()
+      : null;
+
+  const rows = await sql`
+    UPDATE client_requests
+    SET owner_id = ${input.ownerId}::uuid,
+        pet_id = ${input.petId}::uuid,
+        request_type = ${input.requestType},
+        status = ${input.status},
+        subject = ${input.subject},
+        client_note = ${input.clientNote},
+        internal_note = ${input.internalNote},
+        details = ${JSON.stringify(input.details)},
+        resolved_at = ${resolvedAt}::timestamptz,
+        updated_at = NOW()
+    WHERE id = ${requestId}::uuid
+    RETURNING id::text AS id, owner_id::text AS owner_id, pet_id::text AS pet_id,
+              created_by_user_id::text AS created_by_user_id, request_type, status,
+              subject, client_note, internal_note, details, resolved_at, created_at, updated_at
+  `;
+  const requestRecord = rows[0] ? mapClientRequestRow(rows[0]) : null;
+  if (requestRecord && existingRequest) {
+    requestRecord.events = await createRequestUpdateEvents(existingRequest, requestRecord, currentUser);
+  }
+  if (requestRecord && currentUser?.role !== "client") {
+    await notifyClientUsersOfRequestUpdate(requestRecord);
+  }
+  return requestRecord
+    ? await getClientRequest(requestRecord.id, {
+        includeStaffOnly: currentUser?.role !== "client",
+      })
+    : null;
 }
 
 async function deleteOwnerNote(ownerId, noteId) {
@@ -1752,6 +2625,8 @@ function validatePetPayload(payload) {
     breed: requiredString(payload.breed, "breed"),
     weightLbs: optionalNumber(payload.weightLbs, "weightLbs"),
     ageYears: optionalNumber(payload.ageYears, "ageYears"),
+    birthDate: payload.birthDate ? requiredDate(payload.birthDate, "birthDate") : null,
+    isBirthDateEstimated: Boolean(payload.isBirthDateEstimated),
     color: optionalString(payload.color),
     notes: typeof payload.notes === "string" ? payload.notes : undefined,
   };
@@ -1836,7 +2711,9 @@ async function updateOwner(id, payload) {
 async function createPet(payload) {
   const input = validatePetPayload(payload);
   const rows = await sql`
-    INSERT INTO pets (owner_id, name, species, breed, weight_lbs, age_years, color)
+    INSERT INTO pets (
+      owner_id, name, species, breed, weight_lbs, age_years, birth_date, is_birth_date_estimated, color
+    )
     VALUES (
       ${input.ownerId}::uuid,
       ${input.name},
@@ -1844,6 +2721,8 @@ async function createPet(payload) {
       ${input.breed},
       ${input.weightLbs},
       ${input.ageYears},
+      ${input.birthDate}::date,
+      ${input.isBirthDateEstimated},
       ${input.color}
     )
     RETURNING id::text AS id
@@ -1864,6 +2743,8 @@ async function updatePet(id, payload) {
         breed = ${input.breed},
         weight_lbs = ${input.weightLbs},
         age_years = ${input.ageYears},
+        birth_date = ${input.birthDate}::date,
+        is_birth_date_estimated = ${input.isBirthDateEstimated},
         color = ${input.color},
         updated_at = NOW()
     WHERE id = ${id}::uuid
@@ -1907,6 +2788,7 @@ async function createAppointment(payload) {
   const appointment = await getAppointment(rows[0].id);
   if (appointment && appointment.status === "scheduled") {
     await sendClientAppointmentNotification(appointment.id, "initial_schedule");
+    await notifyClientUsersOfScheduledAppointment(appointment);
   }
   return appointment;
 }
@@ -2028,18 +2910,32 @@ async function handleRequest(event) {
 
   if (path === "/auth/login" && method === "POST") {
     const payload = parseJsonBody(event);
-    const email = requiredString(payload.email, "email").toLowerCase();
+    const identifier = requiredString(payload.email ?? payload.identifier, "email");
     const password = requiredString(payload.password, "password");
-    const user = await getUserByEmail(email);
+    const user = await getUserByIdentifier(identifier);
 
-    if (!user || !user.is_active || !verifyPassword(password, user.password_hash)) {
+    if (!user || !user.is_active) {
+      return unauthorized("Invalid email or password.");
+    }
+
+    if (user.locked_at) {
+      return forbidden("This account is locked. Contact an administrator or use password reset.");
+    }
+
+    if (!verifyPassword(password, user.password_hash)) {
+      const updatedUser = await incrementFailedLoginAttempt(user);
+      if (updatedUser?.lockedAt) {
+        await notifyAdminsOfLockout(updatedUser);
+        return forbidden("This account is locked after repeated sign-in attempts.");
+      }
       return unauthorized("Invalid email or password.");
     }
 
     const session = await createSession(user.id);
+    await resetFailedLoginState(user.id);
     return json(
       200,
-      { user: mapAppUser(user) },
+      { user: mapAppUser({ ...user, failed_login_attempts: 0, locked_at: null }) },
       { "Set-Cookie": buildSessionCookie(session.token, session.expiresAt) },
     );
   }
@@ -2050,6 +2946,21 @@ async function handleRequest(event) {
       await deleteSession(cookies[SESSION_COOKIE]);
     }
     return json(200, { ok: true }, { "Set-Cookie": clearSessionCookie() });
+  }
+
+  if (path === "/auth/request-password-reset" && method === "POST") {
+    const payload = parseJsonBody(event);
+    return json(200, await requestPasswordResetByEmail(requiredString(payload.email, "email")));
+  }
+
+  if (path === "/auth/reset-password" && method === "POST") {
+    const payload = parseJsonBody(event);
+    return json(200, await completePasswordToken(requiredString(payload.token, "token"), payload, "password_reset"));
+  }
+
+  if (path === "/auth/complete-setup" && method === "POST") {
+    const payload = parseJsonBody(event);
+    return json(200, await completePasswordToken(requiredString(payload.token, "token"), payload, "setup"));
   }
 
   let match = path.match(/^\/public\/appointment-response\/([^/]+)$/);
@@ -2108,6 +3019,19 @@ async function handleRequest(event) {
     return json(200, { processed: results.length, appointments: results });
   }
 
+  if (path === "/notifications" && method === "GET") {
+    return json(200, await listUserNotifications(currentUser.id));
+  }
+
+  match = path.match(/^\/notifications\/([^/]+)\/read$/);
+  if (match) {
+    if (method !== "POST") {
+      return methodNotAllowed();
+    }
+    const notification = await markUserNotificationRead(currentUser.id, match[1]);
+    return notification ? json(200, notification) : notFound("Notification not found.");
+  }
+
   if (path === "/users" && method === "GET") {
     if (!currentUser || currentUser.role !== "admin") {
       return forbidden("Administrator access is required.");
@@ -2139,13 +3063,125 @@ async function handleRequest(event) {
     return methodNotAllowed();
   }
 
+  match = path.match(/^\/users\/([^/]+)\/unlock$/);
+  if (match) {
+    if (!currentUser || currentUser.role !== "admin") {
+      return forbidden("Administrator access is required.");
+    }
+    if (method !== "POST") {
+      return methodNotAllowed();
+    }
+    const user = await unlockAppUser(match[1]);
+    return user ? json(200, user) : notFound("User not found.");
+  }
+
+  match = path.match(/^\/users\/([^/]+)\/send-setup$/);
+  if (match) {
+    if (!currentUser || currentUser.role !== "admin") {
+      return forbidden("Administrator access is required.");
+    }
+    if (method !== "POST") {
+      return methodNotAllowed();
+    }
+    return json(200, await sendSetupEmailToUser(match[1]));
+  }
+
+  match = path.match(/^\/users\/([^/]+)\/send-password-reset$/);
+  if (match) {
+    if (!currentUser || currentUser.role !== "admin") {
+      return forbidden("Administrator access is required.");
+    }
+    if (method !== "POST") {
+      return methodNotAllowed();
+    }
+    return json(200, await sendPasswordResetToUser(match[1]));
+  }
+
   if (path === "/bootstrap" && method === "GET") {
-    const [owners, pets, appointments] = await Promise.all([
+    const isClient = currentUser?.role === "client";
+    const ownerScopeId = isClient ? currentUser.owner_id ?? null : null;
+    const [owners, pets, appointments, requests] = await Promise.all([
       listOwners(),
       listPets(),
       listAppointments(),
+      listClientRequests(ownerScopeId ? { ownerId: ownerScopeId } : { includeStaffOnly: true }),
     ]);
-    return json(200, { owners, pets, appointments });
+
+    if (isClient) {
+      return json(200, {
+        owners: ownerScopeId ? owners.filter((owner) => owner.id === ownerScopeId) : [],
+        pets: ownerScopeId ? pets.filter((pet) => pet.ownerId === ownerScopeId) : [],
+        appointments: ownerScopeId
+          ? appointments.filter((appointment) => appointment.ownerId === ownerScopeId)
+          : [],
+        requests,
+      });
+    }
+
+    return json(200, { owners, pets, appointments, requests });
+  }
+
+  if (path === "/requests" && method === "GET") {
+    if (currentUser.role === "client") {
+      if (!currentUser.owner_id) {
+        return json(200, []);
+      }
+      return json(200, await listClientRequests({ ownerId: currentUser.owner_id }));
+    }
+
+    return json(200, await listClientRequests({ includeStaffOnly: true }));
+  }
+
+  if (path === "/requests" && method === "POST") {
+    const payload = parseJsonBody(event);
+    if (currentUser.role === "client") {
+      if (!currentUser.owner_id) {
+        return forbidden("Your account is not linked to a client record.");
+      }
+      payload.ownerId = currentUser.owner_id;
+      payload.internalNote = null;
+      payload.status = "open";
+    }
+
+    return json(201, await createClientRequest(payload, currentUser));
+  }
+
+  match = path.match(/^\/requests\/([^/]+)$/);
+  if (match) {
+    const requestId = match[1];
+    if (method !== "PUT") {
+      return methodNotAllowed();
+    }
+
+    const existingRequest = await getClientRequest(requestId, {
+      includeStaffOnly: currentUser.role !== "client",
+    });
+    if (!existingRequest) {
+      return notFound("Request not found.");
+    }
+
+    const payload = parseJsonBody(event);
+    if (currentUser.role === "client") {
+      if (!currentUser.owner_id) {
+        return forbidden("Your account is not linked to a client record.");
+      }
+      if (existingRequest.ownerId !== currentUser.owner_id) {
+        return forbidden("You cannot modify another client's request.");
+      }
+      payload.ownerId = currentUser.owner_id;
+      payload.internalNote = null;
+      payload.status = "open";
+    }
+
+    const updatedRequest = await updateClientRequest(requestId, payload, currentUser);
+    return json(200, updatedRequest);
+  }
+
+  if (
+    currentUser.role === "client" &&
+    (path.startsWith("/owners") || path.startsWith("/pets") || path.startsWith("/appointments"))
+  ) {
+    return forbidden("Client users cannot access staff management routes.");
   }
 
   if (path === "/owners" && method === "GET") {
@@ -2194,7 +3230,8 @@ async function handleRequest(event) {
     if (method !== "POST") {
       return methodNotAllowed();
     }
-    await addOwnerNote(ownerId, parseJsonBody(event).text);
+    const payload = parseJsonBody(event);
+    await addOwnerNote(ownerId, payload.text, payload.visibility);
     return json(200, await getOwner(ownerId));
   }
 
@@ -2202,7 +3239,8 @@ async function handleRequest(event) {
   if (match) {
     const [, ownerId, noteId] = match;
     if (method === "PUT") {
-      const updated = await updateOwnerNote(ownerId, noteId, parseJsonBody(event).text);
+      const payload = parseJsonBody(event);
+      const updated = await updateOwnerNote(ownerId, noteId, payload.text, payload.visibility);
       return updated ? json(200, await getOwner(ownerId)) : notFound("Note not found.");
     }
     if (method === "DELETE") {
@@ -2268,7 +3306,8 @@ async function handleRequest(event) {
     if (method !== "POST") {
       return methodNotAllowed();
     }
-    await addPetNote(petId, parseJsonBody(event).text);
+    const payload = parseJsonBody(event);
+    await addPetNote(petId, payload.text, payload.visibility);
     return json(200, await getPet(petId));
   }
 
@@ -2276,7 +3315,8 @@ async function handleRequest(event) {
   if (match) {
     const [, petId, noteId] = match;
     if (method === "PUT") {
-      const updated = await updatePetNote(petId, noteId, parseJsonBody(event).text);
+      const payload = parseJsonBody(event);
+      const updated = await updatePetNote(petId, noteId, payload.text, payload.visibility);
       return updated ? json(200, await getPet(petId)) : notFound("Note not found.");
     }
     if (method === "DELETE") {
@@ -2352,7 +3392,8 @@ async function handleRequest(event) {
     if (method !== "POST") {
       return methodNotAllowed();
     }
-    await addAppointmentNote(appointmentId, parseJsonBody(event).text);
+    const payload = parseJsonBody(event);
+    await addAppointmentNote(appointmentId, payload.text, payload.visibility);
     return json(200, await getAppointment(appointmentId));
   }
 
@@ -2360,10 +3401,12 @@ async function handleRequest(event) {
   if (match) {
     const [, appointmentId, noteId] = match;
     if (method === "PUT") {
+      const payload = parseJsonBody(event);
       const updated = await updateAppointmentNote(
         appointmentId,
         noteId,
-        parseJsonBody(event).text,
+        payload.text,
+        payload.visibility,
       );
       return updated
         ? json(200, await getAppointment(appointmentId))

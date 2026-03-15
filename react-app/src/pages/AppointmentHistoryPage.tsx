@@ -3,6 +3,7 @@ import { Alert, Badge, Button, Card, Collapse, Form, ListGroup } from "react-boo
 import { useSearchParams } from "react-router-dom";
 import AppointmentDetailsModal from "../components/appointments/AppointmentDetailsModal";
 import { useAppData } from "../components/common/AppDataProvider";
+import { ChevronDownIcon, SearchIcon } from "../components/common/AppIcons";
 import PageLoader from "../components/common/PageLoader";
 import useInitialLoading from "../hooks/useInitialLoading";
 import { formatAppointmentServices } from "../lib/appointmentServices";
@@ -232,9 +233,7 @@ export default function AppointmentHistoryPage() {
                     placeholder="Search by client, pet, service, status, or date"
                   />
                   <Button type="submit" variant="primary" aria-label="Search appointment history">
-                    <span aria-hidden="true" className="search-panel-icon">
-                      ⌕
-                    </span>
+                    <SearchIcon className="search-panel-icon" />
                   </Button>
                 </div>
               </Form.Group>
@@ -329,12 +328,9 @@ export default function AppointmentHistoryPage() {
               aria-controls="history-search-controls"
               aria-label={showControls ? "Hide filters and sort" : "Show filters and sort"}
             >
-              <span
-                aria-hidden="true"
+              <ChevronDownIcon
                 className={`search-panel-caret${showControls ? " search-panel-caret-open" : ""}`}
-              >
-                ▾
-              </span>
+              />
             </Button>
           </div>
         </Card.Body>

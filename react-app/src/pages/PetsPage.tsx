@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button, Card, Collapse, Form } from "react-bootstrap";
+import { ChevronDownIcon, SearchIcon } from "../components/common/AppIcons";
 import { useAppData } from "../components/common/AppDataProvider";
 import { useAppToast } from "../components/common/AppToastProvider";
 import PageLoader from "../components/common/PageLoader";
@@ -229,9 +230,7 @@ export default function PetsPage() {
                     placeholder="Search by pet, breed, species, or owner"
                   />
                   <Button type="submit" variant="primary" aria-label="Search pets">
-                    <span aria-hidden="true" className="search-panel-icon">
-                      ⌕
-                    </span>
+                    <SearchIcon className="search-panel-icon" />
                   </Button>
                 </div>
               </Form.Group>
@@ -252,7 +251,7 @@ export default function PetsPage() {
                           <span className="fw-semibold">{pet.name}</span>
                           <span className="text-muted small">
                             {pet.breed}
-                            {owner ? ` • ${owner.firstName} ${owner.lastName}` : ""}
+                            {owner ? ` | ${owner.firstName} ${owner.lastName}` : ""}
                           </span>
                         </button>
                       );
@@ -384,12 +383,9 @@ export default function PetsPage() {
               aria-controls="pet-search-controls"
               aria-label={showControls ? "Hide filters and sort" : "Show filters and sort"}
             >
-              <span
-                aria-hidden="true"
+              <ChevronDownIcon
                 className={`search-panel-caret${showControls ? " search-panel-caret-open" : ""}`}
-              >
-                ▾
-              </span>
+              />
             </Button>
           </div>
         </Card.Body>

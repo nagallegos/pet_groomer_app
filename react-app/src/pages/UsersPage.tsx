@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button, Card, Collapse, Form, ListGroup } from "react-bootstrap";
+import { ChevronDownIcon, SearchIcon } from "../components/common/AppIcons";
 import ConfirmDeleteModal from "../components/common/ConfirmDeleteModal";
 import PageLoader from "../components/common/PageLoader";
+import { useAppData } from "../components/common/AppDataProvider";
 import { useAppToast } from "../components/common/AppToastProvider";
 import { useAuth } from "../components/common/useAuth";
 import UserFormModal from "../components/users/UserFormModal";
@@ -9,8 +11,11 @@ import {
   deleteManagedUser,
   listManagedUsers,
   saveManagedUser,
+  sendUserPasswordReset,
+  sendUserSetup,
   type ManagedUser,
   type ManagedUserUpsertInput,
+  unlockManagedUser,
 } from "../lib/crmApi";
 
 type SortField = "name" | "email" | "role";
@@ -24,6 +29,7 @@ const roleLabels: Record<string, string> = {
 export default function UsersPage() {
   const { user } = useAuth();
   const { showToast } = useAppToast();
+  const { owners } = useAppData();
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,8 +92,10 @@ export default function UsersPage() {
           managedUser.firstName,
           managedUser.lastName,
           managedUser.email,
+          managedUser.username,
           managedUser.phone,
           roleLabels[managedUser.role],
+          managedUser.lockedAt ? "locked" : "",
         ]
           .join(" ")
           .toLowerCase()
@@ -201,12 +209,10 @@ export default function UsersPage() {
                     type="search"
                     value={searchInput}
                     onChange={(event) => setSearchInput(event.target.value)}
-                    placeholder="Search by name, email, phone, or role"
+                    placeholder="Search by name, username, email, phone, role, or lock status"
                   />
                   <Button type="submit" variant="primary" aria-label="Search users">
-                    <span aria-hidden="true" className="search-panel-icon">
-                      ⌕
-                    </span>
+                    <SearchIcon className="search-panel-icon" />
                   </Button>
                 </div>
               </Form.Group>
@@ -263,7 +269,7 @@ export default function UsersPage() {
               aria-expanded={showControls}
               onClick={() => setShowControls((current) => !current)}
             >
-              <span aria-hidden="true">⌄</span>
+              <ChevronDownIcon className={`search-panel-caret${showControls ? " search-panel-caret-open" : ""}`} />
               <span className="visually-hidden">Toggle filters and sorting</span>
             </Button>
           </div>
@@ -292,10 +298,16 @@ export default function UsersPage() {
                     </div>
                     <div className="text-muted small mt-1">{managedUser.email}</div>
                     <div className="text-muted small">
+                      {managedUser.username ? `@${managedUser.username} | ` : ""}
                       {managedUser.phone || "No phone"} | Email{" "}
                       {managedUser.notifyByEmail ? "on" : "off"} | Text{" "}
                       {managedUser.notifyByText ? "on" : "off"}
                     </div>
+                    {managedUser.lockedAt && (
+                      <div className="text-danger small mt-1">
+                        Locked since {new Date(managedUser.lockedAt).toLocaleString()}
+                      </div>
+                    )}
                   </div>
                   <div className="user-directory-actions">
                     <Button
@@ -307,6 +319,53 @@ export default function UsersPage() {
                       }}
                     >
                       Edit
+                    </Button>
+                    {managedUser.lockedAt && (
+                      <Button
+                        size="sm"
+                        variant="outline-warning"
+                        onClick={async () => {
+                          const updatedUser = await unlockManagedUser(managedUser.id);
+                          setUsers((current) =>
+                            current.map((item) => (item.id === updatedUser.id ? updatedUser : item)),
+                          );
+                          showToast({
+                            title: "Account Unlocked",
+                            body: "The user can sign in again.",
+                            variant: "success",
+                          });
+                        }}
+                      >
+                        Unlock
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline-secondary"
+                      onClick={async () => {
+                        await sendUserSetup(managedUser.id);
+                        showToast({
+                          title: "Setup Email Sent",
+                          body: "The user was emailed an account setup link.",
+                          variant: "success",
+                        });
+                      }}
+                    >
+                      Send Setup
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline-secondary"
+                      onClick={async () => {
+                        await sendUserPasswordReset(managedUser.id);
+                        showToast({
+                          title: "Reset Email Sent",
+                          body: "The user was emailed a password reset link.",
+                          variant: "success",
+                        });
+                      }}
+                    >
+                      Reset Password
                     </Button>
                     {managedUser.id !== user.id && (
                       <Button
@@ -341,6 +400,7 @@ export default function UsersPage() {
         initialUser={selectedUser}
         onSave={handleSave}
         currentUserId={user.id}
+        owners={owners.filter((owner) => !owner.isArchived)}
       />
 
       <ConfirmDeleteModal

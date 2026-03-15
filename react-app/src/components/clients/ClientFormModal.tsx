@@ -1,7 +1,20 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Form, Modal, Spinner } from "react-bootstrap";
-import { isBackendConfigured, saveOwner, type OwnerUpsertInput } from "../../lib/crmApi";
+import { Alert, Button, Card, Form, Modal, Spinner } from "react-bootstrap";
+import {
+  addOwnerNote,
+  deleteOwnerNoteItem,
+  isBackendConfigured,
+  saveOwner,
+  updateOwnerNote,
+  type OwnerUpsertInput,
+} from "../../lib/crmApi";
 import type { ContactMethod, Owner } from "../../types/models";
+
+interface DraftNote {
+  id: string;
+  sourceNoteId?: string;
+  text: string;
+}
 
 interface ClientFormModalProps {
   show: boolean;
@@ -23,10 +36,11 @@ export default function ClientFormModal({
   const [preferredContactMethod, setPreferredContactMethod] =
     useState<ContactMethod>("text");
   const [address, setAddress] = useState("");
-  const [notes, setNotes] = useState("");
+  const [draftNotes, setDraftNotes] = useState<DraftNote[]>([]);
+  const [noteDraftText, setNoteDraftText] = useState("");
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const originalNotes = initialOwner?.notes.map((note) => note.text).join("\n") ?? "";
 
   useEffect(() => {
     if (!show) return;
@@ -37,9 +51,54 @@ export default function ClientFormModal({
     setEmail(initialOwner?.email ?? "");
     setPreferredContactMethod(initialOwner?.preferredContactMethod ?? "text");
     setAddress(initialOwner?.address ?? "");
-    setNotes(initialOwner?.notes.map((note) => note.text).join("\n") ?? "");
+    setDraftNotes(
+      initialOwner?.notes
+        .filter((note) => !note.isArchived)
+        .map((note) => ({
+          id: `existing-${note.id}`,
+          sourceNoteId: note.id,
+          text: note.text,
+        })) ?? [],
+    );
+    setNoteDraftText("");
+    setEditingDraftId(null);
     setSaveError(null);
   }, [initialOwner, show]);
+
+  const resetDraftEditor = () => {
+    setNoteDraftText("");
+    setEditingDraftId(null);
+  };
+
+  const saveDraftNote = () => {
+    const trimmed = noteDraftText.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    if (editingDraftId) {
+      setDraftNotes((current) =>
+        current.map((note) =>
+          note.id === editingDraftId
+            ? {
+                ...note,
+                text: trimmed,
+              }
+            : note,
+        ),
+      );
+    } else {
+      setDraftNotes((current) => [
+        ...current,
+        {
+          id: `draft-${Date.now()}`,
+          text: trimmed,
+        },
+      ]);
+    }
+
+    resetDraftEditor();
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -55,13 +114,42 @@ export default function ClientFormModal({
       address,
     };
 
-    if (!initialOwner || notes !== originalNotes) {
-      payload.notes = notes;
-    }
-
     try {
       const result = await saveOwner(payload, initialOwner ?? undefined);
-      onSaved?.(result.data, result.mode);
+      const savedOwner = result.data;
+      const originalActiveNotes = initialOwner?.notes.filter((note) => !note.isArchived) ?? [];
+      const retainedIds = new Set(
+        draftNotes
+          .map((note) => note.sourceNoteId)
+          .filter((noteId): noteId is string => Boolean(noteId)),
+      );
+
+      for (const existingNote of originalActiveNotes) {
+        if (!retainedIds.has(existingNote.id)) {
+          await deleteOwnerNoteItem(savedOwner, existingNote.id);
+        }
+      }
+
+      let reconciledOwner = savedOwner;
+      for (const draftNote of draftNotes) {
+        if (draftNote.sourceNoteId) {
+          const originalNote = originalActiveNotes.find((note) => note.id === draftNote.sourceNoteId);
+          if (originalNote && originalNote.text !== draftNote.text) {
+            const noteResult = await updateOwnerNote(
+              reconciledOwner,
+              draftNote.sourceNoteId,
+              draftNote.text,
+              "internal",
+            );
+            reconciledOwner = noteResult.data;
+          }
+        } else {
+          const noteResult = await addOwnerNote(reconciledOwner, draftNote.text, "internal");
+          reconciledOwner = noteResult.data;
+        }
+      }
+
+      onSaved?.(reconciledOwner, result.mode);
       onHide();
     } catch (error) {
       setSaveError(
@@ -152,16 +240,75 @@ export default function ClientFormModal({
             />
           </Form.Group>
 
-          <Form.Group>
-            <Form.Label>Client Notes</Form.Label>
-            <Form.Control
-              as="textarea"
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Any special notes about this client..."
-            />
-          </Form.Group>
+          <div className="d-grid gap-3">
+            <div className="d-flex justify-content-between align-items-center gap-2">
+              <Form.Label className="mb-0">Client Notes</Form.Label>
+              <Button variant="outline-secondary" size="sm" onClick={resetDraftEditor}>
+                New Note
+              </Button>
+            </div>
+            <Form.Group>
+              <Form.Control
+                as="textarea"
+                rows={3}
+                value={noteDraftText}
+                onChange={(e) => setNoteDraftText(e.target.value)}
+                placeholder="Add an internal client note..."
+              />
+            </Form.Group>
+            <div className="d-flex justify-content-end gap-2">
+              {editingDraftId && (
+                <Button variant="outline-secondary" size="sm" onClick={resetDraftEditor}>
+                  Cancel Edit
+                </Button>
+              )}
+              <Button variant="primary" size="sm" onClick={saveDraftNote} disabled={!noteDraftText.trim()}>
+                Save Note Card
+              </Button>
+            </div>
+            <div className="d-grid gap-2">
+              {draftNotes.length === 0 ? (
+                <div className="text-muted small">No client notes added yet.</div>
+              ) : (
+                draftNotes.map((note) => (
+                  <Card key={note.id} className="client-note-preview">
+                    <Card.Body className="d-flex justify-content-between align-items-start gap-3">
+                      <div className="client-note-item">
+                        <div className="client-note-meta">
+                          <span className="note-visibility-pill note-visibility-pill-internal">Internal</span>
+                        </div>
+                        <div>{note.text}</div>
+                      </div>
+                      <div className="note-inline-actions">
+                        <button
+                          type="button"
+                          className="pet-row-indicator-button"
+                          onClick={() => {
+                            setEditingDraftId(note.id);
+                            setNoteDraftText(note.text);
+                          }}
+                        >
+                          <span className="pet-row-indicator">Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="pet-row-indicator-button"
+                          onClick={() => {
+                            setDraftNotes((current) => current.filter((item) => item.id !== note.id));
+                            if (editingDraftId === note.id) {
+                              resetDraftEditor();
+                            }
+                          }}
+                        >
+                          <span className="pet-row-indicator pet-row-indicator-danger">Remove</span>
+                        </button>
+                      </div>
+                    </Card.Body>
+                  </Card>
+                ))
+              )}
+            </div>
+          </div>
         </Modal.Body>
 
         <Modal.Footer>

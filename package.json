@@ -1,12 +1,18 @@
 {
   "private": true,
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "workspaces": [
     "react-app"
   ],
   "scripts": {
     "build": "npm run build --workspace react-app",
     "lint": "npm run lint --workspace react-app",
-    "netlify:dev": "npx netlify dev"
+    "dev:web": "npm run dev --workspace react-app",
+    "dev:web:lan": "npm run dev --workspace react-app -- --host 0.0.0.0 --port 3000",
+    "dev:api": "npx netlify dev --port 8888",
+    "netlify:dev": "npx netlify dev --port 8888"
   },
   "dependencies": {
     "@netlify/neon": "^0.1.0",

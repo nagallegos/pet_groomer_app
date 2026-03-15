@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Alert, Button, Card, Collapse, Form, ListGroup } from "react-bootstrap";
 import { useParams } from "react-router-dom";
 import { useAppData } from "../components/common/AppDataProvider";
+import { ChevronDownIcon, SearchIcon } from "../components/common/AppIcons";
 import ConfirmDeleteModal from "../components/common/ConfirmDeleteModal";
 import PageLoader from "../components/common/PageLoader";
 import { useAppToast } from "../components/common/AppToastProvider";
@@ -421,9 +422,7 @@ export default function ArchivePage() {
                     placeholder={pageConfig.searchPlaceholder}
                   />
                   <Button type="submit" variant="primary" aria-label="Search archives">
-                    <span aria-hidden="true" className="search-panel-icon">
-                      ⌕
-                    </span>
+                    <SearchIcon className="search-panel-icon" />
                   </Button>
                 </div>
               </Form.Group>
@@ -503,12 +502,9 @@ export default function ArchivePage() {
               aria-controls="archive-search-controls"
               aria-label={showControls ? "Hide filters and sort" : "Show filters and sort"}
             >
-              <span
-                aria-hidden="true"
+              <ChevronDownIcon
                 className={`search-panel-caret${showControls ? " search-panel-caret-open" : ""}`}
-              >
-                ▾
-              </span>
+              />
             </Button>
           </div>
         </Card.Body>

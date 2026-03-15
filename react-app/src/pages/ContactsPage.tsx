@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button, Card, Collapse, Form } from "react-bootstrap";
+import { ChevronDownIcon, SearchIcon } from "../components/common/AppIcons";
 import { useAppData } from "../components/common/AppDataProvider";
 import { useAppToast } from "../components/common/AppToastProvider";
 import PageLoader from "../components/common/PageLoader";
@@ -175,9 +176,7 @@ export default function ContactsPage() {
                     placeholder="Search by first or last name"
                   />
                   <Button type="submit" variant="primary" aria-label="Search clients">
-                    <span aria-hidden="true" className="search-panel-icon">
-                      ⌕
-                    </span>
+                    <SearchIcon className="search-panel-icon" />
                   </Button>
                 </div>
               </Form.Group>
@@ -287,12 +286,9 @@ export default function ContactsPage() {
               aria-controls="contact-search-controls"
               aria-label={showControls ? "Hide filters and sort" : "Show filters and sort"}
             >
-              <span
-                aria-hidden="true"
+              <ChevronDownIcon
                 className={`search-panel-caret${showControls ? " search-panel-caret-open" : ""}`}
-              >
-                ▾
-              </span>
+              />
             </Button>
           </div>
         </Card.Body>

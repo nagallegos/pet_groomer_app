@@ -1,18 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Form, Modal, Spinner } from "react-bootstrap";
+import { Alert, Button, Card, Form, Modal, Spinner } from "react-bootstrap";
 import { useAppToast } from "../common/AppToastProvider";
 import {
   APPOINTMENT_SERVICE_OPTIONS,
   derivePrimaryServiceType,
 } from "../../lib/appointmentServices";
-import { isBackendConfigured, saveAppointment } from "../../lib/crmApi";
-import type { Appointment, Owner, Pet } from "../../types/models";
+import {
+  addAppointmentNote,
+  isBackendConfigured,
+  saveAppointment,
+} from "../../lib/crmApi";
+import type { Appointment, NoteVisibility, Owner, Pet } from "../../types/models";
+
+interface DraftAppointmentNote {
+  id: string;
+  text: string;
+  visibility: NoteVisibility;
+}
 
 interface AppointmentFormModalProps {
   show: boolean;
   onHide: () => void;
   owners: Owner[];
   pets: Pet[];
+  lockedOwnerId?: string;
   initialOwnerId?: string;
   initialPetId?: string;
   initialDate?: string;
@@ -26,6 +37,7 @@ export default function AppointmentFormModal({
   onHide,
   owners,
   pets,
+  lockedOwnerId,
   initialOwnerId = "",
   initialPetId = "",
   initialDate = "",
@@ -42,7 +54,10 @@ export default function AppointmentFormModal({
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [customServiceType, setCustomServiceType] = useState("");
   const [cost, setCost] = useState("");
-  const [notes, setNotes] = useState("");
+  const [draftNotes, setDraftNotes] = useState<DraftAppointmentNote[]>([]);
+  const [noteDraftText, setNoteDraftText] = useState("");
+  const [noteDraftVisibility, setNoteDraftVisibility] = useState<NoteVisibility>("internal");
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -56,7 +71,10 @@ export default function AppointmentFormModal({
       setSelectedServices([]);
       setCustomServiceType("");
       setCost("");
-      setNotes("");
+      setDraftNotes([]);
+      setNoteDraftText("");
+      setNoteDraftVisibility("internal");
+      setEditingDraftId(null);
       setSaveError(null);
     }
   }, [
@@ -72,6 +90,13 @@ export default function AppointmentFormModal({
     () => owners.filter((owner) => !owner.isArchived),
     [owners],
   );
+  const lockedOwner = useMemo(
+    () =>
+      lockedOwnerId
+        ? activeOwners.find((owner) => owner.id === lockedOwnerId) ?? null
+        : null,
+    [activeOwners, lockedOwnerId],
+  );
 
   const availablePets = useMemo(() => {
     if (!ownerId) return [];
@@ -79,6 +104,40 @@ export default function AppointmentFormModal({
   }, [ownerId, pets]);
 
   const customSelected = selectedServices.includes("Custom");
+
+  const resetDraftEditor = () => {
+    setNoteDraftText("");
+    setNoteDraftVisibility("internal");
+    setEditingDraftId(null);
+  };
+
+  const saveDraftNote = () => {
+    const trimmed = noteDraftText.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    if (editingDraftId) {
+      setDraftNotes((current) =>
+        current.map((note) =>
+          note.id === editingDraftId
+            ? { ...note, text: trimmed, visibility: noteDraftVisibility }
+            : note,
+        ),
+      );
+    } else {
+      setDraftNotes((current) => [
+        ...current,
+        {
+          id: `draft-${Date.now()}`,
+          text: trimmed,
+          visibility: noteDraftVisibility,
+        },
+      ]);
+    }
+
+    resetDraftEditor();
+  };
 
   const toggleService = (service: string) => {
     setSelectedServices((currentServices) =>
@@ -111,12 +170,20 @@ export default function AppointmentFormModal({
       selectedServices,
       customServiceType: customSelected ? customServiceType : undefined,
       cost: Number(cost) || 0,
-      notes,
       status: "scheduled" as const,
     };
 
     try {
       const result = await saveAppointment(payload);
+      let reconciledAppointment = result.data;
+      for (const note of draftNotes) {
+        const noteResult = await addAppointmentNote(
+          reconciledAppointment,
+          note.text,
+          note.visibility,
+        );
+        reconciledAppointment = noteResult.data;
+      }
       showToast({
         title: "Appointment Saved",
         body:
@@ -125,7 +192,7 @@ export default function AppointmentFormModal({
             : "Appointment saved in mock mode. Connect the API later to persist changes.",
         variant: "success",
       });
-      onSaved?.(result.data);
+      onSaved?.(reconciledAppointment);
       onHide();
     } catch (error) {
       setSaveError(
@@ -163,22 +230,35 @@ export default function AppointmentFormModal({
 
           <Form.Group className="mb-3" controlId="clientSelect">
             <Form.Label id="clientLabel">Client</Form.Label>
-            <Form.Select
-              value={ownerId}
-              onChange={(e) => {
-                setOwnerId(e.target.value);
-                setPetId("");
-              }}
-              required
-              aria-labelledby="clientLabel"
-            >
-              <option value="">Select a client</option>
-              {activeOwners.map((owner) => (
-                <option key={owner.id} value={owner.id}>
-                  {owner.firstName} {owner.lastName}
-                </option>
-              ))}
-            </Form.Select>
+            {lockedOwner ? (
+              <>
+                <Form.Control
+                  value={`${lockedOwner.firstName} ${lockedOwner.lastName}`}
+                  readOnly
+                  aria-labelledby="clientLabel"
+                />
+                <Form.Text muted>
+                  This appointment will be scheduled for this client.
+                </Form.Text>
+              </>
+            ) : (
+              <Form.Select
+                value={ownerId}
+                onChange={(e) => {
+                  setOwnerId(e.target.value);
+                  setPetId("");
+                }}
+                required
+                aria-labelledby="clientLabel"
+              >
+                <option value="">Select a client</option>
+                {activeOwners.map((owner) => (
+                  <option key={owner.id} value={owner.id}>
+                    {owner.firstName} {owner.lastName}
+                  </option>
+                ))}
+              </Form.Select>
+            )}
           </Form.Group>
 
           <Form.Group className="mb-3" controlId="petSelect">
@@ -290,18 +370,90 @@ export default function AppointmentFormModal({
             />
           </Form.Group>
 
-          <Form.Group>
-            <Form.Label id="notesLabel">Appointment Notes</Form.Label>
-            <Form.Control
-              as="textarea"
-              rows={4}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add any grooming notes or instructions..."
-              title="Enter appointment notes"
-              aria-labelledby="notesLabel"
-            />
-          </Form.Group>
+          <div className="d-grid gap-3">
+            <div className="d-flex justify-content-between align-items-center gap-2">
+              <Form.Label id="notesLabel" className="mb-0">Appointment Notes</Form.Label>
+              <Button variant="outline-secondary" size="sm" onClick={resetDraftEditor}>
+                New Note
+              </Button>
+            </div>
+            <Form.Group>
+              <Form.Control
+                as="textarea"
+                rows={3}
+                value={noteDraftText}
+                onChange={(e) => setNoteDraftText(e.target.value)}
+                placeholder="Add grooming notes or instructions..."
+                title="Enter appointment note"
+                aria-labelledby="notesLabel"
+              />
+            </Form.Group>
+            <Form.Group>
+              <Form.Label>Visibility</Form.Label>
+              <Form.Select
+                value={noteDraftVisibility}
+                onChange={(e) => setNoteDraftVisibility(e.target.value as NoteVisibility)}
+              >
+                <option value="internal">Internal only</option>
+                <option value="client">Client-facing</option>
+              </Form.Select>
+            </Form.Group>
+            <div className="d-flex justify-content-end gap-2">
+              {editingDraftId && (
+                <Button variant="outline-secondary" size="sm" onClick={resetDraftEditor}>
+                  Cancel Edit
+                </Button>
+              )}
+              <Button variant="primary" size="sm" onClick={saveDraftNote} disabled={!noteDraftText.trim()}>
+                Save Note Card
+              </Button>
+            </div>
+            <div className="d-grid gap-2">
+              {draftNotes.length === 0 ? (
+                <div className="text-muted small">No appointment notes added yet.</div>
+              ) : (
+                draftNotes.map((note) => (
+                  <Card key={note.id} className="client-note-preview">
+                    <Card.Body className="d-flex justify-content-between align-items-start gap-3">
+                      <div className="client-note-item">
+                        <div className="client-note-meta">
+                          <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
+                            {note.visibility === "client" ? "Client-facing" : "Internal"}
+                          </span>
+                        </div>
+                        <div>{note.text}</div>
+                      </div>
+                      <div className="note-inline-actions">
+                        <button
+                          type="button"
+                          className="pet-row-indicator-button"
+                          onClick={() => {
+                            setEditingDraftId(note.id);
+                            setNoteDraftText(note.text);
+                            setNoteDraftVisibility(note.visibility);
+                          }}
+                        >
+                          <span className="pet-row-indicator">Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="pet-row-indicator-button"
+                          onClick={() => {
+                            setDraftNotes((current) => current.filter((item) => item.id !== note.id));
+                            if (editingDraftId === note.id) {
+                              resetDraftEditor();
+                            }
+                          }}
+                        >
+                          <span className="pet-row-indicator pet-row-indicator-danger">Remove</span>
+                        </button>
+                      </div>
+                    </Card.Body>
+                  </Card>
+                ))
+              )}
+            </div>
+          </div>
         </Modal.Body>
 
         <Modal.Footer>

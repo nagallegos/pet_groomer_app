@@ -16,11 +16,9 @@ The API lives at `/api/*` and is implemented in [netlify/functions/api.mjs](./ne
 - Creates the core schema automatically on first API request
 - Keeps the current frontend mock-read flow intact so the app still runs locally without a database
 
-## What is still mock-only
+## Current app state
 
-Most pages still read from [react-app/src/data/mockData.ts](./react-app/src/data/mockData.ts). The backend now exposes read endpoints, but the frontend has not yet been switched over to hydrate from them.
-
-That means production writes can now persist, but a full live-data app still needs one more pass to replace the current mock reads with `/api/bootstrap` or page-level API queries.
+The app now hydrates from the backend bootstrap endpoint first and falls back to mock data only when the API is unavailable. Normal authenticated usage should be database-backed.
 
 ## Official references
 
@@ -31,21 +29,17 @@ As of March 13, 2026, Netlify documents Netlify DB as a beta Postgres integratio
 
 ## Local setup
 
-1. Install root dependencies:
+1. Use Node `20.19+`.
+
+This repo includes [.node-version](./.node-version) with the current expected version. If you are using WSL, install dependencies and run the dev servers from WSL consistently.
+
+2. Install root dependencies:
 
 ```powershell
 npm install
 ```
 
-2. Install frontend dependencies if needed:
-
-```powershell
-cd react-app
-npm install
-cd ..
-```
-
-3. Initialize Netlify DB locally:
+3. Initialize Netlify DB locally if needed:
 
 ```powershell
 npx netlify db init
@@ -54,20 +48,20 @@ npx netlify db init
 4. Run through Netlify so functions and env vars are available:
 
 ```powershell
-npx netlify dev
+npx netlify dev --port 8888
 ```
 
-5. If you want to keep using the plain Vite dev server in `react-app`, the app now proxies `/api` calls to `http://localhost:8888` by default. Run the backend and frontend in separate terminals:
+5. Run the frontend in a separate terminal:
 
 ```powershell
 # terminal 1, repo root
-npx netlify dev
+npm run dev:api
 
-# terminal 2, react-app
-npm run dev
+# terminal 2, repo root
+npm run dev:web:lan
 ```
 
-Then use the Vite URL for the frontend while `/api` requests forward to the Netlify dev server.
+Then open the Vite URL for the frontend. The frontend proxies API calls to `http://127.0.0.1:8888` by default.
 
 If your backend is running on another port, set:
 
@@ -111,10 +105,10 @@ If those env vars are missing, no users are created and login will fail until yo
 
 ## Frontend API base URL
 
-The frontend now defaults to `/api`. For local Vite development, use:
+The frontend now defaults to `/.netlify/functions/api`. For local Vite development, use:
 
 ```text
-VITE_API_BASE_URL=/api
+VITE_API_BASE_URL=/.netlify/functions/api
 VITE_API_PROXY_TARGET=http://localhost:8888
 ```
 
