@@ -1,6 +1,60 @@
 # pet_groomer_app
 This is an app for a pet groomer to keep track of their clients and appointments.
 
+## What Was Built
+
+Here is a summary of everything that was created in the initial implementation:
+
+### React Application (`react-app/`)
+
+A fully functional single-page application built with **React 19 + TypeScript** (powered by Vite) and styled with **Bootstrap 5 + react-bootstrap**.
+
+#### Features
+
+- **Client Management** (`src/components/ClientList.tsx`)
+  - View all clients in a sortable table (Owner Name, Phone, Email, Pet Name, Pet Breed)
+  - Add a new client via a modal form
+  - Edit an existing client's details
+  - Delete a client
+  - Live count badge showing the total number of clients
+  - Sample data pre-loaded (Alice Johnson / Buddy and Bob Smith / Mittens)
+
+- **Appointment Management** (`src/components/AppointmentList.tsx`)
+  - View all appointments in a table (Date, Time, Client, Pet, Service, Notes)
+  - Appointments are automatically sorted chronologically by date and time
+  - Add a new appointment via a modal form with a dropdown for service type
+  - Edit an existing appointment
+  - Delete an appointment
+  - Live count badge showing the total number of appointments
+  - Supported services: Bath & Brush, Full Groom, Nail Trim, Teeth Cleaning, Ear Cleaning, De-shedding
+  - Sample data pre-loaded with two upcoming appointments
+
+- **App Shell** (`src/App.tsx`)
+  - Responsive navigation bar with a 🐾 brand logo
+  - Tab-based navigation to switch between the Clients and Appointments views
+
+#### Project Files Created
+
+| File | Purpose |
+|------|---------|
+| `react-app/src/main.tsx` | App entry point; mounts React and imports Bootstrap CSS |
+| `react-app/src/App.tsx` | Root component with navbar and tab navigation |
+| `react-app/src/App.css` | Minimal app-level styles |
+| `react-app/src/index.css` | Global base styles |
+| `react-app/src/components/ClientList.tsx` | Client CRUD component |
+| `react-app/src/components/AppointmentList.tsx` | Appointment CRUD component |
+| `react-app/index.html` | HTML entry point |
+| `react-app/vite.config.ts` | Vite configuration |
+| `react-app/tsconfig*.json` | TypeScript configuration files |
+| `react-app/eslint.config.js` | ESLint configuration |
+| `react-app/package.json` | Dependencies and npm scripts |
+
+### Developer Environment
+
+- **`.devcontainer/devcontainer.json`** – Dev Container configuration so the app runs out of the box in VS Code or GitHub Codespaces (Node.js 22, auto-installs dependencies, forwards port 5173)
+- **`.vscode/extensions.json`** – Recommended VS Code extensions (Prettier, ESLint, TypeScript Next, React Snippets, GitHub Copilot)
+- **`.vscode/settings.json`** – Workspace settings (format on save with Prettier, ESLint auto-fix, TypeScript validation)
+
 ## Tech Stack
 
 - **Frontend**: React 19 + TypeScript (Vite)
