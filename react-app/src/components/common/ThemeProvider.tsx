@@ -1,34 +1,99 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useAuth } from "./useAuth";
 
-type ThemeMode = "light" | "dark";
+export type ThemeMode = "light" | "dark";
+export type ThemeName = "lavender" | "green" | "blue" | "pink" | "white" | "high-contrast";
+
+const themeNameValues: ThemeName[] = [
+  "lavender",
+  "green",
+  "blue",
+  "pink",
+  "white",
+  "high-contrast",
+];
+
+const normalizeThemeName = (value: string | null | undefined): ThemeName => {
+  return themeNameValues.includes(value as ThemeName) ? (value as ThemeName) : "lavender";
+};
 
 interface ThemeContextValue {
-  theme: ThemeMode;
-  toggleTheme: () => void;
+  themeMode: ThemeMode;
+  themeName: ThemeName;
+  setThemeMode: (mode: ThemeMode) => void;
+  setThemeName: (name: ThemeName) => void;
+  toggleThemeMode: () => void;
+  isDarkModeAvailable: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<ThemeMode>(() => {
-    const savedTheme = window.localStorage.getItem("bb-love-theme");
-    return savedTheme === "dark" ? "dark" : "light";
+  const { user } = useAuth();
+  const [themeMode, setThemeModeState] = useState<ThemeMode>(() => {
+    const savedMode =
+      window.localStorage.getItem("bb-love-theme-mode") ??
+      window.localStorage.getItem("bb-love-theme");
+    return savedMode === "dark" ? "dark" : "light";
+  });
+  const [themeName, setThemeNameState] = useState<ThemeName>(() => {
+    const savedName = window.localStorage.getItem("bb-love-theme-name");
+    return normalizeThemeName(savedName);
   });
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    window.localStorage.setItem("bb-love-theme", theme);
-  }, [theme]);
+    if (!user) {
+      return;
+    }
+
+    if (user.themeName) {
+      setThemeNameState(normalizeThemeName(user.themeName));
+    }
+    if (user.themeMode) {
+      setThemeModeState(user.themeMode);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (themeName === "high-contrast" && themeMode === "dark") {
+      setThemeModeState("light");
+    }
+  }, [themeMode, themeName]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = themeMode;
+    document.documentElement.dataset.colorTheme = themeName;
+    document.documentElement.setAttribute("data-bs-theme", themeMode);
+    window.localStorage.setItem("bb-love-theme-mode", themeMode);
+    window.localStorage.setItem("bb-love-theme-name", themeName);
+  }, [themeMode, themeName]);
+
+  const setThemeMode = (mode: ThemeMode) => {
+    if (themeName === "high-contrast" && mode === "dark") {
+      setThemeModeState("light");
+      return;
+    }
+    setThemeModeState(mode);
+  };
+
+  const setThemeName = (name: ThemeName) => {
+    setThemeNameState(name);
+    if (name === "high-contrast") {
+      setThemeModeState("light");
+    }
+  };
 
   const value = useMemo(
     () => ({
-      theme,
-      toggleTheme: () =>
-        setTheme((currentTheme) =>
-          currentTheme === "dark" ? "light" : "dark",
-        ),
+      themeMode,
+      themeName,
+      setThemeMode,
+      setThemeName,
+      toggleThemeMode: () =>
+        setThemeMode(themeMode === "dark" ? "light" : "dark"),
+      isDarkModeAvailable: themeName !== "high-contrast",
     }),
-    [theme],
+    [themeMode, themeName],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

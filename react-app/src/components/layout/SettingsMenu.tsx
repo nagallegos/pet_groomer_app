@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Dropdown, Form } from "react-bootstrap";
 import { Gear } from "react-bootstrap-icons";
 import { Link } from "react-router-dom";
+import { useAppToast } from "../common/AppToastProvider";
 import { useAuth } from "../common/useAuth";
 import { useTheme } from "../common/ThemeProvider";
 import UserSettingsModal from "./UserSettingsModal";
@@ -17,9 +18,11 @@ export default function SettingsMenu({
   toggleClassName = "",
   onNavigate,
 }: SettingsMenuProps) {
-  const { theme, toggleTheme } = useTheme();
-  const { user, logout } = useAuth();
+  const { themeMode, themeName, toggleThemeMode, setThemeMode, isDarkModeAvailable } = useTheme();
+  const { user, updateProfile, logout } = useAuth();
+  const { showToast } = useAppToast();
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [isSavingTheme, setIsSavingTheme] = useState(false);
   const userLabel = user
     ? `${user.firstName} ${user.lastName}`.trim() || user.name
     : "";
@@ -53,17 +56,56 @@ export default function SettingsMenu({
           <Dropdown.Item onClick={() => setShowSettingsModal(true)}>
             Profile & Notifications
           </Dropdown.Item>
+          <Dropdown.Item as={Link} to="/personalization" onClick={onNavigate}>
+            Personalization
+          </Dropdown.Item>
 
           <Dropdown.Divider />
 
           <div className="px-3 py-2">
-            <Form.Check
-              type="switch"
-              id={`theme-switch-${mobile ? "mobile" : "desktop"}`}
-              label="Switch to dark mode"
-              checked={theme === "dark"}
-              onChange={toggleTheme}
-            />
+            <span
+              title={!isDarkModeAvailable ? "Dark mode is unavailable for the high-contrast theme." : undefined}
+            >
+              <Form.Check
+                type="switch"
+                id={`theme-switch-${mobile ? "mobile" : "desktop"}`}
+                label="Switch to dark mode"
+                checked={themeMode === "dark"}
+                onChange={async () => {
+                  if (!isDarkModeAvailable) {
+                    return;
+                  }
+                  const nextMode = themeMode === "dark" ? "light" : "dark";
+                  toggleThemeMode();
+                  if (!user) {
+                    return;
+                  }
+                  setIsSavingTheme(true);
+                  try {
+                    await updateProfile({
+                      firstName: user.firstName,
+                      lastName: user.lastName,
+                      email: user.email,
+                      phone: user.phone,
+                      notifyByEmail: user.notifyByEmail,
+                      notifyByText: user.notifyByText,
+                      themeName,
+                      themeMode: nextMode,
+                    });
+                  } catch (error) {
+                    setThemeMode(themeMode);
+                    showToast({
+                      title: "Theme update failed",
+                      body: error instanceof Error ? error.message : "Unable to update theme.",
+                      variant: "danger",
+                    });
+                  } finally {
+                    setIsSavingTheme(false);
+                  }
+                }}
+                disabled={!isDarkModeAvailable || isSavingTheme}
+              />
+            </span>
           </div>
 
           <Dropdown.Divider />

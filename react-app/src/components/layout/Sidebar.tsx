@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge, Nav, Offcanvas } from "react-bootstrap";
-import { BarChart, Bell, Calendar, Clipboard, Heart, House, People, Person } from "react-bootstrap-icons";
+import { BarChart, Bell, Calendar, Clipboard, Heart, House, List, People, Person } from "react-bootstrap-icons";
 import { NavLink } from "react-router-dom";
 import { listUserNotifications } from "../../lib/crmApi";
 import { useAuth } from "../common/useAuth";
@@ -9,6 +9,8 @@ import SettingsMenu from "./SettingsMenu";
 interface SidebarProps {
   showMobile: boolean;
   onHideMobile: () => void;
+  isDesktopOpen: boolean;
+  onDesktopToggle: () => void;
 }
 
 const staffNavItems = [
@@ -65,7 +67,12 @@ const clientNavItems = [
   staffNavItems[4],
 ] as const;
 
-export default function Sidebar({ showMobile, onHideMobile }: SidebarProps) {
+export default function Sidebar({
+  showMobile,
+  onHideMobile,
+  isDesktopOpen,
+  onDesktopToggle,
+}: SidebarProps) {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   const baseNavItems = user?.role === "client" ? clientNavItems : staffNavItems;
@@ -125,12 +132,20 @@ export default function Sidebar({ showMobile, onHideMobile }: SidebarProps) {
     <>
       <aside className="sidebar-desktop d-none d-lg-flex flex-column">
         <div className="sidebar-top">
-          <div className="sidebar-brand">
+          <div className="sidebar-top-controls">
             <span className="sidebar-brand-mark" aria-hidden="true">🐶</span>
-            <div>
-              <p className="sidebar-eyebrow mb-1">Pet Grooming Manager</p>
-              <h4 className="sidebar-title mb-0">Barks Bubbles & Love</h4>
-            </div>
+            <button
+              type="button"
+              className="sidebar-menu-toggle"
+              onClick={onDesktopToggle}
+              aria-label={isDesktopOpen ? "Collapse sidebar" : "Expand sidebar"}
+            >
+              <List />
+            </button>
+          </div>
+          <div className="sidebar-brand-text">
+            <p className="sidebar-eyebrow mb-1">Pet Grooming Manager</p>
+            <h4 className="sidebar-title mb-0">Barks Bubbles & Love</h4>
           </div>
           <div className="sidebar-settings-wrap">
             <SettingsMenu />
@@ -143,7 +158,7 @@ export default function Sidebar({ showMobile, onHideMobile }: SidebarProps) {
               <span aria-hidden="true" className="sidebar-link-icon">
                 {item.icon}
               </span>
-              <span>{item.label}</span>
+              <span className="sidebar-link-label">{item.label}</span>
               {item.showBadge && (
                 <Badge pill bg="danger" className="sidebar-notification-badge">
                   {unreadCount}
@@ -189,7 +204,7 @@ export default function Sidebar({ showMobile, onHideMobile }: SidebarProps) {
                 <span aria-hidden="true" className="sidebar-link-icon">
                   {item.icon}
                 </span>
-                <span>{item.label}</span>
+                <span className="sidebar-link-label">{item.label}</span>
                 {item.showBadge && (
                   <Badge pill bg="danger" className="sidebar-notification-badge">
                     {unreadCount}

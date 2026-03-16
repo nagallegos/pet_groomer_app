@@ -21,6 +21,7 @@ import ClientPetsPage from "./pages/ClientPetsPage";
 import ClientAppointmentsPage from "./pages/ClientAppointmentsPage";
 import RequestsPage from "./pages/RequestsPage";
 import NotificationsPage from "./pages/NotificationsPage";
+import PersonalizationPage from "./pages/PersonalizationPage";
 import RequestPasswordResetPage from "./pages/RequestPasswordResetPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import AccountSetupPage from "./pages/AccountSetupPage";
@@ -38,8 +39,8 @@ function PetsRoute() {
 
 const App = () => {
   return (
-    <ThemeProvider>
-      <AuthProvider>
+    <AuthProvider>
+      <ThemeProvider>
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
@@ -64,6 +65,7 @@ const App = () => {
                 <Route path="pets" element={<PetsRoute />} />
                 <Route path="requests" element={<RequestsPage />} />
                 <Route path="notifications" element={<NotificationsPage />} />
+                <Route path="personalization" element={<PersonalizationPage />} />
                 <Route path="appointments" element={<RequireAuth allowedRoles={["client"]} />}>
                   <Route index element={<ClientAppointmentsPage />} />
                 </Route>
@@ -83,8 +85,8 @@ const App = () => {
             </Route>
           </Routes>
         </BrowserRouter>
-      </AuthProvider>
-    </ThemeProvider>
+      </ThemeProvider>
+    </AuthProvider>
   );
 };
 

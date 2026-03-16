@@ -13,6 +13,8 @@ export interface AppUser {
   phone: string;
   notifyByEmail: boolean;
   notifyByText: boolean;
+  themeName?: string;
+  themeMode?: "light" | "dark";
   lockedAt?: string;
   ownerId?: string;
 }
@@ -24,6 +26,8 @@ export interface UserProfileInput {
   phone: string;
   notifyByEmail: boolean;
   notifyByText: boolean;
+  themeName?: string;
+  themeMode?: "light" | "dark";
 }
 
 export interface AuthContextValue {

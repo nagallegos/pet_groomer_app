@@ -27,6 +27,15 @@ const clientRequestTypes = new Set([
   "general",
 ]);
 const clientRequestStatuses = new Set(["open", "in_review", "resolved", "closed"]);
+const themeNames = new Set([
+  "lavender",
+  "green",
+  "blue",
+  "pink",
+  "white",
+  "high-contrast",
+]);
+const themeModes = new Set(["light", "dark"]);
 
 let schemaReadyPromise;
 const SESSION_COOKIE = "pet_grooming_session";
@@ -226,6 +235,8 @@ function mapAppUser(row) {
     phone: row.phone ?? "",
     notifyByEmail: row.notify_by_email ?? true,
     notifyByText: row.notify_by_text ?? false,
+    themeName: row.theme_name ?? "lavender",
+    themeMode: row.theme_mode ?? "light",
     isActive: row.is_active ?? true,
     failedLoginAttempts: row.failed_login_attempts ?? 0,
     lockedAt: toIso(row.locked_at),
@@ -532,6 +543,8 @@ async function ensureSchema() {
           owner_id UUID REFERENCES owners(id) ON DELETE SET NULL,
           notify_by_email BOOLEAN NOT NULL DEFAULT TRUE,
           notify_by_text BOOLEAN NOT NULL DEFAULT FALSE,
+          theme_name TEXT NOT NULL DEFAULT 'lavender',
+          theme_mode TEXT NOT NULL DEFAULT 'light',
           failed_login_attempts INTEGER NOT NULL DEFAULT 0,
           locked_at TIMESTAMPTZ,
           last_login_at TIMESTAMPTZ,
@@ -663,6 +676,8 @@ async function ensureSchema() {
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES owners(id) ON DELETE SET NULL`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS notify_by_email BOOLEAN NOT NULL DEFAULT TRUE`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS notify_by_text BOOLEAN NOT NULL DEFAULT FALSE`;
+      await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS theme_name TEXT NOT NULL DEFAULT 'lavender'`;
+      await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS theme_mode TEXT NOT NULL DEFAULT 'light'`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER NOT NULL DEFAULT 0`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`;
@@ -980,7 +995,7 @@ async function getUserByIdentifier(identifier) {
   const rows = await sql`
     SELECT id::text AS id, email, username, password_hash, role, display_name, first_name,
            last_name, phone, owner_id::text AS owner_id, notify_by_email,
-           notify_by_text, is_active, failed_login_attempts, locked_at
+           notify_by_text, theme_name, theme_mode, is_active, failed_login_attempts, locked_at
     FROM app_users
     WHERE LOWER(email) = ${normalized}
        OR LOWER(COALESCE(username, '')) = ${normalized}
@@ -991,7 +1006,7 @@ async function getUserByIdentifier(identifier) {
 async function listAppUsers() {
   const rows = await sql`
     SELECT id::text AS id, email, username, role, display_name, first_name, last_name, phone,
-           owner_id::text AS owner_id, notify_by_email, notify_by_text, is_active,
+           owner_id::text AS owner_id, notify_by_email, notify_by_text, theme_name, theme_mode, is_active,
            failed_login_attempts, locked_at, created_at, updated_at
     FROM app_users
     ORDER BY last_name ASC, first_name ASC, email ASC
@@ -1210,7 +1225,7 @@ async function markUserNotificationRead(userId, notificationId) {
 async function listActiveUsersByRoles(roles) {
   const rows = await sql`
     SELECT id::text AS id, email, username, role, display_name, first_name, last_name, phone,
-           owner_id::text AS owner_id, notify_by_email, notify_by_text, is_active,
+           owner_id::text AS owner_id, notify_by_email, notify_by_text, theme_name, theme_mode, is_active,
            failed_login_attempts, locked_at, created_at, updated_at
     FROM app_users
     WHERE role = ANY(${roles})
@@ -1222,7 +1237,7 @@ async function listActiveUsersByRoles(roles) {
 async function listActiveUsersByOwner(ownerId) {
   const rows = await sql`
     SELECT id::text AS id, email, username, role, display_name, first_name, last_name, phone,
-           owner_id::text AS owner_id, notify_by_email, notify_by_text, is_active,
+           owner_id::text AS owner_id, notify_by_email, notify_by_text, theme_name, theme_mode, is_active,
            failed_login_attempts, locked_at, created_at, updated_at
     FROM app_users
     WHERE owner_id = ${ownerId}::uuid
@@ -1601,7 +1616,7 @@ async function incrementFailedLoginAttempt(user) {
         updated_at = NOW()
     WHERE id = ${user.id}::uuid
     RETURNING id::text AS id, email, username, role, display_name, first_name, last_name, phone,
-              owner_id::text AS owner_id, notify_by_email, notify_by_text, is_active,
+              owner_id::text AS owner_id, notify_by_email, notify_by_text, theme_name, theme_mode, is_active,
               failed_login_attempts, locked_at, created_at, updated_at
   `;
   return rows[0] ? mapAppUser(rows[0]) : null;
@@ -1617,7 +1632,7 @@ async function getCurrentUser(event) {
   const rows = await sql`
     SELECT u.id::text AS id, u.email, u.username, u.role, u.display_name, u.first_name,
            u.last_name, u.phone, u.owner_id::text AS owner_id, u.notify_by_email,
-           u.notify_by_text, u.is_active, u.failed_login_attempts, u.locked_at
+           u.notify_by_text, u.theme_name, u.theme_mode, u.is_active, u.failed_login_attempts, u.locked_at
     FROM app_sessions s
     JOIN app_users u ON u.id = s.user_id
     WHERE s.session_token = ${token}
@@ -1636,6 +1651,18 @@ function validateUserProfilePayload(payload) {
   const phone = optionalString(payload.phone);
   const notifyByEmail = optionalBoolean(payload.notifyByEmail, "notifyByEmail");
   const notifyByText = optionalBoolean(payload.notifyByText, "notifyByText");
+  const themeName = optionalString(payload.themeName);
+  let themeMode = optionalString(payload.themeMode);
+
+  if (themeName && !themeNames.has(themeName)) {
+    throw new Error("Theme selection is invalid.");
+  }
+  if (themeMode && !themeModes.has(themeMode)) {
+    throw new Error("Theme mode is invalid.");
+  }
+  if (themeName === "high-contrast" && themeMode === "dark") {
+    themeMode = "light";
+  }
 
   if (notifyByText && !phone) {
     throw new Error("A phone number is required when text notifications are enabled.");
@@ -1648,6 +1675,8 @@ function validateUserProfilePayload(payload) {
     phone,
     notifyByEmail,
     notifyByText,
+    themeName,
+    themeMode,
   };
 }
 
@@ -1722,10 +1751,13 @@ async function updateCurrentUserProfile(userId, payload) {
         phone = ${input.phone},
         notify_by_email = ${input.notifyByEmail},
         notify_by_text = ${input.notifyByText},
+        theme_name = COALESCE(${input.themeName}, theme_name),
+        theme_mode = COALESCE(${input.themeMode}, theme_mode),
         updated_at = NOW()
     WHERE id = ${userId}::uuid
     RETURNING id::text AS id, email, username, role, display_name, first_name, last_name,
               phone, owner_id::text AS owner_id, notify_by_email, notify_by_text,
+              theme_name, theme_mode,
               failed_login_attempts, locked_at
   `;
 
@@ -1779,6 +1811,7 @@ async function createAppUser(payload) {
     )
     RETURNING id::text AS id, email, username, role, display_name, first_name, last_name,
               phone, owner_id::text AS owner_id, notify_by_email, notify_by_text,
+              theme_name, theme_mode,
               is_active, failed_login_attempts, locked_at, created_at, updated_at
   `;
 
@@ -1859,7 +1892,7 @@ async function updateAppUser(userId, payload, currentUserId) {
 
   const rows = await sql`
     SELECT id::text AS id, email, username, role, display_name, first_name, last_name, phone,
-           owner_id::text AS owner_id, notify_by_email, notify_by_text,
+           owner_id::text AS owner_id, notify_by_email, notify_by_text, theme_name, theme_mode,
            is_active, failed_login_attempts, locked_at, created_at, updated_at
     FROM app_users
     WHERE id = ${userId}::uuid
@@ -1878,6 +1911,7 @@ async function deleteAppUser(userId, currentUserId) {
     WHERE id = ${userId}::uuid
     RETURNING id::text AS id, email, username, role, display_name, first_name, last_name,
               phone, owner_id::text AS owner_id, notify_by_email, notify_by_text,
+              theme_name, theme_mode,
               is_active, failed_login_attempts, locked_at, created_at, updated_at
   `;
 
@@ -1893,6 +1927,7 @@ async function unlockAppUser(userId) {
     WHERE id = ${userId}::uuid
     RETURNING id::text AS id, email, username, role, display_name, first_name, last_name,
               phone, owner_id::text AS owner_id, notify_by_email, notify_by_text,
+              theme_name, theme_mode,
               is_active, failed_login_attempts, locked_at, created_at, updated_at
   `;
   return rows[0] ? mapAppUser(rows[0]) : null;
@@ -1902,6 +1937,7 @@ async function getAppUser(userId) {
   const rows = await sql`
     SELECT id::text AS id, email, username, role, display_name, first_name, last_name,
            phone, owner_id::text AS owner_id, notify_by_email, notify_by_text,
+           theme_name, theme_mode,
            is_active, failed_login_attempts, locked_at, created_at, updated_at
     FROM app_users
     WHERE id = ${userId}::uuid
