@@ -314,6 +314,17 @@ a {
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
+.notification-clear-btn {
+  padding: 0;
+  font-weight: 600;
+  color: #8b5cf6;
+  text-decoration: none;
+}
+
+.notification-clear-btn:disabled {
+  color: rgba(100, 116, 139, 0.55);
+}
+
 .notification-dropdown-empty {
   padding: 1rem;
   color: var(--bs-secondary-color);

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Badge, Dropdown } from "react-bootstrap";
+import { Badge, Button, Dropdown } from "react-bootstrap";
 import { Bell } from "react-bootstrap-icons";
 import { useNavigate } from "react-router-dom";
 import { listUserNotifications, markUserNotificationRead } from "../../lib/crmApi";
@@ -82,6 +82,22 @@ export default function NotificationBell() {
     navigate(notification.href || "/home");
   };
 
+  const handleClear = async () => {
+    const unread = notifications.filter((notification) => !notification.isRead);
+    if (unread.length > 0) {
+      await Promise.all(
+        unread.map(async (notification) => {
+          try {
+            await markUserNotificationRead(notification.id);
+          } catch {
+            // Ignore individual failures.
+          }
+        }),
+      );
+    }
+    setNotifications([]);
+  };
+
   return (
     <Dropdown align="end">
       <Dropdown.Toggle variant="outline-light" className="notification-bell-btn">
@@ -96,7 +112,20 @@ export default function NotificationBell() {
         <span className="visually-hidden">Notifications</span>
       </Dropdown.Toggle>
       <Dropdown.Menu className="notification-dropdown-menu">
-        <div className="notification-dropdown-header">Notifications</div>
+        <div className="notification-dropdown-header d-flex align-items-center justify-content-between gap-2">
+          <span>Notifications</span>
+          <Button
+            variant="link"
+            size="sm"
+            className="notification-clear-btn"
+            onClick={() => {
+              void handleClear();
+            }}
+            disabled={notifications.length === 0}
+          >
+            Clear
+          </Button>
+        </div>
         {notifications.length === 0 ? (
           <div className="notification-dropdown-empty">No notifications yet.</div>
         ) : (
