@@ -1285,6 +1285,33 @@ function buildAppointmentSummary(appointment, owner, pet) {
   };
 }
 
+function formatAppointmentDateTime(value) {
+  if (!value) {
+    return "Not provided";
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return `${value}`;
+  }
+
+  const timeZone =
+    process.env.EMAIL_TIMEZONE ??
+    process.env.APP_TIMEZONE ??
+    "America/Chicago";
+
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+    timeZoneName: "short",
+  }).format(parsedDate);
+}
+
 function getClientAvailableActions(appointmentStatus) {
   if (appointmentStatus === "scheduled") {
     return ["confirm", "cancel", "reschedule"];
@@ -1304,9 +1331,13 @@ function buildClientEmailNotification({
   const responsePageUrl = token
     ? buildAppUrl(`/appointment-response?token=${token}`)
     : null;
+  const formattedStart = formatAppointmentDateTime(summary.startsAt);
+  const formattedEnd = formatAppointmentDateTime(summary.endsAt);
   const actionButtons = isCancellation
     ? ""
-    : getClientAvailableActions(summary.status)
+    : !responsePageUrl
+      ? ""
+      : getClientAvailableActions(summary.status)
         .map((action) => {
           const label =
             action === "confirm"
@@ -1314,7 +1345,7 @@ function buildClientEmailNotification({
               : action === "cancel"
                 ? "Request Cancellation"
                 : "Request Reschedule";
-          return `<p><a href="${responsePageUrl}&action=${action}">${label}</a></p>`;
+          return `<a href="${responsePageUrl}&action=${action}" style="display:inline-block;margin:0 8px 10px 0;padding:11px 16px;border-radius:10px;text-decoration:none;font-weight:600;font-family:Arial,Helvetica,sans-serif;background:${action === "confirm" ? "#7a5ccf" : "#f1eefb"};color:${action === "confirm" ? "#ffffff" : "#3f2d74"};border:1px solid #cbbcf0;">${label}</a>`;
         })
         .join("");
   const subject = isCancellation
@@ -1330,8 +1361,8 @@ function buildClientEmailNotification({
   const text = [
     intro,
     `${summary.petName} for ${summary.ownerName}`,
-    `Starts: ${summary.startsAt}`,
-    `Ends: ${summary.endsAt}`,
+    `Starts: ${formattedStart}`,
+    `Ends: ${formattedEnd}`,
     `Service: ${summary.serviceSummary}`,
     !isCancellation && responsePageUrl ? `Manage this appointment: ${responsePageUrl}` : "",
   ]
@@ -1341,13 +1372,38 @@ function buildClientEmailNotification({
   return {
     subject,
     html: `
-      <p>${intro}</p>
-      <p><strong>Pet:</strong> ${summary.petName}<br />
-      <strong>Client:</strong> ${summary.ownerName}<br />
-      <strong>Starts:</strong> ${summary.startsAt}<br />
-      <strong>Ends:</strong> ${summary.endsAt}<br />
-      <strong>Service:</strong> ${summary.serviceSummary}</p>
-      ${actionButtons}
+      <div style="margin:0;padding:20px;background:#f6f2ff;">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e7defa;border-radius:16px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#2f2850;">
+          <tr>
+            <td style="padding:16px 22px;background:linear-gradient(135deg,#7a5ccf,#a98de9);color:#ffffff;">
+              <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.9;">Barks Bubbles &amp; Love</div>
+              <div style="font-size:20px;font-weight:700;margin-top:4px;">Appointment Update</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 22px 8px 22px;">
+              <p style="margin:0 0 14px 0;line-height:1.5;">${intro}</p>
+              <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;border-spacing:0 8px;">
+                <tr><td style="font-weight:700;width:130px;">Pet</td><td>${summary.petName}</td></tr>
+                <tr><td style="font-weight:700;">Client</td><td>${summary.ownerName}</td></tr>
+                <tr><td style="font-weight:700;">Starts</td><td>${formattedStart}</td></tr>
+                <tr><td style="font-weight:700;">Ends</td><td>${formattedEnd}</td></tr>
+                <tr><td style="font-weight:700;">Service</td><td>${summary.serviceSummary}</td></tr>
+              </table>
+            </td>
+          </tr>
+          ${
+            actionButtons
+              ? `<tr><td style="padding:10px 22px 4px 22px;"><div style="font-size:14px;font-weight:700;margin:0 0 10px 0;">Manage this appointment</div>${actionButtons}</td></tr>`
+              : ""
+          }
+          ${
+            responsePageUrl && !isCancellation
+              ? `<tr><td style="padding:8px 22px 20px 22px;"><a href="${responsePageUrl}" style="font-size:13px;color:#7a5ccf;text-decoration:underline;">Open appointment response page</a></td></tr>`
+              : ""
+          }
+        </table>
+      </div>
     `,
     text,
     responsePageUrl,
@@ -1358,8 +1414,9 @@ function buildClientTextNotification({ summary, token, notificationType, isCance
   const responsePageUrl = token
     ? buildAppUrl(`/appointment-response?token=${token}`)
     : null;
+  const formattedStart = formatAppointmentDateTime(summary.startsAt);
   if (isCancellation) {
-    return `Appointment update: ${summary.petName} on ${summary.startsAt} has been cancelled.`;
+    return `Appointment update: ${summary.petName} on ${formattedStart} has been cancelled.`;
   }
   const prefix =
     notificationType === "reminder_24h"
@@ -1368,7 +1425,7 @@ function buildClientTextNotification({ summary, token, notificationType, isCance
   const actions = getClientAvailableActions(summary.status)
     .map((action) => action.toUpperCase())
     .join(", or ");
-  return `${prefix} ${summary.petName} on ${summary.startsAt}. Reply ${actions}.${responsePageUrl ? ` Manage online: ${responsePageUrl}` : ""}`;
+  return `${prefix} ${summary.petName} on ${formattedStart}. Reply ${actions}.${responsePageUrl ? ` Manage online: ${responsePageUrl}` : ""}`;
 }
 
 function getRequestTypeLabel(requestType) {
@@ -2856,7 +2913,8 @@ async function updateAppointment(id, payload) {
   return appointment;
 }
 
-async function archiveOwner(id, shouldArchive) {
+async function archiveOwner(id, shouldArchive, options = {}) {
+  const includeRelated = options.includeRelated === true;
   const archivedAt = shouldArchive ? new Date().toISOString() : null;
   const rows = await sql`
     UPDATE owners
@@ -2866,6 +2924,91 @@ async function archiveOwner(id, shouldArchive) {
   `;
   if (rows.length === 0) {
     return null;
+  }
+
+  const petArchivedAt = shouldArchive ? archivedAt : null;
+  const noteArchivedAt = shouldArchive ? archivedAt : null;
+
+  if (shouldArchive) {
+    await sql`
+      UPDATE pets
+      SET is_archived = TRUE,
+          archived_at = ${petArchivedAt},
+          updated_at = NOW()
+      WHERE owner_id = ${id}::uuid
+    `;
+    await sql`
+      UPDATE appointments
+      SET is_archived = TRUE,
+          archived_at = ${petArchivedAt},
+          updated_at = NOW()
+      WHERE owner_id = ${id}::uuid
+    `;
+    await sql`
+      UPDATE owner_notes
+      SET is_archived = TRUE,
+          archived_at = ${noteArchivedAt},
+          updated_at = NOW()
+      WHERE owner_id = ${id}::uuid
+    `;
+    await sql`
+      UPDATE pet_notes
+      SET is_archived = TRUE,
+          archived_at = ${noteArchivedAt},
+          updated_at = NOW()
+      WHERE pet_id IN (
+        SELECT id FROM pets WHERE owner_id = ${id}::uuid
+      )
+    `;
+    await sql`
+      UPDATE appointment_notes
+      SET is_archived = TRUE,
+          archived_at = ${noteArchivedAt},
+          updated_at = NOW()
+      WHERE appointment_id IN (
+        SELECT id FROM appointments WHERE owner_id = ${id}::uuid
+      )
+    `;
+  } else if (includeRelated) {
+    await sql`
+      UPDATE pets
+      SET is_archived = FALSE,
+          archived_at = NULL,
+          updated_at = NOW()
+      WHERE owner_id = ${id}::uuid
+    `;
+    await sql`
+      UPDATE appointments
+      SET is_archived = FALSE,
+          archived_at = NULL,
+          updated_at = NOW()
+      WHERE owner_id = ${id}::uuid
+    `;
+    await sql`
+      UPDATE owner_notes
+      SET is_archived = FALSE,
+          archived_at = NULL,
+          updated_at = NOW()
+      WHERE owner_id = ${id}::uuid
+    `;
+    await sql`
+      UPDATE pet_notes
+      SET is_archived = FALSE,
+          archived_at = NULL,
+          updated_at = NOW()
+      WHERE pet_id IN (
+        SELECT id FROM pets WHERE owner_id = ${id}::uuid
+      )
+    `;
+    await sql`
+      UPDATE appointment_notes
+      SET is_archived = FALSE,
+          archived_at = NULL,
+          updated_at = NOW()
+      WHERE appointment_id IN (
+        SELECT id FROM appointments WHERE owner_id = ${id}::uuid
+      )
+    `;
   }
 
   return getOwner(id);
@@ -2883,6 +3026,30 @@ async function archivePet(id, shouldArchive) {
     return null;
   }
 
+  await sql`
+    UPDATE appointments
+    SET is_archived = ${shouldArchive},
+        archived_at = ${archivedAt},
+        updated_at = NOW()
+    WHERE pet_id = ${id}::uuid
+  `;
+  await sql`
+    UPDATE pet_notes
+    SET is_archived = ${shouldArchive},
+        archived_at = ${archivedAt},
+        updated_at = NOW()
+    WHERE pet_id = ${id}::uuid
+  `;
+  await sql`
+    UPDATE appointment_notes
+    SET is_archived = ${shouldArchive},
+        archived_at = ${archivedAt},
+        updated_at = NOW()
+    WHERE appointment_id IN (
+      SELECT id FROM appointments WHERE pet_id = ${id}::uuid
+    )
+  `;
+
   return getPet(id);
 }
 
@@ -2897,6 +3064,14 @@ async function archiveAppointment(id, shouldArchive) {
   if (rows.length === 0) {
     return null;
   }
+
+  await sql`
+    UPDATE appointment_notes
+    SET is_archived = ${shouldArchive},
+        archived_at = ${archivedAt},
+        updated_at = NOW()
+    WHERE appointment_id = ${id}::uuid
+  `;
 
   return getAppointment(id);
 }
@@ -3243,7 +3418,10 @@ async function handleRequest(event) {
     if (method !== "POST") {
       return methodNotAllowed();
     }
-    const owner = await archiveOwner(ownerId, action === "archive");
+    const payload = parseJsonBody(event);
+    const owner = await archiveOwner(ownerId, action === "archive", {
+      includeRelated: payload.includeRelated === true,
+    });
     return owner ? json(200, owner) : notFound("Owner not found.");
   }
 

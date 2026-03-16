@@ -173,6 +173,9 @@ export default function ClientQuickViewModal({
   const selectedPetAppointments = selectedPet
     ? appointments.filter((appointment) => appointment.petId === selectedPet.id)
     : [];
+  const relatedPetNames = pets.map((pet) => pet.name);
+  const relatedPetSummary =
+    relatedPetNames.length === 0 ? "No pets on file." : relatedPetNames.join(", ");
 
   const resetNoteEditor = () => {
     setNoteText("");
@@ -600,8 +603,8 @@ export default function ClientQuickViewModal({
       <ConfirmDeleteModal
         show={showArchiveModal}
         title="Archive Client"
-        body="Archiving removes this client from the visible client lists and related active views."
-        note="Archived client records can still be retrieved later if needed. Deleting permanently removes the record instead."
+        body="Archiving removes this client from the visible client lists and related active views. All pets, pet appointments, and notes under this client will also be archived."
+        note={`Pets affected: ${relatedPetSummary} Archived client records can still be retrieved later if needed. Deleting permanently removes the record instead.`}
         confirmLabel="Archive"
         confirmVariant="warning"
         onCancel={() => setShowArchiveModal(false)}

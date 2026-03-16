@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert, Button, Card, Collapse, Form, ListGroup } from "react-bootstrap";
+import { Alert, Button, Card, Collapse, Form, ListGroup, Modal } from "react-bootstrap";
 import { useParams } from "react-router-dom";
 import { useAppData } from "../components/common/AppDataProvider";
 import { ChevronDownIcon, SearchIcon } from "../components/common/AppIcons";
@@ -9,6 +9,9 @@ import { useAppToast } from "../components/common/AppToastProvider";
 import useInitialLoading from "../hooks/useInitialLoading";
 import { formatAppointmentServices } from "../lib/appointmentServices";
 import {
+  deleteAppointment,
+  deleteOwner,
+  deletePet,
   unarchiveAppointment,
   unarchiveOwner,
   unarchivePet,
@@ -39,6 +42,9 @@ export default function ArchivePage() {
   const [page, setPage] = useState(1);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [showUnarchiveModal, setShowUnarchiveModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showQuickViewModal, setShowQuickViewModal] = useState(false);
+  const [includeRelatedOnUnarchive, setIncludeRelatedOnUnarchive] = useState(true);
   const [showControls, setShowControls] = useState(false);
 
   const validArchiveType: ArchiveType =
@@ -359,16 +365,43 @@ export default function ArchivePage() {
     if (!selectedItem) return;
 
     if (validArchiveType === "clients") {
-      const result = await unarchiveOwner(selectedItem as Owner);
+      const result = await unarchiveOwner(selectedItem as Owner, {
+        includeRelated: includeRelatedOnUnarchive,
+      });
       setOwners((currentOwners) =>
         currentOwners.map((owner) =>
           owner.id === result.data.id ? result.data : owner,
         ),
       );
+      if (includeRelatedOnUnarchive) {
+        const selectedOwner = selectedItem as Owner;
+        setPets((currentPets) =>
+          currentPets.map((pet) =>
+            pet.ownerId === selectedOwner.id
+              ? { ...pet, isArchived: false, archivedAt: undefined }
+              : pet,
+          ),
+        );
+        setAppointments((currentAppointments) =>
+          currentAppointments.map((appointment) =>
+            appointment.ownerId === selectedOwner.id
+              ? { ...appointment, isArchived: false, archivedAt: undefined }
+              : appointment,
+          ),
+        );
+      }
     } else if (validArchiveType === "pets") {
-      const result = await unarchivePet(selectedItem as Pet);
+      const petToRestore = selectedItem as Pet;
+      const result = await unarchivePet(petToRestore);
       setPets((currentPets) =>
         currentPets.map((pet) => (pet.id === result.data.id ? result.data : pet)),
+      );
+      setAppointments((currentAppointments) =>
+        currentAppointments.map((appointment) =>
+          appointment.petId === petToRestore.id
+            ? { ...appointment, isArchived: false, archivedAt: undefined }
+            : appointment,
+        ),
       );
     } else {
       const result = await unarchiveAppointment(selectedItem as Appointment);
@@ -386,7 +419,58 @@ export default function ArchivePage() {
     });
     setShowUnarchiveModal(false);
     setSelectedItemId(null);
+    setIncludeRelatedOnUnarchive(true);
   };
+
+  const handleDeleteArchivedItem = async () => {
+    if (!selectedItem) {
+      return;
+    }
+
+    if (validArchiveType === "clients") {
+      const owner = selectedItem as Owner;
+      await deleteOwner(owner);
+      setOwners((currentOwners) =>
+        currentOwners.filter((currentOwner) => currentOwner.id !== owner.id),
+      );
+      setPets((currentPets) =>
+        currentPets.filter((pet) => pet.ownerId !== owner.id),
+      );
+      setAppointments((currentAppointments) =>
+        currentAppointments.filter((appointment) => appointment.ownerId !== owner.id),
+      );
+    } else if (validArchiveType === "pets") {
+      const pet = selectedItem as Pet;
+      await deletePet(pet);
+      setPets((currentPets) => currentPets.filter((currentPet) => currentPet.id !== pet.id));
+      setAppointments((currentAppointments) =>
+        currentAppointments.filter((appointment) => appointment.petId !== pet.id),
+      );
+    } else {
+      const appointment = selectedItem as Appointment;
+      await deleteAppointment(appointment);
+      setAppointments((currentAppointments) =>
+        currentAppointments.filter((currentAppointment) => currentAppointment.id !== appointment.id),
+      );
+    }
+
+    showToast({
+      title: "Item Deleted",
+      body: "The archived record was permanently deleted.",
+      variant: "warning",
+    });
+    setShowDeleteModal(false);
+    setShowQuickViewModal(false);
+    setSelectedItemId(null);
+  };
+
+  const selectedOwnerPets = useMemo(() => {
+    if (!selectedItem || validArchiveType !== "clients") {
+      return [];
+    }
+    const owner = selectedItem as Owner;
+    return pets.filter((pet) => pet.ownerId === owner.id);
+  }, [pets, selectedItem, validArchiveType]);
 
   if (isLoading) {
     return <PageLoader label="Loading archives..." />;
@@ -533,6 +617,20 @@ export default function ArchivePage() {
               >
                 Unarchive Selected
               </Button>
+              <Button
+                variant="outline-secondary"
+                disabled={!selectedItemId}
+                onClick={() => setShowQuickViewModal(true)}
+              >
+                View Selected
+              </Button>
+              <Button
+                variant="outline-danger"
+                disabled={!selectedItemId}
+                onClick={() => setShowDeleteModal(true)}
+              >
+                Delete Selected
+              </Button>
             </div>
           </div>
 
@@ -555,7 +653,17 @@ export default function ArchivePage() {
                           key={itemId}
                           action
                           active={isSelected}
-                          onClick={() => setSelectedItemId(itemId)}
+                          onClick={() => {
+                            setSelectedItemId((current) => {
+                              if (current === itemId) {
+                                return null;
+                              }
+                              return itemId;
+                            });
+                            if (!isSelected) {
+                              setShowQuickViewModal(true);
+                            }
+                          }}
                           className="archive-list-item"
                         >
                           <div className="archive-list-item-main">
@@ -605,10 +713,14 @@ export default function ArchivePage() {
       </Card>
 
       <ConfirmDeleteModal
-        show={showUnarchiveModal}
+        show={showUnarchiveModal && validArchiveType !== "clients"}
         title="Unarchive Item"
         body="This will restore the selected record to the active lists and views."
-        note="Are you sure you want to unarchive this item?"
+        note={
+          validArchiveType === "clients"
+            ? "For clients, you can choose to restore related pets, appointments, and notes together."
+            : "Are you sure you want to unarchive this item?"
+        }
         confirmLabel="Unarchive"
         confirmVariant="success"
         onCancel={() => setShowUnarchiveModal(false)}
@@ -616,6 +728,124 @@ export default function ArchivePage() {
           void handleUnarchive();
         }}
       />
+      <Modal
+        show={showUnarchiveModal && validArchiveType === "clients"}
+        onHide={() => {
+          setShowUnarchiveModal(false);
+          setIncludeRelatedOnUnarchive(true);
+        }}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Unarchive Client</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="fw-semibold mb-2">Restore this client to active records?</p>
+          <p className="mb-3">
+            You can restore only the client, or restore the client plus all related pets,
+            appointments, and notes.
+          </p>
+          <Form.Check
+            type="switch"
+            id="include-related-unarchive"
+            label="Also unarchive related pets, appointments, and notes"
+            checked={includeRelatedOnUnarchive}
+            onChange={(event) => setIncludeRelatedOnUnarchive(event.target.checked)}
+          />
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setShowUnarchiveModal(false);
+              setIncludeRelatedOnUnarchive(true);
+            }}
+          >
+            Keep It
+          </Button>
+          <Button
+            variant="success"
+            onClick={() => {
+              void handleUnarchive();
+            }}
+          >
+            Unarchive
+          </Button>
+        </Modal.Footer>
+      </Modal>
+      <ConfirmDeleteModal
+        show={showDeleteModal}
+        title="Delete Archived Item"
+        body="Deleting permanently removes this archived record from the system."
+        note="This action cannot be undone."
+        confirmLabel="Delete Permanently"
+        onCancel={() => setShowDeleteModal(false)}
+        onConfirm={() => {
+          void handleDeleteArchivedItem();
+        }}
+      />
+      <Modal
+        show={showQuickViewModal}
+        onHide={() => setShowQuickViewModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Archived Item</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {!selectedItem && (
+            <p className="text-muted mb-0">No item selected.</p>
+          )}
+          {selectedItem && validArchiveType === "clients" && (
+            <div className="d-grid gap-2">
+              <div className="fw-semibold">
+                {(selectedItem as Owner).firstName} {(selectedItem as Owner).lastName}
+              </div>
+              <div className="text-muted small">{(selectedItem as Owner).email}</div>
+              <div className="text-muted small">{(selectedItem as Owner).phone}</div>
+              <div className="text-muted small">
+                Preferred contact: {(selectedItem as Owner).preferredContactMethod}
+              </div>
+              <div className="text-muted small">
+                Archived pets: {selectedOwnerPets.length}
+              </div>
+            </div>
+          )}
+          {selectedItem && validArchiveType === "pets" && (
+            <div className="d-grid gap-2">
+              <div className="fw-semibold">{(selectedItem as Pet).name}</div>
+              <div className="text-muted small">
+                {(selectedItem as Pet).species} - {(selectedItem as Pet).breed}
+              </div>
+              <div className="text-muted small">
+                Owner: {owners.find((owner) => owner.id === (selectedItem as Pet).ownerId)?.firstName ?? "Unknown"}{" "}
+                {owners.find((owner) => owner.id === (selectedItem as Pet).ownerId)?.lastName ?? ""}
+              </div>
+            </div>
+          )}
+          {selectedItem && validArchiveType === "appointments" && (
+            <div className="d-grid gap-2">
+              <div className="fw-semibold">
+                {new Date((selectedItem as Appointment).start).toLocaleString()}
+              </div>
+              <div className="text-muted small">
+                Status: {(selectedItem as Appointment).status}
+              </div>
+              <div className="text-muted small">
+                Service: {formatAppointmentServices(selectedItem as Appointment)}
+              </div>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-danger" onClick={() => setShowDeleteModal(true)} disabled={!selectedItem}>
+            Delete Permanently
+          </Button>
+          <Button variant="secondary" onClick={() => setShowQuickViewModal(false)}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </>
   );
 }

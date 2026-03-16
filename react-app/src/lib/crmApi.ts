@@ -440,7 +440,10 @@ export async function archiveOwner(owner: Owner): Promise<SaveResult<Owner>> {
   return { data, mode: "api" };
 }
 
-export async function unarchiveOwner(owner: Owner): Promise<SaveResult<Owner>> {
+export async function unarchiveOwner(
+  owner: Owner,
+  options?: { includeRelated?: boolean },
+): Promise<SaveResult<Owner>> {
   if (!isBackendConfigured()) {
     return {
       data: {
@@ -452,7 +455,9 @@ export async function unarchiveOwner(owner: Owner): Promise<SaveResult<Owner>> {
     };
   }
 
-  const data = await request<Owner>(`/owners/${owner.id}/unarchive`, "POST", {});
+  const data = await request<Owner>(`/owners/${owner.id}/unarchive`, "POST", {
+    includeRelated: options?.includeRelated === true,
+  });
   return { data, mode: "api" };
 }
 

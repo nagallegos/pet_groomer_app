@@ -613,7 +613,7 @@ export default function PetQuickViewModal({
       <ConfirmDeleteModal
         show={showArchiveModal}
         title="Archive Pet"
-        body="Archiving removes this pet from the visible pet lists and active client views."
+        body="Archiving removes this pet from active pet views and also archives its appointments and related notes."
         note="Archived pet records can still be retrieved later if needed. Deleting permanently removes the record instead."
         confirmLabel="Archive"
         confirmVariant="warning"
