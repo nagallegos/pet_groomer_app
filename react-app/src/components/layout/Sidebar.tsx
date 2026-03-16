@@ -1,6 +1,8 @@
-import { Nav, Offcanvas } from "react-bootstrap";
-import { BarChart, Calendar, Clipboard, Heart, House, People, Person } from "react-bootstrap-icons";
+import { useEffect, useMemo, useState } from "react";
+import { Badge, Nav, Offcanvas } from "react-bootstrap";
+import { BarChart, Bell, Calendar, Clipboard, Heart, House, People, Person } from "react-bootstrap-icons";
 import { NavLink } from "react-router-dom";
+import { listUserNotifications } from "../../lib/crmApi";
 import { useAuth } from "../common/useAuth";
 import SettingsMenu from "./SettingsMenu";
 
@@ -36,6 +38,11 @@ const staffNavItems = [
     icon: <Clipboard />,
   },
   {
+    to: "/notifications",
+    label: "Notifications",
+    icon: <Bell />,
+  },
+  {
     to: "/analysis",
     label: "Analysis",
     icon: <BarChart />,
@@ -60,6 +67,7 @@ const clientNavItems = [
 
 export default function Sidebar({ show, onHide }: SidebarProps) {
   const { user } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
   const baseNavItems = user?.role === "client" ? clientNavItems : staffNavItems;
   const visibleNavItems = baseNavItems.filter(
     (item) => item.to !== "/users" || user?.role === "admin",
@@ -70,6 +78,48 @@ export default function Sidebar({ show, onHide }: SidebarProps) {
       : user?.role === "groomer"
         ? "Pet Groomer"
         : "Client User";
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const data = await listUserNotifications();
+        if (!cancelled) {
+          setUnreadCount(data.length);
+        }
+      } catch {
+        if (!cancelled) {
+          setUnreadCount(0);
+        }
+      }
+    };
+
+    if (user) {
+      void load();
+      const interval = window.setInterval(() => {
+        void load();
+      }, 30000);
+
+      return () => {
+        cancelled = true;
+        window.clearInterval(interval);
+      };
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const navItemsWithBadge = useMemo(
+    () =>
+      visibleNavItems.map((item) => ({
+        ...item,
+        showBadge: item.to === "/notifications" && unreadCount > 0,
+      })),
+    [unreadCount, visibleNavItems],
+  );
 
   return (
     <>
@@ -88,12 +138,17 @@ export default function Sidebar({ show, onHide }: SidebarProps) {
         </div>
 
         <Nav className="sidebar-nav flex-column gap-2">
-          {visibleNavItems.map((item) => (
+          {navItemsWithBadge.map((item) => (
             <Nav.Link key={item.to} as={NavLink} to={item.to} className="sidebar-link">
               <span aria-hidden="true" className="sidebar-link-icon">
                 {item.icon}
               </span>
               <span>{item.label}</span>
+              {item.showBadge && (
+                <Badge pill bg="danger" className="sidebar-notification-badge">
+                  {unreadCount}
+                </Badge>
+              )}
             </Nav.Link>
           ))}
         </Nav>
@@ -123,7 +178,7 @@ export default function Sidebar({ show, onHide }: SidebarProps) {
             />
           </div>
           <Nav className="flex-column gap-2">
-            {visibleNavItems.map((item) => (
+            {navItemsWithBadge.map((item) => (
               <Nav.Link
                 key={item.to}
                 as={NavLink}
@@ -135,6 +190,11 @@ export default function Sidebar({ show, onHide }: SidebarProps) {
                   {item.icon}
                 </span>
                 <span>{item.label}</span>
+                {item.showBadge && (
+                  <Badge pill bg="danger" className="sidebar-notification-badge">
+                    {unreadCount}
+                  </Badge>
+                )}
               </Nav.Link>
             ))}
           </Nav>

@@ -187,6 +187,16 @@ a {
   margin-bottom: 1rem;
 }
 
+.desktop-topbar {
+  margin-bottom: 1rem;
+  gap: 1rem;
+}
+
+.desktop-menu-toggle {
+  border-radius: 999px;
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
 .desktop-user-banner-actions,
 .topbar-actions {
   display: inline-flex;
@@ -321,6 +331,13 @@ a {
   text-decoration: none;
 }
 
+.notification-history-btn {
+  padding: 0;
+  font-weight: 600;
+  color: #475569;
+  text-decoration: none;
+}
+
 .notification-clear-btn:disabled {
   color: rgba(100, 116, 139, 0.55);
 }
@@ -336,6 +353,24 @@ a {
   white-space: normal;
   display: grid;
   gap: 0.2rem;
+}
+
+.notification-card {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 1rem;
+  background: #fff;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.notification-card:hover {
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
+  transform: translateY(-1px);
+}
+
+.notification-card.is-unread {
+  border-color: rgba(124, 58, 237, 0.28);
+  box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.08);
 }
 
 .notification-dropdown-item.is-unread {
@@ -447,6 +482,7 @@ a {
     linear-gradient(180deg, rgba(143, 112, 192, 0.99), rgba(102, 75, 148, 0.99));
   color: #fdf7ff;
   box-shadow: 22px 0 50px rgba(101, 78, 142, 0.16);
+  transition: transform 200ms ease, opacity 200ms ease;
 }
 
 .sidebar-brand {
@@ -528,6 +564,12 @@ a {
     color 150ms ease,
     transform 150ms ease,
     box-shadow 150ms ease;
+}
+
+.sidebar-notification-badge {
+  margin-left: auto;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.45rem;
 }
 
 .sidebar-nav .nav-link:hover,
@@ -2454,7 +2496,18 @@ textarea.form-control {
 @media (min-width: 992px) {
   .app-shell {
     display: grid;
+    grid-template-columns: 0 minmax(0, 1fr);
+    transition: grid-template-columns 200ms ease;
+  }
+
+  .app-shell.app-shell--sidebar-open {
     grid-template-columns: 292px minmax(0, 1fr);
+  }
+
+  .app-shell--sidebar-collapsed .sidebar-desktop {
+    transform: translateX(-100%);
+    opacity: 0;
+    pointer-events: none;
   }
 
   .page-content {

@@ -1178,8 +1178,20 @@ async function listUserNotifications(userId) {
     SELECT id::text AS id, user_id::text AS user_id, type, title, body, href, metadata, is_read, read_at, created_at
     FROM user_notifications
     WHERE user_id = ${userId}::uuid
+      AND is_read = FALSE
     ORDER BY created_at DESC
     LIMIT 50
+  `;
+  return rows.map(mapUserNotificationRow);
+}
+
+async function listAllUserNotifications(userId) {
+  const rows = await sql`
+    SELECT id::text AS id, user_id::text AS user_id, type, title, body, href, metadata, is_read, read_at, created_at
+    FROM user_notifications
+    WHERE user_id = ${userId}::uuid
+    ORDER BY created_at DESC
+    LIMIT 200
   `;
   return rows.map(mapUserNotificationRow);
 }
@@ -2992,6 +3004,10 @@ async function handleRequest(event) {
 
   if (path === "/notifications" && method === "GET") {
     return json(200, await listUserNotifications(currentUser.id));
+  }
+
+  if (path === "/notifications/all" && method === "GET") {
+    return json(200, await listAllUserNotifications(currentUser.id));
   }
 
   match = path.match(/^\/notifications\/([^/]+)\/read$/);

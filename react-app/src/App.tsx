@@ -20,6 +20,7 @@ import ClientHomePage from "./pages/ClientHomePage";
 import ClientPetsPage from "./pages/ClientPetsPage";
 import ClientAppointmentsPage from "./pages/ClientAppointmentsPage";
 import RequestsPage from "./pages/RequestsPage";
+import NotificationsPage from "./pages/NotificationsPage";
 import RequestPasswordResetPage from "./pages/RequestPasswordResetPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import AccountSetupPage from "./pages/AccountSetupPage";
@@ -62,6 +63,7 @@ const App = () => {
                 <Route path="home" element={<HomeRoute />} />
                 <Route path="pets" element={<PetsRoute />} />
                 <Route path="requests" element={<RequestsPage />} />
+                <Route path="notifications" element={<NotificationsPage />} />
                 <Route path="appointments" element={<RequireAuth allowedRoles={["client"]} />}>
                   <Route index element={<ClientAppointmentsPage />} />
                 </Route>

@@ -198,6 +198,10 @@ export async function listUserNotifications(): Promise<UserNotification[]> {
   return request<UserNotification[]>("/notifications", "GET");
 }
 
+export async function listAllUserNotifications(): Promise<UserNotification[]> {
+  return request<UserNotification[]>("/notifications/all", "GET");
+}
+
 export async function markUserNotificationRead(notificationId: string): Promise<UserNotification> {
   return request<UserNotification>(`/notifications/${notificationId}/read`, "POST", {});
 }

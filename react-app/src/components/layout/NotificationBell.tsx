@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge, Button, Dropdown } from "react-bootstrap";
 import { Bell } from "react-bootstrap-icons";
 import { useNavigate } from "react-router-dom";
-import { listUserNotifications, markUserNotificationRead } from "../../lib/crmApi";
+import { listAllUserNotifications, listUserNotifications, markUserNotificationRead } from "../../lib/crmApi";
 import type { UserNotification } from "../../types/models";
 
 const notificationTypeLabels: Record<UserNotification["type"], string> = {
@@ -34,19 +34,26 @@ function getNotificationTypeClass(type: UserNotification["type"]) {
 export default function NotificationBell() {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
+  const [showAll, setShowAll] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
+      setIsLoading(true);
       try {
-        const data = await listUserNotifications();
+        const data = showAll ? await listAllUserNotifications() : await listUserNotifications();
         if (!cancelled) {
           setNotifications(data);
         }
       } catch {
         if (!cancelled) {
           setNotifications([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
         }
       }
     };
@@ -60,7 +67,7 @@ export default function NotificationBell() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, []);
+  }, [showAll]);
 
   const unreadCount = useMemo(
     () => notifications.filter((notification) => !notification.isRead).length,
@@ -70,15 +77,13 @@ export default function NotificationBell() {
   const handleOpen = async (notification: UserNotification) => {
     if (!notification.isRead) {
       try {
-        const updated = await markUserNotificationRead(notification.id);
-        setNotifications((current) =>
-          current.map((item) => (item.id === updated.id ? updated : item)),
-        );
+        await markUserNotificationRead(notification.id);
       } catch {
         // Ignore local badge failure and still navigate.
       }
     }
 
+    setNotifications((current) => current.filter((item) => item.id !== notification.id));
     navigate(notification.href || "/home");
   };
 
@@ -114,20 +119,34 @@ export default function NotificationBell() {
       <Dropdown.Menu className="notification-dropdown-menu">
         <div className="notification-dropdown-header d-flex align-items-center justify-content-between gap-2">
           <span>Notifications</span>
-          <Button
-            variant="link"
-            size="sm"
-            className="notification-clear-btn"
-            onClick={() => {
-              void handleClear();
-            }}
-            disabled={notifications.length === 0}
-          >
-            Clear
-          </Button>
+          <div className="d-flex align-items-center gap-2">
+            <Button
+              variant="link"
+              size="sm"
+              className="notification-history-btn"
+              onClick={() => setShowAll((current) => !current)}
+            >
+              {showAll ? "Unread Only" : "View All"}
+            </Button>
+            <Button
+              variant="link"
+              size="sm"
+              className="notification-clear-btn"
+              onClick={() => {
+                void handleClear();
+              }}
+              disabled={notifications.length === 0 || showAll}
+            >
+              Clear
+            </Button>
+          </div>
         </div>
-        {notifications.length === 0 ? (
-          <div className="notification-dropdown-empty">No notifications yet.</div>
+        {isLoading ? (
+          <div className="notification-dropdown-empty">Loading notifications...</div>
+        ) : notifications.length === 0 ? (
+          <div className="notification-dropdown-empty">
+            {showAll ? "No notifications yet." : "No unread notifications."}
+          </div>
         ) : (
           notifications.map((notification) => (
             <Dropdown.Item
