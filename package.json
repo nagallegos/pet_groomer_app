@@ -12,7 +12,8 @@
     "dev:web": "npm run dev --workspace react-app",
     "dev:web:lan": "npm run dev --workspace react-app -- --host 0.0.0.0 --port 3000",
     "dev:api": "npx netlify dev --port 8888",
-    "netlify:dev": "npx netlify dev --port 8888"
+    "netlify:dev": "npx netlify dev --port 8888",
+    "seed:test-data": "node scripts/seed-test-data.mjs"
   },
   "dependencies": {
     "@netlify/neon": "^0.1.0",
