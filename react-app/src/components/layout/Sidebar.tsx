@@ -7,8 +7,8 @@ import { useAuth } from "../common/useAuth";
 import SettingsMenu from "./SettingsMenu";
 
 interface SidebarProps {
-  show: boolean;
-  onHide: () => void;
+  showMobile: boolean;
+  onHideMobile: () => void;
 }
 
 const staffNavItems = [
@@ -65,7 +65,7 @@ const clientNavItems = [
   staffNavItems[4],
 ] as const;
 
-export default function Sidebar({ show, onHide }: SidebarProps) {
+export default function Sidebar({ showMobile, onHideMobile }: SidebarProps) {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   const baseNavItems = user?.role === "client" ? clientNavItems : staffNavItems;
@@ -158,7 +158,7 @@ export default function Sidebar({ show, onHide }: SidebarProps) {
         </div>
       </aside>
 
-      <Offcanvas show={show} onHide={onHide} className="d-lg-none sidebar-offcanvas">
+      <Offcanvas show={showMobile} onHide={onHideMobile} className="d-lg-none sidebar-offcanvas">
         <Offcanvas.Header closeButton>
           <div className="sidebar-offcanvas-header-main">
             {user && (
@@ -174,7 +174,7 @@ export default function Sidebar({ show, onHide }: SidebarProps) {
           <div className="d-flex justify-content-end mb-3">
             <SettingsMenu
               toggleClassName="sidebar-offcanvas-settings-btn"
-              onNavigate={onHide}
+              onNavigate={onHideMobile}
             />
           </div>
           <Nav className="flex-column gap-2">
@@ -183,7 +183,7 @@ export default function Sidebar({ show, onHide }: SidebarProps) {
                 key={item.to}
                 as={NavLink}
                 to={item.to}
-                onClick={onHide}
+                onClick={onHideMobile}
                 className="sidebar-link"
               >
                 <span aria-hidden="true" className="sidebar-link-icon">

@@ -9,7 +9,8 @@ import Topbar from "./Topbar";
 import { List } from "react-bootstrap-icons";
 
 export default function AppLayout() {
-  const [showSidebar, setShowSidebar] = useState(false);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const [showDesktopSidebar, setShowDesktopSidebar] = useState(false);
   const { user } = useAuth();
   const roleLabel =
     user?.role === "admin"
@@ -20,9 +21,12 @@ export default function AppLayout() {
 
   return (
     <AppToastProvider>
-      <div className={`app-shell${showSidebar ? " app-shell--sidebar-open" : " app-shell--sidebar-collapsed"}`}>
-        <Topbar onMenuClick={() => setShowSidebar(true)} />
-        <Sidebar show={showSidebar} onHide={() => setShowSidebar(false)} />
+      <div className={`app-shell${showDesktopSidebar ? " app-shell--sidebar-open" : " app-shell--sidebar-collapsed"}`}>
+        <Topbar onMenuClick={() => setShowMobileSidebar(true)} />
+        <Sidebar
+          showMobile={showMobileSidebar}
+          onHideMobile={() => setShowMobileSidebar(false)}
+        />
 
         <main className="page-content">
           <Container fluid className="py-3 py-md-4">
@@ -30,7 +34,7 @@ export default function AppLayout() {
               <Button
                 variant="outline-secondary"
                 className="desktop-menu-toggle"
-                onClick={() => setShowSidebar((current) => !current)}
+                onClick={() => setShowDesktopSidebar((current) => !current)}
               >
                 <span aria-hidden="true" className="topbar-btn-icon">
                   <List />
