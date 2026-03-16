@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Badge, Button, Dropdown, Form, ListGroup, Modal, Spinner } from "react-bootstrap";
+import { Alert, Badge, Button, Card, Dropdown, Form, Modal, Spinner } from "react-bootstrap";
 import { PencilSquare } from "react-bootstrap-icons";
 import { useNavigate } from "react-router-dom";
 import {
@@ -733,58 +733,36 @@ export default function AppointmentDetailsModal({
                 {activeNotes.length === 0 ? (
                   <p className="text-muted mb-0">No active appointment notes.</p>
                 ) : (
-                  <ListGroup className="compact-note-list">
+                  <div className="d-grid gap-2">
                     {previewNotes.map((note) => (
-                      <ListGroup.Item key={note.id}>
-                        <div className="d-flex justify-content-between align-items-start gap-3">
-                          <div className="client-note-item">
-                            <div className="client-note-meta">
-                              <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
-                                {note.visibility === "client" ? "Client-facing" : "Internal"}
-                              </span>
-                              <span>{new Date(note.createdAt).toLocaleDateString()}</span>
-                              {note.updatedAt && (
-                                <span>Updated {new Date(note.updatedAt).toLocaleDateString()}</span>
-                              )}
-                            </div>
-                            <div>{note.text}</div>
+                      <Card
+                        key={note.id}
+                        className="note-card"
+                        onClick={() => openEditNoteModal(note.id, note.text, note.visibility)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            openEditNoteModal(note.id, note.text, note.visibility);
+                          }
+                        }}
+                      >
+                        <Card.Body className="d-grid gap-2">
+                          <div className="note-card-meta">
+                            <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
+                              {note.visibility === "client" ? "Client-facing" : "Internal"}
+                            </span>
+                            <span>{new Date(note.createdAt).toLocaleDateString()}</span>
+                            {note.updatedAt && (
+                              <span>Updated {new Date(note.updatedAt).toLocaleDateString()}</span>
+                            )}
                           </div>
-                          <div className="note-inline-actions">
-                            <button
-                              type="button"
-                              className="pet-row-indicator-button"
-                              aria-label="Edit appointment note"
-                              onClick={() => openEditNoteModal(note.id, note.text, note.visibility)}
-                            >
-                              <span className="pet-row-indicator">
-                                <PencilSquare aria-hidden="true" />
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              className="pet-row-indicator-button"
-                              disabled={isSavingNote}
-                              onClick={() => {
-                                void handleNoteAction(note.id, "archive");
-                              }}
-                            >
-                              <span className="pet-row-indicator">Archive</span>
-                            </button>
-                            <button
-                              type="button"
-                              className="pet-row-indicator-button"
-                              disabled={isSavingNote}
-                              onClick={() => {
-                                void handleNoteAction(note.id, "delete");
-                              }}
-                            >
-                              <span className="pet-row-indicator pet-row-indicator-danger">Delete</span>
-                            </button>
-                          </div>
-                        </div>
-                      </ListGroup.Item>
+                          <div className="note-card-text">{note.text}</div>
+                        </Card.Body>
+                      </Card>
                     ))}
-                  </ListGroup>
+                  </div>
                 )}
               </div>
             </>
@@ -814,21 +792,33 @@ export default function AppointmentDetailsModal({
               {activeNotes.length === 0 ? (
                 <div className="text-muted small">No appointment notes recorded.</div>
               ) : (
-                <ListGroup className="compact-note-list">
+                <div className="d-grid gap-2">
                   {activeNotes.map((note) => (
-                    <ListGroup.Item key={note.id}>
-                      <div className="client-note-item">
-                        <div className="client-note-meta">
+                    <Card
+                      key={note.id}
+                      className="note-card"
+                      onClick={() => openEditNoteModal(note.id, note.text, note.visibility)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openEditNoteModal(note.id, note.text, note.visibility);
+                        }
+                      }}
+                    >
+                      <Card.Body className="d-grid gap-2">
+                        <div className="note-card-meta">
                           <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
                             {note.visibility === "client" ? "Client-facing" : "Internal"}
                           </span>
                           <span>{new Date(note.createdAt).toLocaleDateString()}</span>
                         </div>
-                        <div>{note.text}</div>
-                      </div>
-                    </ListGroup.Item>
+                        <div className="note-card-text">{note.text}</div>
+                      </Card.Body>
+                    </Card>
                   ))}
-                </ListGroup>
+                </div>
               )}
             </div>
           )}
@@ -1004,59 +994,126 @@ export default function AppointmentDetailsModal({
               {activeNotes.length > 0 && (
                 <>
                   <div className="fw-semibold mb-2">Active Notes</div>
-                  <ListGroup className="compact-note-list mb-3">
+                  <div className="d-grid gap-2 mb-3">
                     {activeNotes.map((note) => (
-                      <ListGroup.Item key={note.id}>
-                        <div className="d-flex justify-content-between align-items-start gap-3">
-                          <div className="client-note-item">
-                            <div className="client-note-meta">
-                              <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>{note.visibility === "client" ? "Client-facing" : "Internal"}</span>
-                              <span>{new Date(note.createdAt).toLocaleDateString()}</span>
-                            </div>
-                            <div>{note.text}</div>
+                      <Card
+                        key={note.id}
+                        className="note-card"
+                        onClick={() => openEditNoteModal(note.id, note.text, note.visibility)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            openEditNoteModal(note.id, note.text, note.visibility);
+                          }
+                        }}
+                      >
+                        <Card.Body className="d-grid gap-2">
+                          <div className="note-card-meta">
+                            <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
+                              {note.visibility === "client" ? "Client-facing" : "Internal"}
+                            </span>
+                            <span>{new Date(note.createdAt).toLocaleDateString()}</span>
                           </div>
+                          <div className="note-card-text">{note.text}</div>
                           <div className="note-inline-actions">
                             <button
                               type="button"
                               className="pet-row-indicator-button"
                               aria-label="Edit appointment note"
-                              onClick={() => openEditNoteModal(note.id, note.text, note.visibility)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openEditNoteModal(note.id, note.text, note.visibility);
+                              }}
                             >
                               <span className="pet-row-indicator">
                                 <PencilSquare aria-hidden="true" />
                               </span>
                             </button>
-                            <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "archive"); }}><span className="pet-row-indicator">Archive</span></button>
-                            <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "delete"); }}><span className="pet-row-indicator pet-row-indicator-danger">Delete</span></button>
+                            <button
+                              type="button"
+                              className="pet-row-indicator-button"
+                              disabled={isSavingNote}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleNoteAction(note.id, "archive");
+                              }}
+                            >
+                              <span className="pet-row-indicator">Archive</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="pet-row-indicator-button"
+                              disabled={isSavingNote}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleNoteAction(note.id, "delete");
+                              }}
+                            >
+                              <span className="pet-row-indicator pet-row-indicator-danger">Delete</span>
+                            </button>
                           </div>
-                        </div>
-                      </ListGroup.Item>
+                        </Card.Body>
+                      </Card>
                     ))}
-                  </ListGroup>
+                  </div>
                 </>
               )}
               {archivedNotes.length > 0 && (
                 <>
                   <div className="fw-semibold mb-2">Archived Notes</div>
-                  <ListGroup className="compact-note-list">
+                  <div className="d-grid gap-2">
                     {archivedNotes.map((note) => (
-                      <ListGroup.Item key={note.id}>
-                        <div className="d-flex justify-content-between align-items-start gap-3">
-                          <div className="client-note-item">
-                            <div className="client-note-meta">
-                              <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>{note.visibility === "client" ? "Client-facing" : "Internal"}</span>
-                              <span>Archived {note.archivedAt ? new Date(note.archivedAt).toLocaleDateString() : ""}</span>
-                            </div>
-                            <div>{note.text}</div>
+                      <Card
+                        key={note.id}
+                        className="note-card"
+                        onClick={() => openEditNoteModal(note.id, note.text, note.visibility)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            openEditNoteModal(note.id, note.text, note.visibility);
+                          }
+                        }}
+                      >
+                        <Card.Body className="d-grid gap-2">
+                          <div className="note-card-meta">
+                            <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
+                              {note.visibility === "client" ? "Client-facing" : "Internal"}
+                            </span>
+                            <span>Archived {note.archivedAt ? new Date(note.archivedAt).toLocaleDateString() : ""}</span>
                           </div>
+                          <div className="note-card-text">{note.text}</div>
                           <div className="note-inline-actions">
-                            <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "restore"); }}><span className="pet-row-indicator">Restore</span></button>
-                            <button type="button" className="pet-row-indicator-button" disabled={isSavingNote} onClick={() => { void handleNoteAction(note.id, "delete"); }}><span className="pet-row-indicator pet-row-indicator-danger">Delete</span></button>
+                            <button
+                              type="button"
+                              className="pet-row-indicator-button"
+                              disabled={isSavingNote}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleNoteAction(note.id, "restore");
+                              }}
+                            >
+                              <span className="pet-row-indicator">Restore</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="pet-row-indicator-button"
+                              disabled={isSavingNote}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleNoteAction(note.id, "delete");
+                              }}
+                            >
+                              <span className="pet-row-indicator pet-row-indicator-danger">Delete</span>
+                            </button>
                           </div>
-                        </div>
-                      </ListGroup.Item>
+                        </Card.Body>
+                      </Card>
                     ))}
-                  </ListGroup>
+                  </div>
                 </>
               )}
             </>

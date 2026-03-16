@@ -94,8 +94,6 @@ export default function ClientDetailsPage() {
   const [isSavingClient, setIsSavingClient] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showNotesModal, setShowNotesModal] = useState(false);
-  const [notesEditMode, setNotesEditMode] = useState(false);
-  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [selectedNoteEntityType, setSelectedNoteEntityType] = useState<ClientNoteEntityType>("client");
   const [selectedNoteEntityId, setSelectedNoteEntityId] = useState("");
   const [noteText, setNoteText] = useState("");
@@ -104,6 +102,7 @@ export default function ClientDetailsPage() {
   const [noteSaveError, setNoteSaveError] = useState<string | null>(null);
   const [showArchivedNotes, setShowArchivedNotes] = useState(false);
   const [isApplyingNoteAction, setIsApplyingNoteAction] = useState(false);
+  const [showAddNoteModal, setShowAddNoteModal] = useState(false);
   const [showQuickEditNoteModal, setShowQuickEditNoteModal] = useState(false);
   const [quickEditNote, setQuickEditNote] = useState<ClientTimelineNote | null>(null);
   const [quickEditText, setQuickEditText] = useState("");
@@ -286,8 +285,6 @@ export default function ClientDetailsPage() {
   };
 
   const resetNotesEditor = () => {
-    setNotesEditMode(false);
-    setSelectedNoteId(null);
     setSelectedNoteEntityType("client");
     setSelectedNoteEntityId(owner.id);
     setNoteText("");
@@ -296,12 +293,11 @@ export default function ClientDetailsPage() {
   };
 
   const openNewNoteEditor = () => {
-    setSelectedNoteId(null);
     setSelectedNoteEntityType("client");
     setSelectedNoteEntityId(owner.id);
     setNoteText("");
     setNoteSaveError(null);
-    setNotesEditMode(true);
+    setShowAddNoteModal(true);
   };
 
   const openEditNoteEditor = (note: ClientTimelineNote) => {
@@ -329,9 +325,7 @@ export default function ClientDetailsPage() {
 
     try {
       if (selectedNoteEntityType === "client") {
-        const result = selectedNoteId
-          ? await updateOwnerNote(owner, selectedNoteId, noteText.trim(), noteVisibility)
-          : await addOwnerNote(owner, noteText.trim(), noteVisibility);
+        const result = await addOwnerNote(owner, noteText.trim(), noteVisibility);
         replaceOwnerInState(result.data);
       } else if (selectedNoteEntityType === "pet") {
         const currentPet = pets.find((pet) => pet.id === selectedNoteEntityId);
@@ -339,9 +333,7 @@ export default function ClientDetailsPage() {
           return;
         }
 
-        const result = selectedNoteId
-          ? await updatePetNote(currentPet, selectedNoteId, noteText.trim(), noteVisibility)
-          : await addPetNote(currentPet, noteText.trim(), noteVisibility);
+        const result = await addPetNote(currentPet, noteText.trim(), noteVisibility);
         replacePetInState(result.data);
       } else {
         const currentAppointment = clientAppointments.find((appointment) => appointment.id === selectedNoteEntityId);
@@ -349,15 +341,14 @@ export default function ClientDetailsPage() {
           return;
         }
 
-        const result = selectedNoteId
-          ? await updateAppointmentNote(currentAppointment, selectedNoteId, noteText.trim(), noteVisibility)
-          : await addAppointmentNote(currentAppointment, noteText.trim(), noteVisibility);
+        const result = await addAppointmentNote(currentAppointment, noteText.trim(), noteVisibility);
         replaceAppointmentInState(result.data);
       }
 
       resetNotesEditor();
+      setShowAddNoteModal(false);
       showToast({
-        title: selectedNoteId ? "Note Updated" : "Note Added",
+        title: "Note Added",
         body: "The note was saved successfully.",
         variant: "success",
       });
@@ -739,131 +730,145 @@ export default function ClientDetailsPage() {
       <Modal show={showNotesModal} onHide={() => { setShowNotesModal(false); resetNotesEditor(); }} centered fullscreen="sm-down">
         <Modal.Header closeButton>
           <div className="w-100 d-flex justify-content-between align-items-start gap-3">
-            <div>
-              <Modal.Title>Client Notes</Modal.Title>
-              <span className={`mode-indicator${notesEditMode ? " mode-indicator-edit" : ""}`}>{notesEditMode ? "Edit Mode" : "View Mode"}</span>
-            </div>
-            {!notesEditMode && (
-              <Dropdown align="end">
-                <Dropdown.Toggle variant="outline-secondary" size="sm">Actions</Dropdown.Toggle>
-                <Dropdown.Menu>
-                  <Dropdown.Item onClick={openNewNoteEditor}>Add Note</Dropdown.Item>
-                </Dropdown.Menu>
-              </Dropdown>
-            )}
+            <Modal.Title>Client Notes</Modal.Title>
+            <Button variant="outline-secondary" size="sm" onClick={openNewNoteEditor}>
+              Add Note
+            </Button>
           </div>
         </Modal.Header>
         <Modal.Body>
           {noteSaveError && <Alert variant="danger" className="mb-3">{noteSaveError}</Alert>}
-          {notesEditMode ? (
-            <>
-              {!selectedNoteId && (
-                <Form.Group className="mb-3">
-                  <Form.Label>Attach Note To</Form.Label>
-                  <Form.Select value={`${selectedNoteEntityType}:${selectedNoteEntityId}`} onChange={(event) => { const [entityType, entityId] = event.target.value.split(":"); setSelectedNoteEntityType(entityType as ClientNoteEntityType); setSelectedNoteEntityId(entityId); }}>
-                    {noteTargets.map((target) => <option key={`${target.entityType}:${target.entityId}`} value={`${target.entityType}:${target.entityId}`}>{target.label}</option>)}
-                  </Form.Select>
-                </Form.Group>
-              )}
-              {selectedNoteId && <p className="text-muted small">Editing note on {noteTargets.find((target) => target.entityType === selectedNoteEntityType && target.entityId === selectedNoteEntityId)?.label}</p>}
-              <Form.Group>
-                <Form.Label>Note</Form.Label>
-                <Form.Control as="textarea" rows={6} value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder="Enter note details..." />
-              </Form.Group>
-              <Form.Group className="mt-3">
-                <Form.Label>Visibility</Form.Label>
-                <Form.Select value={noteVisibility} onChange={(event) => setNoteVisibility(event.target.value as NoteVisibility)}>
-                  <option value="internal">Internal only</option>
-                  <option value="client">Client-facing</option>
-                </Form.Select>
-              </Form.Group>
-            </>
-          ) : (
-            <>
-              {activeTimelineNotes.length === 0 ? <p className="text-muted mb-0">No active notes have been added to this client, pets, or appointments.</p> : (
-                <ListGroup>
-                  {activeTimelineNotes.map((note) => (
-                    <ListGroup.Item key={`${note.entityType}-${note.entityId}-${note.id}`}>
-                      <div className="d-flex justify-content-between align-items-start gap-3">
-                        <div className="client-note-item">
-                          <div className="client-note-meta">
-                            <span className={`client-note-type client-note-type-${note.entityType}`}>{note.entityType}</span>
-                            <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
-                              {note.visibility === "client" ? "Client-facing" : "Internal"}
-                            </span>
-                            <span>{note.entityLabel}</span>
-                            <span>{new Date(note.createdAt).toLocaleString()}{note.updatedAt ? ` | Updated ${new Date(note.updatedAt).toLocaleString()}` : ""}</span>
-                          </div>
-                          <div>{note.text}</div>
-                        </div>
-                        <div className="note-inline-actions">
-                          <button
-                            type="button"
-                            className="pet-row-indicator-button"
-                            aria-label="Edit note"
-                            onClick={() => openEditNoteEditor(note)}
-                          >
-                            <span className="pet-row-indicator">
-                              <PencilSquare aria-hidden="true" />
-                            </span>
-                          </button>
-                          <button type="button" className="pet-row-indicator-button" disabled={isApplyingNoteAction} onClick={() => { void handleNoteAction(note, "archive"); }}><span className="pet-row-indicator">Archive</span></button>
-                          <button type="button" className="pet-row-indicator-button" disabled={isApplyingNoteAction} onClick={() => { void handleNoteAction(note, "delete"); }}><span className="pet-row-indicator pet-row-indicator-danger">Delete</span></button>
-                        </div>
-                      </div>
-                    </ListGroup.Item>
-                  ))}
-                </ListGroup>
-              )}
-              {archivedTimelineNotes.length > 0 && (
-                <div className="mt-3">
-                  <Button variant="outline-secondary" size="sm" onClick={() => setShowArchivedNotes((current) => !current)} aria-expanded={showArchivedNotes} aria-controls="archived-client-notes">
-                    {showArchivedNotes ? "Hide Archived Notes" : `Show Archived Notes (${archivedTimelineNotes.length})`}
-                  </Button>
-                  <Collapse in={showArchivedNotes}>
-                    <div id="archived-client-notes" className="mt-3">
-                      <ListGroup>
-                        {archivedTimelineNotes.map((note) => (
-                          <ListGroup.Item key={`${note.entityType}-${note.entityId}-${note.id}`}>
-                            <div className="d-flex justify-content-between align-items-start gap-3">
-                              <div className="client-note-item">
-                                <div className="client-note-meta">
-                                  <span className={`client-note-type client-note-type-${note.entityType}`}>{note.entityType}</span>
-                                  <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
-                                    {note.visibility === "client" ? "Client-facing" : "Internal"}
-                                  </span>
-                                  <span>{note.entityLabel}</span>
-                                  <span>Archived {note.archivedAt ? new Date(note.archivedAt).toLocaleString() : ""}</span>
-                                </div>
-                                <div>{note.text}</div>
-                              </div>
-                              <div className="note-inline-actions">
-                                <button type="button" className="pet-row-indicator-button" disabled={isApplyingNoteAction} onClick={() => { void handleNoteAction(note, "restore"); }}><span className="pet-row-indicator">Restore</span></button>
-                                <button type="button" className="pet-row-indicator-button" disabled={isApplyingNoteAction} onClick={() => { void handleNoteAction(note, "delete"); }}><span className="pet-row-indicator pet-row-indicator-danger">Delete</span></button>
-                              </div>
-                            </div>
-                          </ListGroup.Item>
-                        ))}
-                      </ListGroup>
+          {activeTimelineNotes.length === 0 ? <p className="text-muted mb-0">No active notes have been added to this client, pets, or appointments.</p> : (
+            <div className="d-grid gap-2">
+              {activeTimelineNotes.map((note) => (
+                <Card
+                  key={`${note.entityType}-${note.entityId}-${note.id}`}
+                  className="note-card"
+                  onClick={() => openEditNoteEditor(note)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openEditNoteEditor(note);
+                    }
+                  }}
+                >
+                  <Card.Body className="d-grid gap-2">
+                    <div className="note-card-meta">
+                      <span className={`client-note-type client-note-type-${note.entityType}`}>{note.entityType}</span>
+                      <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
+                        {note.visibility === "client" ? "Client-facing" : "Internal"}
+                      </span>
+                      <span>{note.entityLabel}</span>
+                      <span>{new Date(note.createdAt).toLocaleString()}{note.updatedAt ? ` | Updated ${new Date(note.updatedAt).toLocaleString()}` : ""}</span>
                     </div>
-                  </Collapse>
+                    <div className="note-card-text">{note.text}</div>
+                    <div className="note-inline-actions">
+                      <button
+                        type="button"
+                        className="pet-row-indicator-button"
+                        aria-label="Edit note"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openEditNoteEditor(note);
+                        }}
+                      >
+                        <span className="pet-row-indicator">
+                          <PencilSquare aria-hidden="true" />
+                        </span>
+                      </button>
+                      <button type="button" className="pet-row-indicator-button" disabled={isApplyingNoteAction} onClick={(event) => { event.stopPropagation(); void handleNoteAction(note, "archive"); }}><span className="pet-row-indicator">Archive</span></button>
+                      <button type="button" className="pet-row-indicator-button" disabled={isApplyingNoteAction} onClick={(event) => { event.stopPropagation(); void handleNoteAction(note, "delete"); }}><span className="pet-row-indicator pet-row-indicator-danger">Delete</span></button>
+                    </div>
+                  </Card.Body>
+                </Card>
+              ))}
+            </div>
+          )}
+          {archivedTimelineNotes.length > 0 && (
+            <div className="mt-3">
+              <Button variant="outline-secondary" size="sm" onClick={() => setShowArchivedNotes((current) => !current)} aria-expanded={showArchivedNotes} aria-controls="archived-client-notes">
+                {showArchivedNotes ? "Hide Archived Notes" : `Show Archived Notes (${archivedTimelineNotes.length})`}
+              </Button>
+              <Collapse in={showArchivedNotes}>
+                <div id="archived-client-notes" className="mt-3 d-grid gap-2">
+                  {archivedTimelineNotes.map((note) => (
+                    <Card
+                      key={`${note.entityType}-${note.entityId}-${note.id}`}
+                      className="note-card"
+                      onClick={() => openEditNoteEditor(note)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openEditNoteEditor(note);
+                        }
+                      }}
+                    >
+                      <Card.Body className="d-grid gap-2">
+                        <div className="note-card-meta">
+                          <span className={`client-note-type client-note-type-${note.entityType}`}>{note.entityType}</span>
+                          <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
+                            {note.visibility === "client" ? "Client-facing" : "Internal"}
+                          </span>
+                          <span>{note.entityLabel}</span>
+                          <span>Archived {note.archivedAt ? new Date(note.archivedAt).toLocaleString() : ""}</span>
+                        </div>
+                        <div className="note-card-text">{note.text}</div>
+                        <div className="note-inline-actions">
+                          <button type="button" className="pet-row-indicator-button" disabled={isApplyingNoteAction} onClick={(event) => { event.stopPropagation(); void handleNoteAction(note, "restore"); }}><span className="pet-row-indicator">Restore</span></button>
+                          <button type="button" className="pet-row-indicator-button" disabled={isApplyingNoteAction} onClick={(event) => { event.stopPropagation(); void handleNoteAction(note, "delete"); }}><span className="pet-row-indicator pet-row-indicator-danger">Delete</span></button>
+                        </div>
+                      </Card.Body>
+                    </Card>
+                  ))}
                 </div>
-              )}
-            </>
+              </Collapse>
+            </div>
           )}
         </Modal.Body>
         <Modal.Footer>
-          {notesEditMode ? (
-            <>
-              <Button variant="outline-secondary" onClick={resetNotesEditor}>Cancel</Button>
-              <Button variant="primary" onClick={() => void handleSaveNote()} disabled={!noteText.trim() || isSavingNote}>
-                {isSavingNote && <Spinner animation="border" size="sm" className="me-2" />}
-                Save Note
-              </Button>
-            </>
-          ) : (
-            <Button variant="secondary" onClick={() => setShowNotesModal(false)}>Close</Button>
-          )}
+          <Button variant="secondary" onClick={() => setShowNotesModal(false)}>Close</Button>
+        </Modal.Footer>
+      </Modal>
+      <Modal show={showAddNoteModal} onHide={() => { setShowAddNoteModal(false); resetNotesEditor(); }} centered fullscreen="sm-down">
+        <Modal.Header closeButton>
+          <Modal.Title>New Note</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {noteSaveError && <Alert variant="danger" className="mb-3">{noteSaveError}</Alert>}
+          <Form.Group className="mb-3">
+            <Form.Label>Attach Note To</Form.Label>
+            <Form.Select value={`${selectedNoteEntityType}:${selectedNoteEntityId}`} onChange={(event) => { const [entityType, entityId] = event.target.value.split(":"); setSelectedNoteEntityType(entityType as ClientNoteEntityType); setSelectedNoteEntityId(entityId); }}>
+              {noteTargets.map((target) => (
+                <option key={`${target.entityType}:${target.entityId}`} value={`${target.entityType}:${target.entityId}`}>
+                  {target.label}
+                </option>
+              ))}
+            </Form.Select>
+          </Form.Group>
+          <Form.Group className="mb-3">
+            <Form.Label>Note</Form.Label>
+            <Form.Control as="textarea" rows={6} value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder="Enter note details..." />
+          </Form.Group>
+          <Form.Group>
+            <Form.Label>Visibility</Form.Label>
+            <Form.Select value={noteVisibility} onChange={(event) => setNoteVisibility(event.target.value as NoteVisibility)}>
+              <option value="internal">Internal only</option>
+              <option value="client">Client-facing</option>
+            </Form.Select>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => { setShowAddNoteModal(false); resetNotesEditor(); }}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={() => void handleSaveNote()} disabled={!noteText.trim() || isSavingNote}>
+            {isSavingNote && <Spinner animation="border" size="sm" className="me-2" />}
+            Save Note
+          </Button>
         </Modal.Footer>
       </Modal>
       <Modal show={showQuickEditNoteModal} onHide={closeQuickEditNoteModal} centered>

@@ -2258,6 +2258,40 @@ textarea.form-control {
   font-size: 0.76rem;
 }
 
+.note-card {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 0.9rem;
+  background: #fff;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.note-card:hover {
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  transform: translateY(-1px);
+}
+
+.note-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.note-card-text {
+  color: #1f2937;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.note-card-text-full {
+  color: #1f2937;
+  white-space: pre-wrap;
+}
+
 .client-note-type {
   display: inline-flex;
   align-items: center;
@@ -2934,6 +2968,11 @@ textarea.form-control {
 .request-type-mark-appointment {
   background: rgba(37, 99, 235, 0.12);
   color: #1d4ed8;
+}
+
+.request-type-mark-appointment-change {
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
 }
 
 .request-type-mark-new-pet {

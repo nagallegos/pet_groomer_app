@@ -9,6 +9,7 @@ export type AppointmentStatus =
   | "no-show";
 export type ClientRequestType =
   | "appointment"
+  | "appointment_change"
   | "new_pet"
   | "profile_update"
   | "general";
@@ -83,6 +84,13 @@ export interface AppointmentRequestDetails {
   pendingPet?: PendingPetProfile;
 }
 
+export type AppointmentChangeType = "cancel" | "reschedule";
+
+export interface AppointmentChangeRequestDetails {
+  appointmentId: string;
+  changeType: AppointmentChangeType;
+}
+
 export interface NewPetRequestDetails {
   pendingPet: PendingPetProfile;
 }
@@ -97,6 +105,7 @@ export interface GeneralRequestDetails {
 
 export interface ClientRequestDetails {
   appointment?: AppointmentRequestDetails;
+  appointmentChange?: AppointmentChangeRequestDetails;
   newPet?: NewPetRequestDetails;
   profileUpdate?: ProfileUpdateRequestDetails;
   general?: GeneralRequestDetails;
@@ -129,6 +138,7 @@ export interface ClientRequest {
   status: ClientRequestStatus;
   subject: string;
   clientNote: string;
+  resolutionNote?: string;
   internalNote?: string;
   details?: ClientRequestDetails;
   events?: ClientRequestEvent[];

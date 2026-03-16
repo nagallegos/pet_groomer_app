@@ -1,4 +1,5 @@
-import { Accordion, Card } from "react-bootstrap";
+import { useState } from "react";
+import { Accordion, Card, Modal } from "react-bootstrap";
 import { useAppData } from "../components/common/AppDataProvider";
 import PageLoader from "../components/common/PageLoader";
 import { useAuth } from "../components/common/useAuth";
@@ -9,6 +10,7 @@ export default function ClientPetsPage() {
   const isLoading = useInitialLoading();
   const { user } = useAuth();
   const { pets, appointments } = useAppData();
+  const [selectedNote, setSelectedNote] = useState<{ text: string; createdAt: string } | null>(null);
 
   if (isLoading) {
     return <PageLoader label="Loading pets..." />;
@@ -76,12 +78,24 @@ export default function ClientPetsPage() {
                     <h6 className="mb-2">Notes</h6>
                     <div className="d-grid gap-2">
                       {clientNotes.map((note) => (
-                        <Card key={note.id} className="client-note-preview">
-                          <Card.Body>
-                            <div className="text-muted small mb-1">
-                              {new Date(note.createdAt).toLocaleDateString()}
+                        <Card
+                          key={note.id}
+                          className="note-card"
+                          onClick={() => setSelectedNote({ text: note.text, createdAt: note.createdAt })}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              setSelectedNote({ text: note.text, createdAt: note.createdAt });
+                            }
+                          }}
+                        >
+                          <Card.Body className="d-grid gap-2">
+                            <div className="note-card-meta">
+                              <span>{new Date(note.createdAt).toLocaleDateString()}</span>
                             </div>
-                            <div>{note.text}</div>
+                            <div className="note-card-text">{note.text}</div>
                           </Card.Body>
                         </Card>
                       ))}
@@ -116,6 +130,21 @@ export default function ClientPetsPage() {
           );
         })}
       </Accordion>
+      <Modal show={!!selectedNote} onHide={() => setSelectedNote(null)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Note</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {selectedNote && (
+            <>
+              <div className="text-muted small mb-2">
+                {new Date(selectedNote.createdAt).toLocaleDateString()}
+              </div>
+              <div className="note-card-text-full">{selectedNote.text}</div>
+            </>
+          )}
+        </Modal.Body>
+      </Modal>
     </>
   );
 }

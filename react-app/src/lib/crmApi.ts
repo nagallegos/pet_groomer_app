@@ -92,6 +92,7 @@ export interface ClientRequestUpsertInput {
   requestType: ClientRequestType;
   subject: string;
   clientNote: string;
+  resolutionNote?: string;
   internalNote?: string;
   status?: ClientRequestStatus;
   details?: ClientRequestDetails;
@@ -325,6 +326,7 @@ function normalizeClientRequest(
     status,
     subject: input.subject,
     clientNote: input.clientNote,
+    resolutionNote: input.resolutionNote,
     internalNote: input.internalNote,
     details: input.details,
     events: existingRequest?.events ?? [],

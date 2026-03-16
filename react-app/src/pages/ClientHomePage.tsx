@@ -9,6 +9,7 @@ const CLIENT_PORTAL_NOW = Date.now();
 
 const requestTypeLabels = {
   appointment: "Appointment request",
+  appointment_change: "Cancel/Reschedule request",
   new_pet: "New pet request",
   profile_update: "Profile update",
   general: "General request",
@@ -166,6 +167,9 @@ export default function ClientHomePage() {
               <div className="d-grid gap-2">
                 <Link className="btn btn-primary" to="/requests?type=appointment">
                   Request Appointment
+                </Link>
+                <Link className="btn btn-outline-primary" to="/requests?type=appointment_change">
+                  Request Cancel/Reschedule
                 </Link>
                 <Link className="btn btn-outline-primary" to="/requests?type=new_pet">
                   Request New Pet Profile

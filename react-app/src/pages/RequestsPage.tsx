@@ -10,6 +10,8 @@ import useInitialLoading from "../hooks/useInitialLoading";
 import { saveClientRequest, type ClientRequestUpsertInput } from "../lib/crmApi";
 import { toDateInputValue } from "../lib/petAge";
 import type {
+  Appointment,
+  AppointmentChangeType,
   ClientRequest,
   ClientRequestEvent,
   ClientRequestType,
@@ -22,9 +24,15 @@ const NEW_PET_SENTINEL = "__new_pet__";
 
 const requestTypeLabels: Record<ClientRequestType, string> = {
   appointment: "Appointment Request",
+  appointment_change: "Cancel/Reschedule Request",
   new_pet: "New Pet Request",
   profile_update: "Profile Update",
   general: "General Request",
+};
+
+const appointmentChangeLabels: Record<AppointmentChangeType, string> = {
+  cancel: "Cancel",
+  reschedule: "Reschedule",
 };
 
 const profileAttributeLabels: Record<ProfileRequestAttribute, string> = {
@@ -64,6 +72,8 @@ function getRequestTypeIcon(type: ClientRequestType) {
   switch (type) {
     case "appointment":
       return "A";
+    case "appointment_change":
+      return "C";
     case "new_pet":
       return "P";
     case "profile_update":
@@ -84,7 +94,7 @@ export default function RequestsPage() {
   const isLoading = useInitialLoading();
   const { user } = useAuth();
   const { showToast } = useAppToast();
-  const { owners, pets, requests, setRequests } = useAppData();
+  const { owners, pets, appointments, requests, setRequests } = useAppData();
   const [searchParams, setSearchParams] = useSearchParams();
   const [showModal, setShowModal] = useState(false);
   const [editingRequest, setEditingRequest] = useState<ClientRequest | null>(null);
@@ -95,9 +105,12 @@ export default function RequestsPage() {
   const [requestType, setRequestType] = useState<ClientRequestType>("appointment");
   const [subject, setSubject] = useState("");
   const [clientNote, setClientNote] = useState("");
+  const [resolutionNote, setResolutionNote] = useState("");
   const [internalNote, setInternalNote] = useState("");
   const [status, setStatus] = useState<ClientRequest["status"]>("open");
   const [petId, setPetId] = useState("");
+  const [appointmentId, setAppointmentId] = useState("");
+  const [appointmentChangeType, setAppointmentChangeType] = useState<AppointmentChangeType>("cancel");
   const [selectedOwnerId, setSelectedOwnerId] = useState("");
   const [profileAttribute, setProfileAttribute] = useState<ProfileRequestAttribute>("contact_info");
   const [pendingPet, setPendingPet] = useState<PendingPetProfile>(emptyPendingPet());
@@ -108,6 +121,27 @@ export default function RequestsPage() {
   const availablePets = pets.filter(
     (pet) => !pet.isArchived && (!activeOwnerId || pet.ownerId === activeOwnerId),
   );
+  const availableAppointments = appointments.filter((appointment) => {
+    if (appointment.isArchived) {
+      return false;
+    }
+    if (activeOwnerId && appointment.ownerId !== activeOwnerId) {
+      return false;
+    }
+    if (!["scheduled", "confirmed"].includes(appointment.status)) {
+      return false;
+    }
+    return new Date(appointment.end).getTime() >= Date.now();
+  });
+  const sortedAppointments = useMemo(
+    () =>
+      [...availableAppointments].sort(
+        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+      ),
+    [availableAppointments],
+  );
+  const selectedAppointment = appointments.find((item) => item.id === appointmentId);
+  const selectedAppointmentInList = sortedAppointments.some((item) => item.id === appointmentId);
   const visibleRequests = useMemo(
     () =>
       [...requests].sort(
@@ -125,7 +159,7 @@ export default function RequestsPage() {
 
   useEffect(() => {
     const type = searchParams.get("type");
-    if (type && ["appointment", "new_pet", "profile_update", "general"].includes(type)) {
+    if (type && ["appointment", "appointment_change", "new_pet", "profile_update", "general"].includes(type)) {
       setRequestType(type as ClientRequestType);
       if (isClient) {
         setSelectedOwnerId(ownerId);
@@ -166,9 +200,12 @@ export default function RequestsPage() {
     setRequestType("appointment");
     setSubject("");
     setClientNote("");
+    setResolutionNote("");
     setInternalNote("");
     setStatus("open");
     setPetId("");
+    setAppointmentId("");
+    setAppointmentChangeType("cancel");
     setSelectedOwnerId(isClient ? ownerId : "");
     setProfileAttribute("contact_info");
     setPendingPet(emptyPendingPet());
@@ -190,9 +227,12 @@ export default function RequestsPage() {
     setRequestType(request.requestType);
     setSubject(request.subject);
     setClientNote(request.clientNote);
+    setResolutionNote(request.resolutionNote ?? "");
     setInternalNote(request.internalNote ?? "");
     setStatus(request.status);
     setPetId(request.petId ?? "");
+    setAppointmentId(request.details?.appointmentChange?.appointmentId ?? "");
+    setAppointmentChangeType(request.details?.appointmentChange?.changeType ?? "cancel");
     setSelectedOwnerId(request.ownerId);
     setProfileAttribute(request.details?.profileUpdate?.attribute ?? "contact_info");
     setPendingPet(
@@ -228,6 +268,12 @@ export default function RequestsPage() {
     return `Appointment request for ${pet?.name ?? "pet"}`;
   };
 
+  const buildAppointmentChangeSubject = (appointment?: Appointment | null) => {
+    const actionLabel = appointmentChangeLabels[appointmentChangeType];
+    const pet = appointment ? pets.find((item) => item.id === appointment.petId) : null;
+    return `${actionLabel} request for ${pet?.name ?? "appointment"}`;
+  };
+
   const validateForm = () => {
     if (!activeOwnerId) {
       return "A client is required.";
@@ -256,6 +302,15 @@ export default function RequestsPage() {
       }
     }
 
+    if (requestType === "appointment_change") {
+      if (!appointmentId) {
+        return "Please choose the appointment you want to change.";
+      }
+      if (!appointmentChangeType) {
+        return "Please choose cancel or reschedule.";
+      }
+    }
+
     if ((requestType === "profile_update" || requestType === "general") && !subject.trim()) {
       return "A subject is required.";
     }
@@ -267,14 +322,21 @@ export default function RequestsPage() {
     return null;
   };
 
+  const ownerIdForPayload = editingRequest
+    ? editingRequest.ownerId
+    : isClient
+      ? ownerId
+      : selectedOwnerId;
+
   const buildPayload = (): ClientRequestUpsertInput => {
     if (requestType === "appointment") {
       return {
-        ownerId: isClient ? ownerId : selectedOwnerId,
+        ownerId: ownerIdForPayload,
         petId: petId && petId !== NEW_PET_SENTINEL ? petId : undefined,
         requestType,
         subject: buildAppointmentSubject(),
         clientNote,
+        resolutionNote: isClient ? undefined : resolutionNote || undefined,
         internalNote: isClient ? undefined : internalNote || undefined,
         status: isClient ? "open" : status,
         details: {
@@ -286,12 +348,33 @@ export default function RequestsPage() {
       };
     }
 
+    if (requestType === "appointment_change") {
+      const appointment = appointments.find((item) => item.id === appointmentId);
+      return {
+        ownerId: ownerIdForPayload,
+        petId: appointment?.petId,
+        requestType,
+        subject: buildAppointmentChangeSubject(appointment),
+        clientNote,
+        resolutionNote: isClient ? undefined : resolutionNote || undefined,
+        internalNote: isClient ? undefined : internalNote || undefined,
+        status: isClient ? "open" : status,
+        details: {
+          appointmentChange: {
+            appointmentId,
+            changeType: appointmentChangeType,
+          },
+        },
+      };
+    }
+
     if (requestType === "new_pet") {
       return {
-        ownerId: isClient ? ownerId : selectedOwnerId,
+        ownerId: ownerIdForPayload,
         requestType,
         subject: buildNewPetSubject(),
         clientNote,
+        resolutionNote: isClient ? undefined : resolutionNote || undefined,
         internalNote: isClient ? undefined : internalNote || undefined,
         status: isClient ? "open" : status,
         details: {
@@ -304,11 +387,12 @@ export default function RequestsPage() {
 
     if (requestType === "profile_update") {
       return {
-        ownerId: isClient ? ownerId : selectedOwnerId,
+        ownerId: ownerIdForPayload,
         petId: petId || undefined,
         requestType,
         subject: subject.trim(),
         clientNote,
+        resolutionNote: isClient ? undefined : resolutionNote || undefined,
         internalNote: isClient ? undefined : internalNote || undefined,
         status: isClient ? "open" : status,
         details: {
@@ -320,11 +404,12 @@ export default function RequestsPage() {
     }
 
     return {
-      ownerId: isClient ? ownerId : selectedOwnerId,
+      ownerId: ownerIdForPayload,
       petId: petId || undefined,
       requestType,
       subject: subject.trim(),
       clientNote,
+      resolutionNote: isClient ? undefined : resolutionNote || undefined,
       internalNote: isClient ? undefined : internalNote || undefined,
       status: isClient ? "open" : status,
       details: {
@@ -358,6 +443,7 @@ export default function RequestsPage() {
             requestType: "new_pet",
             subject: buildNewPetSubject(),
             clientNote,
+            resolutionNote: payload.resolutionNote,
             internalNote: payload.internalNote,
             status: payload.status,
             details: {
@@ -405,6 +491,19 @@ export default function RequestsPage() {
     if (request.requestType === "appointment" && request.details?.appointment?.pendingPet) {
       return `Pending Pet: ${formatPendingPetSummary(request.details.appointment.pendingPet)}`;
     }
+    if (request.requestType === "appointment_change" && request.details?.appointmentChange) {
+      const appointment = appointments.find(
+        (item) => item.id === request.details?.appointmentChange?.appointmentId,
+      );
+      const petName = appointment
+        ? pets.find((item) => item.id === appointment.petId)?.name ?? "Pet"
+        : "Appointment";
+      const appointmentSummary = appointment
+        ? `${petName} | ${new Date(appointment.start).toLocaleString()}`
+        : petName;
+      const changeLabel = appointmentChangeLabels[request.details.appointmentChange.changeType];
+      return `${changeLabel}: ${appointmentSummary}`;
+    }
     if (request.requestType === "new_pet" && request.details?.newPet?.pendingPet) {
       return formatPendingPetSummary(request.details.newPet.pendingPet);
     }
@@ -418,6 +517,8 @@ export default function RequestsPage() {
     switch (type) {
       case "appointment":
         return "bg-primary-subtle text-primary-emphasis";
+      case "appointment_change":
+        return "bg-danger-subtle text-danger-emphasis";
       case "new_pet":
         return "bg-success-subtle text-success-emphasis";
       case "profile_update":
@@ -512,7 +613,7 @@ export default function RequestsPage() {
           <h2 className="mb-1">{isClient ? "My Requests" : "Request Log"}</h2>
           <p className="text-muted mb-0">
             {isClient
-              ? "Request appointments, pet updates, and profile changes from the groomer."
+              ? "Request appointments, cancel or reschedule, pet updates, and profile changes from the groomer."
               : "Review incoming customer requests and track follow-up work."}
           </p>
         </div>
@@ -521,7 +622,7 @@ export default function RequestsPage() {
 
       {!isClient && (
         <Alert variant="info" className="mb-4">
-          This log includes appointment requests, new pet requests, profile updates, and general client requests.
+          This log includes appointment requests, cancel/reschedule requests, new pet requests, profile updates, and general client requests.
         </Alert>
       )}
 
@@ -568,6 +669,13 @@ export default function RequestsPage() {
                     <div className="text-muted small mb-1">Client Note</div>
                     <div>{request.clientNote}</div>
                   </div>
+
+                  {request.resolutionNote && (
+                    <div>
+                      <div className="text-muted small mb-1">Groomer Update</div>
+                      <div>{request.resolutionNote}</div>
+                    </div>
+                  )}
 
                   {!isClient && request.internalNote && (
                     <div>
@@ -685,12 +793,14 @@ export default function RequestsPage() {
                 <Form.Label>Request Type</Form.Label>
                   <Form.Select
                     value={requestType}
-                    onChange={(event) => {
+                  onChange={(event) => {
                       setRequestType(event.target.value as ClientRequestType);
                       setPetId("");
+                      setAppointmentId("");
+                      setAppointmentChangeType("cancel");
                       setPendingPet(emptyPendingPet());
                     }}
-                  disabled={isReadOnly || (!!editingRequest && isClient)}
+                  disabled={isReadOnly || !!editingRequest}
                   >
                     {Object.entries(requestTypeLabels).map(([value, label]) => (
                       <option key={value} value={value}>
@@ -708,7 +818,7 @@ export default function RequestsPage() {
                     setSelectedOwnerId(event.target.value);
                     setPetId("");
                   }}
-                  disabled={isReadOnly || isClient}
+                  disabled={isReadOnly || isClient || !!editingRequest}
                   required
                 >
                   <option value="">Select a client</option>
@@ -749,6 +859,53 @@ export default function RequestsPage() {
                       onChange={(event) => setSubject(event.target.value)}
                       disabled={isReadOnly}
                     />
+                  </Form.Group>
+                </>
+              )}
+
+              {requestType === "appointment_change" && (
+                <>
+                  <Form.Group>
+                    <Form.Label>Appointment</Form.Label>
+                    <Form.Select
+                      value={appointmentId}
+                      onChange={(event) => setAppointmentId(event.target.value)}
+                      required
+                      disabled={isReadOnly}
+                    >
+                      <option value="">Select an appointment</option>
+                      {!selectedAppointmentInList && selectedAppointment && (
+                        <option value={selectedAppointment.id}>
+                          {pets.find((pet) => pet.id === selectedAppointment.petId)?.name ?? "Pet"} |{" "}
+                          {new Date(selectedAppointment.start).toLocaleString()}
+                        </option>
+                      )}
+                      {sortedAppointments.map((appointment) => {
+                        const pet = pets.find((item) => item.id === appointment.petId);
+                        return (
+                          <option key={appointment.id} value={appointment.id}>
+                            {pet?.name ?? "Pet"} | {new Date(appointment.start).toLocaleString()}
+                          </option>
+                        );
+                      })}
+                    </Form.Select>
+                    {sortedAppointments.length === 0 && !selectedAppointment && (
+                      <div className="text-muted small mt-2">No upcoming appointments available.</div>
+                    )}
+                  </Form.Group>
+                  <Form.Group>
+                    <Form.Label>Change Type</Form.Label>
+                    <Form.Select
+                      value={appointmentChangeType}
+                      onChange={(event) => setAppointmentChangeType(event.target.value as AppointmentChangeType)}
+                      disabled={isReadOnly}
+                    >
+                      {Object.entries(appointmentChangeLabels).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </Form.Select>
                   </Form.Group>
                 </>
               )}
@@ -813,7 +970,13 @@ export default function RequestsPage() {
               )}
 
               <Form.Group>
-                <Form.Label>{requestType === "profile_update" || requestType === "general" ? "Request Note" : "Additional Details"}</Form.Label>
+                <Form.Label>
+                  {requestType === "profile_update" || requestType === "general"
+                    ? "Request Note"
+                    : requestType === "appointment_change"
+                      ? "Notes"
+                      : "Additional Details"}
+                </Form.Label>
                 <Form.Control
                   as="textarea"
                   rows={5}
@@ -823,6 +986,26 @@ export default function RequestsPage() {
                   disabled={isReadOnly}
                 />
               </Form.Group>
+
+              {isClient ? (
+                resolutionNote ? (
+                  <Form.Group>
+                    <Form.Label>Groomer Update</Form.Label>
+                    <Form.Control as="textarea" rows={4} value={resolutionNote} disabled />
+                  </Form.Group>
+                ) : null
+              ) : (
+                <Form.Group>
+                  <Form.Label>Client Update (Visible to client)</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={4}
+                    value={resolutionNote}
+                    onChange={(event) => setResolutionNote(event.target.value)}
+                    disabled={isReadOnly}
+                  />
+                </Form.Group>
+              )}
 
               {!isClient && (
                 <>

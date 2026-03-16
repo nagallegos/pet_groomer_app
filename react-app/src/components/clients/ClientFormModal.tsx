@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, Card, Form, Modal, Spinner } from "react-bootstrap";
-import { PencilSquare } from "react-bootstrap-icons";
 import {
   addOwnerNote,
   deleteOwnerNoteItem,
@@ -40,6 +39,7 @@ export default function ClientFormModal({
   const [draftNotes, setDraftNotes] = useState<DraftNote[]>([]);
   const [noteDraftText, setNoteDraftText] = useState("");
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
+  const [showNoteModal, setShowNoteModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -63,12 +63,28 @@ export default function ClientFormModal({
     );
     setNoteDraftText("");
     setEditingDraftId(null);
+    setShowNoteModal(false);
     setSaveError(null);
   }, [initialOwner, show]);
 
   const resetDraftEditor = () => {
     setNoteDraftText("");
     setEditingDraftId(null);
+  };
+
+  const openNoteModal = (note?: DraftNote) => {
+    if (note) {
+      setEditingDraftId(note.id);
+      setNoteDraftText(note.text);
+    } else {
+      resetDraftEditor();
+    }
+    setShowNoteModal(true);
+  };
+
+  const closeNoteModal = () => {
+    setShowNoteModal(false);
+    resetDraftEditor();
   };
 
   const saveDraftNote = () => {
@@ -99,6 +115,16 @@ export default function ClientFormModal({
     }
 
     resetDraftEditor();
+    setShowNoteModal(false);
+  };
+
+  const deleteDraftNote = () => {
+    if (!editingDraftId) {
+      return;
+    }
+    setDraftNotes((current) => current.filter((note) => note.id !== editingDraftId));
+    resetDraftEditor();
+    setShowNoteModal(false);
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -162,6 +188,7 @@ export default function ClientFormModal({
   };
 
   return (
+    <>
     <Modal show={show} onHide={onHide} centered fullscreen="sm-down">
       <Form onSubmit={handleSubmit} className="modal-form-shell">
         <Modal.Header closeButton>
@@ -244,27 +271,8 @@ export default function ClientFormModal({
           <div className="d-grid gap-3">
             <div className="d-flex justify-content-between align-items-center gap-2">
               <Form.Label className="mb-0">Client Notes</Form.Label>
-              <Button variant="outline-secondary" size="sm" onClick={resetDraftEditor}>
-                New Note
-              </Button>
-            </div>
-            <Form.Group>
-              <Form.Control
-                as="textarea"
-                rows={3}
-                value={noteDraftText}
-                onChange={(e) => setNoteDraftText(e.target.value)}
-                placeholder="Add an internal client note..."
-              />
-            </Form.Group>
-            <div className="d-flex justify-content-end gap-2">
-              {editingDraftId && (
-                <Button variant="outline-secondary" size="sm" onClick={resetDraftEditor}>
-                  Cancel Edit
-                </Button>
-              )}
-              <Button variant="primary" size="sm" onClick={saveDraftNote} disabled={!noteDraftText.trim()}>
-                Save Note Card
+              <Button variant="outline-secondary" size="sm" onClick={() => openNoteModal()}>
+                Add Note
               </Button>
             </div>
             <div className="d-grid gap-2">
@@ -272,41 +280,24 @@ export default function ClientFormModal({
                 <div className="text-muted small">No client notes added yet.</div>
               ) : (
                 draftNotes.map((note) => (
-                  <Card key={note.id} className="client-note-preview">
-                    <Card.Body className="d-flex justify-content-between align-items-start gap-3">
-                      <div className="client-note-item">
-                        <div className="client-note-meta">
-                          <span className="note-visibility-pill note-visibility-pill-internal">Internal</span>
-                        </div>
-                        <div>{note.text}</div>
+                  <Card
+                    key={note.id}
+                    className="note-card"
+                    onClick={() => openNoteModal(note)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openNoteModal(note);
+                      }
+                    }}
+                  >
+                    <Card.Body className="d-grid gap-2">
+                      <div className="note-card-meta">
+                        <span className="note-visibility-pill note-visibility-pill-internal">Internal</span>
                       </div>
-                      <div className="note-inline-actions">
-                        <button
-                          type="button"
-                          className="pet-row-indicator-button"
-                          aria-label="Edit note"
-                          onClick={() => {
-                            setEditingDraftId(note.id);
-                            setNoteDraftText(note.text);
-                          }}
-                        >
-                          <span className="pet-row-indicator">
-                            <PencilSquare aria-hidden="true" />
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          className="pet-row-indicator-button"
-                          onClick={() => {
-                            setDraftNotes((current) => current.filter((item) => item.id !== note.id));
-                            if (editingDraftId === note.id) {
-                              resetDraftEditor();
-                            }
-                          }}
-                        >
-                          <span className="pet-row-indicator pet-row-indicator-danger">Remove</span>
-                        </button>
-                      </div>
+                      <div className="note-card-text">{note.text}</div>
                     </Card.Body>
                   </Card>
                 ))
@@ -329,5 +320,36 @@ export default function ClientFormModal({
         </Modal.Footer>
       </Form>
     </Modal>
+    <Modal show={showNoteModal} onHide={closeNoteModal} centered>
+      <Modal.Header closeButton>
+        <Modal.Title>{editingDraftId ? "Edit Client Note" : "New Client Note"}</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <Form.Group>
+          <Form.Label>Note</Form.Label>
+          <Form.Control
+            as="textarea"
+            rows={4}
+            value={noteDraftText}
+            onChange={(e) => setNoteDraftText(e.target.value)}
+            placeholder="Add an internal client note..."
+          />
+        </Form.Group>
+      </Modal.Body>
+      <Modal.Footer>
+        {editingDraftId && (
+          <Button variant="outline-danger" onClick={deleteDraftNote}>
+            Delete
+          </Button>
+        )}
+        <Button variant="outline-secondary" onClick={closeNoteModal}>
+          Cancel
+        </Button>
+        <Button variant="primary" onClick={saveDraftNote} disabled={!noteDraftText.trim()}>
+          Save Note
+        </Button>
+      </Modal.Footer>
+    </Modal>
+    </>
   );
 }

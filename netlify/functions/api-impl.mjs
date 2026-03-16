@@ -21,6 +21,7 @@ const appUserRoles = new Set(["admin", "groomer", "client"]);
 const noteVisibilities = new Set(["internal", "client"]);
 const clientRequestTypes = new Set([
   "appointment",
+  "appointment_change",
   "new_pet",
   "profile_update",
   "general",
@@ -259,6 +260,7 @@ function mapClientRequestRow(row) {
     status: row.status,
     subject: row.subject,
     clientNote: row.client_note,
+    resolutionNote: row.resolution_note ?? undefined,
     internalNote: row.internal_note ?? undefined,
     details: row.details ?? {},
     events: row.events ?? undefined,
@@ -617,10 +619,11 @@ async function ensureSchema() {
           owner_id UUID NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
           pet_id UUID REFERENCES pets(id) ON DELETE SET NULL,
           created_by_user_id UUID REFERENCES app_users(id) ON DELETE SET NULL,
-          request_type TEXT NOT NULL CHECK (request_type IN ('appointment', 'new_pet', 'profile_update', 'general')),
+          request_type TEXT NOT NULL CHECK (request_type IN ('appointment', 'appointment_change', 'new_pet', 'profile_update', 'general')),
           status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_review', 'resolved', 'closed')),
           subject TEXT NOT NULL,
           client_note TEXT NOT NULL,
+          resolution_note TEXT,
           internal_note TEXT,
           details JSONB NOT NULL DEFAULT '{}'::jsonb,
           resolved_at TIMESTAMPTZ,
@@ -664,6 +667,25 @@ async function ensureSchema() {
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`;
       await sql`ALTER TABLE client_requests ADD COLUMN IF NOT EXISTS details JSONB NOT NULL DEFAULT '{}'::jsonb`;
+      await sql`ALTER TABLE client_requests ADD COLUMN IF NOT EXISTS resolution_note TEXT`;
+      await sql`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            WHERE t.relname = 'client_requests'
+              AND c.conname = 'client_requests_request_type_check'
+          ) THEN
+            ALTER TABLE client_requests DROP CONSTRAINT client_requests_request_type_check;
+          END IF;
+
+          ALTER TABLE client_requests
+          ADD CONSTRAINT client_requests_request_type_check
+          CHECK (request_type IN ('appointment', 'appointment_change', 'new_pet', 'profile_update', 'general'));
+        END $$;
+      `;
       await sql`
         DO $$
         BEGIN
@@ -809,7 +831,7 @@ async function listClientRequests({ ownerId, includeStaffOnly = false } = {}) {
     ? await sql`
         SELECT id::text AS id, owner_id::text AS owner_id, pet_id::text AS pet_id,
                created_by_user_id::text AS created_by_user_id, request_type, status,
-               subject, client_note, internal_note, details, resolved_at, created_at, updated_at
+               subject, client_note, resolution_note, internal_note, details, resolved_at, created_at, updated_at
         FROM client_requests
         WHERE owner_id = ${ownerId}::uuid
         ORDER BY created_at DESC
@@ -817,7 +839,7 @@ async function listClientRequests({ ownerId, includeStaffOnly = false } = {}) {
     : await sql`
         SELECT id::text AS id, owner_id::text AS owner_id, pet_id::text AS pet_id,
                created_by_user_id::text AS created_by_user_id, request_type, status,
-               subject, client_note, internal_note, details, resolved_at, created_at, updated_at
+               subject, client_note, resolution_note, internal_note, details, resolved_at, created_at, updated_at
         FROM client_requests
         ORDER BY created_at DESC
       `;
@@ -839,7 +861,7 @@ async function getClientRequest(requestId, { includeStaffOnly = false } = {}) {
   const rows = await sql`
     SELECT id::text AS id, owner_id::text AS owner_id, pet_id::text AS pet_id,
            created_by_user_id::text AS created_by_user_id, request_type, status,
-           subject, client_note, internal_note, details, resolved_at, created_at, updated_at
+           subject, client_note, resolution_note, internal_note, details, resolved_at, created_at, updated_at
     FROM client_requests
     WHERE id = ${requestId}::uuid
     LIMIT 1
@@ -1324,6 +1346,8 @@ function buildClientTextNotification({ summary, token, notificationType, isCance
 
 function getRequestTypeLabel(requestType) {
   switch (requestType) {
+    case "appointment_change":
+      return "Cancel/Reschedule Request";
     case "new_pet":
       return "New Pet Request";
     case "profile_update":
@@ -2379,6 +2403,7 @@ function validateClientRequestPayload(payload, { isNew = false } = {}) {
   const petId = optionalString(payload.petId);
   const subject = requiredString(payload.subject, "subject");
   const clientNote = requiredString(payload.clientNote, "clientNote");
+  const resolutionNote = optionalString(payload.resolutionNote);
   const internalNote = optionalString(payload.internalNote);
   const details = optionalObject(payload.details, "details");
 
@@ -2393,6 +2418,7 @@ function validateClientRequestPayload(payload, { isNew = false } = {}) {
     status,
     subject,
     clientNote,
+    resolutionNote,
     internalNote,
     details,
   };
@@ -2402,7 +2428,7 @@ async function createClientRequest(payload, currentUser) {
   const input = validateClientRequestPayload(payload, { isNew: true });
   const rows = await sql`
     INSERT INTO client_requests (
-      owner_id, pet_id, created_by_user_id, request_type, status, subject, client_note, internal_note, details
+      owner_id, pet_id, created_by_user_id, request_type, status, subject, client_note, resolution_note, internal_note, details
     )
     VALUES (
       ${input.ownerId}::uuid,
@@ -2412,12 +2438,13 @@ async function createClientRequest(payload, currentUser) {
       ${input.status},
       ${input.subject},
       ${input.clientNote},
+      ${input.resolutionNote},
       ${input.internalNote},
       ${JSON.stringify(input.details)}
     )
     RETURNING id::text AS id, owner_id::text AS owner_id, pet_id::text AS pet_id,
               created_by_user_id::text AS created_by_user_id, request_type, status,
-              subject, client_note, internal_note, details, resolved_at, created_at, updated_at
+              subject, client_note, resolution_note, internal_note, details, resolved_at, created_at, updated_at
   `;
   const requestRecord = mapClientRequestRow(rows[0]);
   const createdEvent = await createClientRequestEvent(
@@ -2451,6 +2478,7 @@ async function updateClientRequest(requestId, payload, currentUser) {
         status = ${input.status},
         subject = ${input.subject},
         client_note = ${input.clientNote},
+        resolution_note = ${input.resolutionNote},
         internal_note = ${input.internalNote},
         details = ${JSON.stringify(input.details)},
         resolved_at = ${resolvedAt}::timestamptz,
@@ -2458,7 +2486,7 @@ async function updateClientRequest(requestId, payload, currentUser) {
     WHERE id = ${requestId}::uuid
     RETURNING id::text AS id, owner_id::text AS owner_id, pet_id::text AS pet_id,
               created_by_user_id::text AS created_by_user_id, request_type, status,
-              subject, client_note, internal_note, details, resolved_at, created_at, updated_at
+              subject, client_note, resolution_note, internal_note, details, resolved_at, created_at, updated_at
   `;
   const requestRecord = rows[0] ? mapClientRequestRow(rows[0]) : null;
   if (requestRecord && existingRequest) {

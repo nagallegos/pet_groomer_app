@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Button, Card, Form, Modal, Spinner } from "react-bootstrap";
-import { PencilSquare } from "react-bootstrap-icons";
 import { useAppToast } from "../common/AppToastProvider";
 import {
   APPOINTMENT_SERVICE_OPTIONS,
@@ -59,6 +58,7 @@ export default function AppointmentFormModal({
   const [noteDraftText, setNoteDraftText] = useState("");
   const [noteDraftVisibility, setNoteDraftVisibility] = useState<NoteVisibility>("internal");
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
+  const [showNoteModal, setShowNoteModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -76,6 +76,7 @@ export default function AppointmentFormModal({
       setNoteDraftText("");
       setNoteDraftVisibility("internal");
       setEditingDraftId(null);
+      setShowNoteModal(false);
       setSaveError(null);
     }
   }, [
@@ -112,6 +113,22 @@ export default function AppointmentFormModal({
     setEditingDraftId(null);
   };
 
+  const openNoteModal = (note?: DraftAppointmentNote) => {
+    if (note) {
+      setEditingDraftId(note.id);
+      setNoteDraftText(note.text);
+      setNoteDraftVisibility(note.visibility);
+    } else {
+      resetDraftEditor();
+    }
+    setShowNoteModal(true);
+  };
+
+  const closeNoteModal = () => {
+    setShowNoteModal(false);
+    resetDraftEditor();
+  };
+
   const saveDraftNote = () => {
     const trimmed = noteDraftText.trim();
     if (!trimmed) {
@@ -138,6 +155,16 @@ export default function AppointmentFormModal({
     }
 
     resetDraftEditor();
+    setShowNoteModal(false);
+  };
+
+  const deleteDraftNote = () => {
+    if (!editingDraftId) {
+      return;
+    }
+    setDraftNotes((current) => current.filter((note) => note.id !== editingDraftId));
+    resetDraftEditor();
+    setShowNoteModal(false);
   };
 
   const toggleService = (service: string) => {
@@ -205,6 +232,7 @@ export default function AppointmentFormModal({
   };
 
   return (
+    <>
     <Modal show={show} onHide={onHide} centered fullscreen="sm-down">
       <Form onSubmit={handleSubmit} className="modal-form-shell">
         <Modal.Header closeButton>
@@ -374,39 +402,8 @@ export default function AppointmentFormModal({
           <div className="d-grid gap-3">
             <div className="d-flex justify-content-between align-items-center gap-2">
               <Form.Label id="notesLabel" className="mb-0">Appointment Notes</Form.Label>
-              <Button variant="outline-secondary" size="sm" onClick={resetDraftEditor}>
-                New Note
-              </Button>
-            </div>
-            <Form.Group>
-              <Form.Control
-                as="textarea"
-                rows={3}
-                value={noteDraftText}
-                onChange={(e) => setNoteDraftText(e.target.value)}
-                placeholder="Add grooming notes or instructions..."
-                title="Enter appointment note"
-                aria-labelledby="notesLabel"
-              />
-            </Form.Group>
-            <Form.Group>
-              <Form.Label>Visibility</Form.Label>
-              <Form.Select
-                value={noteDraftVisibility}
-                onChange={(e) => setNoteDraftVisibility(e.target.value as NoteVisibility)}
-              >
-                <option value="internal">Internal only</option>
-                <option value="client">Client-facing</option>
-              </Form.Select>
-            </Form.Group>
-            <div className="d-flex justify-content-end gap-2">
-              {editingDraftId && (
-                <Button variant="outline-secondary" size="sm" onClick={resetDraftEditor}>
-                  Cancel Edit
-                </Button>
-              )}
-              <Button variant="primary" size="sm" onClick={saveDraftNote} disabled={!noteDraftText.trim()}>
-                Save Note Card
+              <Button variant="outline-secondary" size="sm" onClick={() => openNoteModal()}>
+                Add Note
               </Button>
             </div>
             <div className="d-grid gap-2">
@@ -414,44 +411,26 @@ export default function AppointmentFormModal({
                 <div className="text-muted small">No appointment notes added yet.</div>
               ) : (
                 draftNotes.map((note) => (
-                  <Card key={note.id} className="client-note-preview">
-                    <Card.Body className="d-flex justify-content-between align-items-start gap-3">
-                      <div className="client-note-item">
-                        <div className="client-note-meta">
-                          <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
-                            {note.visibility === "client" ? "Client-facing" : "Internal"}
-                          </span>
-                        </div>
-                        <div>{note.text}</div>
+                  <Card
+                    key={note.id}
+                    className="note-card"
+                    onClick={() => openNoteModal(note)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openNoteModal(note);
+                      }
+                    }}
+                  >
+                    <Card.Body className="d-grid gap-2">
+                      <div className="note-card-meta">
+                        <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
+                          {note.visibility === "client" ? "Client-facing" : "Internal"}
+                        </span>
                       </div>
-                      <div className="note-inline-actions">
-                        <button
-                          type="button"
-                          className="pet-row-indicator-button"
-                          aria-label="Edit note"
-                          onClick={() => {
-                            setEditingDraftId(note.id);
-                            setNoteDraftText(note.text);
-                            setNoteDraftVisibility(note.visibility);
-                          }}
-                        >
-                          <span className="pet-row-indicator">
-                            <PencilSquare aria-hidden="true" />
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          className="pet-row-indicator-button"
-                          onClick={() => {
-                            setDraftNotes((current) => current.filter((item) => item.id !== note.id));
-                            if (editingDraftId === note.id) {
-                              resetDraftEditor();
-                            }
-                          }}
-                        >
-                          <span className="pet-row-indicator pet-row-indicator-danger">Remove</span>
-                        </button>
-                      </div>
+                      <div className="note-card-text">{note.text}</div>
                     </Card.Body>
                   </Card>
                 ))
@@ -473,5 +452,46 @@ export default function AppointmentFormModal({
         </Modal.Footer>
       </Form>
     </Modal>
+    <Modal show={showNoteModal} onHide={closeNoteModal} centered>
+      <Modal.Header closeButton>
+        <Modal.Title>{editingDraftId ? "Edit Appointment Note" : "New Appointment Note"}</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <Form.Group className="mb-3">
+          <Form.Label>Note</Form.Label>
+          <Form.Control
+            as="textarea"
+            rows={4}
+            value={noteDraftText}
+            onChange={(e) => setNoteDraftText(e.target.value)}
+            placeholder="Add grooming notes or instructions..."
+          />
+        </Form.Group>
+        <Form.Group>
+          <Form.Label>Visibility</Form.Label>
+          <Form.Select
+            value={noteDraftVisibility}
+            onChange={(e) => setNoteDraftVisibility(e.target.value as NoteVisibility)}
+          >
+            <option value="internal">Internal only</option>
+            <option value="client">Client-facing</option>
+          </Form.Select>
+        </Form.Group>
+      </Modal.Body>
+      <Modal.Footer>
+        {editingDraftId && (
+          <Button variant="outline-danger" onClick={deleteDraftNote}>
+            Delete
+          </Button>
+        )}
+        <Button variant="outline-secondary" onClick={closeNoteModal}>
+          Cancel
+        </Button>
+        <Button variant="primary" onClick={saveDraftNote} disabled={!noteDraftText.trim()}>
+          Save Note
+        </Button>
+      </Modal.Footer>
+    </Modal>
+    </>
   );
 }
