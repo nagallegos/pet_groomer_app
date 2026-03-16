@@ -449,6 +449,7 @@ export default function ClientQuickViewModal({
                       >
                         <Card.Body className="d-grid gap-2">
                           <div className="note-card-meta">
+                            <span className="client-note-type">client</span>
                             <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
                               {note.visibility === "client" ? "Client-facing" : "Internal"}
                             </span>
@@ -506,6 +507,7 @@ export default function ClientQuickViewModal({
                       >
                         <Card.Body className="d-grid gap-2">
                           <div className="note-card-meta">
+                            <span className="client-note-type">client</span>
                             <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
                               {note.visibility === "client" ? "Client-facing" : "Internal"}
                             </span>
@@ -805,6 +807,7 @@ export default function ClientQuickViewModal({
                       >
                         <Card.Body className="d-grid gap-2">
                           <div className="note-card-meta">
+                            <span className="client-note-type">client</span>
                             <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
                               {note.visibility === "client" ? "Client-facing" : "Internal"}
                             </span>
@@ -874,6 +877,7 @@ export default function ClientQuickViewModal({
                       >
                         <Card.Body className="d-grid gap-2">
                           <div className="note-card-meta">
+                            <span className="client-note-type">client</span>
                             <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
                               {note.visibility === "client" ? "Client-facing" : "Internal"}
                             </span>

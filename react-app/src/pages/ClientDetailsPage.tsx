@@ -591,19 +591,54 @@ export default function ClientDetailsPage() {
                     {previewClientNotes.length === 0 ? (
                       <p className="text-muted mb-0">No active client notes.</p>
                     ) : (
-                      <ListGroup className="compact-note-list">
+                      <div className="d-grid gap-2">
                         {previewClientNotes.map((note) => (
-                          <ListGroup.Item key={note.id}>
-                            <div className="client-note-item">
-                              <div className="client-note-meta">
+                          <Card
+                            key={note.id}
+                            className="note-card"
+                            onClick={() => openEditNoteEditor({
+                              id: note.id,
+                              entityId: owner.id,
+                              entityType: "client",
+                              entityLabel: `${owner.firstName} ${owner.lastName}`,
+                              text: note.text,
+                              visibility: note.visibility,
+                              createdAt: note.createdAt,
+                              updatedAt: note.updatedAt,
+                              isArchived: note.isArchived,
+                              archivedAt: note.archivedAt,
+                            })}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                openEditNoteEditor({
+                                  id: note.id,
+                                  entityId: owner.id,
+                                  entityType: "client",
+                                  entityLabel: `${owner.firstName} ${owner.lastName}`,
+                                  text: note.text,
+                                  visibility: note.visibility,
+                                  createdAt: note.createdAt,
+                                  updatedAt: note.updatedAt,
+                                  isArchived: note.isArchived,
+                                  archivedAt: note.archivedAt,
+                                });
+                              }
+                            }}
+                          >
+                            <Card.Body className="d-grid gap-2">
+                              <div className="note-card-meta">
+                                <span className="client-note-type">client</span>
                                 <span>{new Date(note.createdAt).toLocaleDateString()}</span>
                                 {note.updatedAt && <span>Updated {new Date(note.updatedAt).toLocaleDateString()}</span>}
                               </div>
-                              <div>{note.text}</div>
-                            </div>
-                          </ListGroup.Item>
+                              <div className="note-card-text">{note.text}</div>
+                            </Card.Body>
+                          </Card>
                         ))}
-                      </ListGroup>
+                      </div>
                     )}
                   </div>
                 </>
