@@ -81,6 +81,7 @@ export interface PendingPetProfile {
 
 export interface AppointmentRequestDetails {
   petSelection: "existing" | "new_pet";
+  petIds?: string[];
   pendingPet?: PendingPetProfile;
 }
 

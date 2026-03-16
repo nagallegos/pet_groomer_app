@@ -109,6 +109,7 @@ export default function RequestsPage() {
   const [internalNote, setInternalNote] = useState("");
   const [status, setStatus] = useState<ClientRequest["status"]>("open");
   const [petId, setPetId] = useState("");
+  const [selectedPetIds, setSelectedPetIds] = useState<string[]>([]);
   const [appointmentId, setAppointmentId] = useState("");
   const [appointmentChangeType, setAppointmentChangeType] = useState<AppointmentChangeType>("cancel");
   const [selectedOwnerId, setSelectedOwnerId] = useState("");
@@ -149,7 +150,8 @@ export default function RequestsPage() {
       ),
     [requests],
   );
-  const isPendingPetSelected = requestType === "appointment" && petId === NEW_PET_SENTINEL;
+  const isPendingPetSelected =
+    requestType === "appointment" && selectedPetIds.includes(NEW_PET_SENTINEL);
 
   useEffect(() => {
     if (isClient) {
@@ -204,6 +206,7 @@ export default function RequestsPage() {
     setInternalNote("");
     setStatus("open");
     setPetId("");
+    setSelectedPetIds([]);
     setAppointmentId("");
     setAppointmentChangeType("cancel");
     setSelectedOwnerId(isClient ? ownerId : "");
@@ -231,6 +234,12 @@ export default function RequestsPage() {
     setInternalNote(request.internalNote ?? "");
     setStatus(request.status);
     setPetId(request.petId ?? "");
+    setSelectedPetIds(
+      request.requestType === "appointment"
+        ? request.details?.appointment?.petIds ??
+            (request.petId ? [request.petId] : [])
+        : [],
+    );
     setAppointmentId(request.details?.appointmentChange?.appointmentId ?? "");
     setAppointmentChangeType(request.details?.appointmentChange?.changeType ?? "cancel");
     setSelectedOwnerId(request.ownerId);
@@ -240,8 +249,11 @@ export default function RequestsPage() {
         request.details?.newPet?.pendingPet ??
         emptyPendingPet(),
     );
-    if (request.requestType === "appointment" && request.details?.appointment?.petSelection === "new_pet") {
-      setPetId(NEW_PET_SENTINEL);
+    if (
+      request.requestType === "appointment" &&
+      request.details?.appointment?.petSelection === "new_pet"
+    ) {
+      setSelectedPetIds([NEW_PET_SENTINEL]);
     }
     setSaveError(null);
     setInfoMessage(null);
@@ -258,14 +270,18 @@ export default function RequestsPage() {
   };
 
   const buildAppointmentSubject = () => {
-    if (subject.trim()) {
-      return subject.trim();
+    const selectedIds = selectedPetIds.filter((id) => id !== NEW_PET_SENTINEL);
+    const hasNewPet = selectedPetIds.includes(NEW_PET_SENTINEL);
+    if (hasNewPet && selectedIds.length === 0) {
+      return `Appointment request for ${pendingPet.name.trim() || "new pet"}`;
     }
-    if (petId === NEW_PET_SENTINEL) {
-      return `Appointment request for ${pendingPet.name.trim() || "pending pet"}`;
+    const selectedNames = selectedIds
+      .map((id) => availablePets.find((item) => item.id === id)?.name)
+      .filter(Boolean);
+    if (selectedNames.length > 0) {
+      return `Appointment request for ${selectedNames.join(", ")}`;
     }
-    const pet = availablePets.find((item) => item.id === petId);
-    return `Appointment request for ${pet?.name ?? "pet"}`;
+    return "Appointment request";
   };
 
   const buildAppointmentChangeSubject = (appointment?: Appointment | null) => {
@@ -280,10 +296,13 @@ export default function RequestsPage() {
     }
 
     if (requestType === "appointment") {
-      if (!petId) {
-        return "Please choose a pet or select New Pet.";
+      if (selectedPetIds.length === 0) {
+        return "Please choose at least one pet or select New Pet.";
       }
-      if (petId === NEW_PET_SENTINEL) {
+      if (selectedPetIds.includes(NEW_PET_SENTINEL) && selectedPetIds.length > 1) {
+        return "New pet requests cannot be combined with existing pets. Submit those separately.";
+      }
+      if (selectedPetIds.includes(NEW_PET_SENTINEL)) {
         if (!pendingPet.name.trim() || !pendingPet.breed.trim()) {
           return "New pet appointment requests need the pet name and breed.";
         }
@@ -330,9 +349,11 @@ export default function RequestsPage() {
 
   const buildPayload = (): ClientRequestUpsertInput => {
     if (requestType === "appointment") {
+      const existingPetIds = selectedPetIds.filter((id) => id !== NEW_PET_SENTINEL);
+      const hasNewPet = selectedPetIds.includes(NEW_PET_SENTINEL);
       return {
         ownerId: ownerIdForPayload,
-        petId: petId && petId !== NEW_PET_SENTINEL ? petId : undefined,
+        petId: existingPetIds[0],
         requestType,
         subject: buildAppointmentSubject(),
         clientNote,
@@ -341,8 +362,9 @@ export default function RequestsPage() {
         status: isClient ? "open" : status,
         details: {
           appointment: {
-            petSelection: petId === NEW_PET_SENTINEL ? "new_pet" : "existing",
-            pendingPet: petId === NEW_PET_SENTINEL ? pendingPet : undefined,
+            petSelection: hasNewPet ? "new_pet" : "existing",
+            petIds: hasNewPet ? undefined : existingPetIds,
+            pendingPet: hasNewPet ? pendingPet : undefined,
           },
         },
       };
@@ -436,7 +458,11 @@ export default function RequestsPage() {
     try {
       const payload = buildPayload();
 
-      if (!editingRequest && requestType === "appointment" && petId === NEW_PET_SENTINEL) {
+      if (
+        !editingRequest &&
+        requestType === "appointment" &&
+        selectedPetIds.includes(NEW_PET_SENTINEL)
+      ) {
         const petRequest = await saveClientRequest(
           {
             ownerId: payload.ownerId,
@@ -490,6 +516,14 @@ export default function RequestsPage() {
   const renderRequestSummary = (request: ClientRequest) => {
     if (request.requestType === "appointment" && request.details?.appointment?.pendingPet) {
       return `Pending Pet: ${formatPendingPetSummary(request.details.appointment.pendingPet)}`;
+    }
+    if (request.requestType === "appointment" && request.details?.appointment?.petIds?.length) {
+      const petNames = request.details.appointment.petIds
+        .map((id) => pets.find((pet) => pet.id === id)?.name)
+        .filter(Boolean);
+      if (petNames.length > 0) {
+        return `Pets: ${petNames.join(", ")}`;
+      }
     }
     if (request.requestType === "appointment_change" && request.details?.appointmentChange) {
       const appointment = appointments.find(
@@ -790,12 +824,13 @@ export default function RequestsPage() {
               )}
 
               <Form.Group>
-                <Form.Label>Request Type</Form.Label>
+                  <Form.Label>Request Type</Form.Label>
                   <Form.Select
                     value={requestType}
-                  onChange={(event) => {
+                    onChange={(event) => {
                       setRequestType(event.target.value as ClientRequestType);
                       setPetId("");
+                      setSelectedPetIds([]);
                       setAppointmentId("");
                       setAppointmentChangeType("cancel");
                       setPendingPet(emptyPendingPet());
@@ -817,6 +852,7 @@ export default function RequestsPage() {
                   onChange={(event) => {
                     setSelectedOwnerId(event.target.value);
                     setPetId("");
+                    setSelectedPetIds([]);
                   }}
                   disabled={isReadOnly || isClient || !!editingRequest}
                   required
@@ -835,14 +871,20 @@ export default function RequestsPage() {
               {requestType === "appointment" && (
                 <>
                   <Form.Group>
-                    <Form.Label>Pet</Form.Label>
+                    <Form.Label>Pets</Form.Label>
                     <Form.Select
-                      value={petId}
-                      onChange={(event) => setPetId(event.target.value)}
+                      value={selectedPetIds}
+                      onChange={(event) => {
+                        const values = Array.from(event.target.selectedOptions).map((option) => option.value);
+                        setSelectedPetIds(values);
+                      }}
+                      multiple
                       required
                       disabled={isReadOnly}
                     >
-                      <option value="">No pet selected</option>
+                      <option value="" disabled>
+                        Select one or more pets
+                      </option>
                       {availablePets.map((pet) => (
                         <option key={pet.id} value={pet.id}>
                           {pet.name}
@@ -850,15 +892,21 @@ export default function RequestsPage() {
                       ))}
                       <option value={NEW_PET_SENTINEL}>New Pet</option>
                     </Form.Select>
+                    <Form.Text muted>
+                      Select multiple pets if the appointment request is for more than one pet.
+                    </Form.Text>
                   </Form.Group>
                   {isPendingPetSelected && renderPendingPetFields()}
                   <Form.Group>
                     <Form.Label>Subject</Form.Label>
                     <Form.Control
-                      value={subject}
-                      onChange={(event) => setSubject(event.target.value)}
+                      value={buildAppointmentSubject()}
+                      readOnly
                       disabled={isReadOnly}
                     />
+                    <Form.Text muted>
+                      This is prefilled with the request type and selected pet(s).
+                    </Form.Text>
                   </Form.Group>
                 </>
               )}
