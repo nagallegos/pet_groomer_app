@@ -28,6 +28,7 @@ dist-ssr
 react-app/.netlify
 
 .agent.md
+CONTEXT_HANDOFF.md
 
 # QA artifacts
 docs/qa/
