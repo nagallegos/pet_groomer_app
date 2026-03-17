@@ -623,18 +623,6 @@ export default function AppointmentDetailsModal({
               <strong>Breed:</strong> {pet.breed}
             </div>
             <div>
-              <strong>Quote:</strong> {formatAppointmentCurrency(getAppointmentQuotePrice(appointment))}
-            </div>
-            <div>
-              <strong>Actual Charged:</strong>{" "}
-              {appointment.actualPriceCharged != null
-                ? formatAppointmentCurrency(appointment.actualPriceCharged)
-                : "Not recorded"}
-            </div>
-            <div>
-              <strong>Payment:</strong> {getAppointmentPaymentStatus(appointment)}
-            </div>
-            <div>
               <strong>Services:</strong> {formatAppointmentServices(appointment)}
             </div>
             <div>

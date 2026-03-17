@@ -31,6 +31,29 @@ interface AppointmentResponseDetails {
 
 const API_BASE_URL = getApiBaseUrl();
 
+function formatAppointmentDateTime(value: string) {
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return value;
+  }
+
+  const timeZone =
+    import.meta.env.VITE_EMAIL_TIMEZONE?.trim() ||
+    import.meta.env.VITE_APP_TIMEZONE?.trim() ||
+    "America/Chicago";
+
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+    timeZoneName: "short",
+  }).format(parsedDate);
+}
+
 export default function AppointmentResponsePage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") ?? "";
@@ -181,8 +204,8 @@ export default function AppointmentResponsePage() {
                 <div><strong>Pet:</strong> {details.appointment.petName}</div>
                 <div><strong>Client:</strong> {details.appointment.ownerName}</div>
                 <div><strong>Service:</strong> {details.appointment.serviceSummary}</div>
-                <div><strong>Starts:</strong> {details.appointment.startsAt}</div>
-                <div><strong>Ends:</strong> {details.appointment.endsAt}</div>
+                <div><strong>Starts:</strong> {formatAppointmentDateTime(details.appointment.startsAt)}</div>
+                <div><strong>Ends:</strong> {formatAppointmentDateTime(details.appointment.endsAt)}</div>
                 <div><strong>Status:</strong> {details.appointment.status}</div>
               </div>
 
@@ -299,6 +322,9 @@ export default function AppointmentResponsePage() {
           <Modal.Title>Request Reschedule</Modal.Title>
         </Modal.Header>
         <Modal.Body className="d-grid gap-3">
+          <Alert variant="info" className="mb-0">
+            The date and time you request are subject to the groomer&apos;s availability. They may not be able to offer the exact slot you request, so please contact the groomer directly to finalize your new appointment.
+          </Alert>
           <Form.Group>
             <Form.Label>Preferred date</Form.Label>
             <Form.Control
