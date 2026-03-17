@@ -35,6 +35,8 @@ export interface NoteItem {
   id: string;
   text: string;
   visibility: NoteVisibility;
+  createdByUserId?: string;
+  createdByName?: string;
   createdAt: string;
   updatedAt?: string;
   isArchived?: boolean;

@@ -216,6 +216,8 @@ function mapNoteRow(row) {
     id: row.id,
     text: row.text,
     visibility: row.visibility ?? "internal",
+    createdByUserId: row.created_by_user_id ?? undefined,
+    createdByName: row.created_by_name ?? undefined,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
     isArchived: row.is_archived ?? false,
@@ -694,12 +696,18 @@ async function ensureSchema() {
       await sql`ALTER TABLE owner_notes ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`ALTER TABLE owner_notes ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`;
       await sql`ALTER TABLE owner_notes ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'internal'`;
+      await sql`ALTER TABLE owner_notes ADD COLUMN IF NOT EXISTS created_by_user_id UUID REFERENCES app_users(id) ON DELETE SET NULL`;
+      await sql`ALTER TABLE owner_notes ADD COLUMN IF NOT EXISTS created_by_name TEXT`;
       await sql`ALTER TABLE pet_notes ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`ALTER TABLE pet_notes ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`;
       await sql`ALTER TABLE pet_notes ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'internal'`;
+      await sql`ALTER TABLE pet_notes ADD COLUMN IF NOT EXISTS created_by_user_id UUID REFERENCES app_users(id) ON DELETE SET NULL`;
+      await sql`ALTER TABLE pet_notes ADD COLUMN IF NOT EXISTS created_by_name TEXT`;
       await sql`ALTER TABLE appointment_notes ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`ALTER TABLE appointment_notes ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`;
       await sql`ALTER TABLE appointment_notes ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'internal'`;
+      await sql`ALTER TABLE appointment_notes ADD COLUMN IF NOT EXISTS created_by_user_id UUID REFERENCES app_users(id) ON DELETE SET NULL`;
+      await sql`ALTER TABLE appointment_notes ADD COLUMN IF NOT EXISTS created_by_name TEXT`;
       await sql`ALTER TABLE pets ADD COLUMN IF NOT EXISTS birth_date DATE`;
       await sql`ALTER TABLE pets ADD COLUMN IF NOT EXISTS is_birth_date_estimated BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT ''`;
@@ -795,7 +803,8 @@ async function ensureSchema() {
 async function fetchOwnerNotes(ownerId) {
   if (ownerId) {
     return sql`
-      SELECT id::text AS id, owner_id::text AS owner_id, text, visibility, is_archived, archived_at, created_at, updated_at
+      SELECT id::text AS id, owner_id::text AS owner_id, created_by_user_id::text AS created_by_user_id,
+             created_by_name, text, visibility, is_archived, archived_at, created_at, updated_at
       FROM owner_notes
       WHERE owner_id = ${ownerId}::uuid
       ORDER BY created_at ASC
@@ -803,7 +812,8 @@ async function fetchOwnerNotes(ownerId) {
   }
 
   return sql`
-    SELECT id::text AS id, owner_id::text AS owner_id, text, visibility, is_archived, archived_at, created_at, updated_at
+    SELECT id::text AS id, owner_id::text AS owner_id, created_by_user_id::text AS created_by_user_id,
+           created_by_name, text, visibility, is_archived, archived_at, created_at, updated_at
     FROM owner_notes
     ORDER BY created_at ASC
   `;
@@ -812,7 +822,8 @@ async function fetchOwnerNotes(ownerId) {
 async function fetchPetNotes(petId) {
   if (petId) {
     return sql`
-      SELECT id::text AS id, pet_id::text AS pet_id, text, visibility, is_archived, archived_at, created_at, updated_at
+      SELECT id::text AS id, pet_id::text AS pet_id, created_by_user_id::text AS created_by_user_id,
+             created_by_name, text, visibility, is_archived, archived_at, created_at, updated_at
       FROM pet_notes
       WHERE pet_id = ${petId}::uuid
       ORDER BY created_at ASC
@@ -820,7 +831,8 @@ async function fetchPetNotes(petId) {
   }
 
   return sql`
-    SELECT id::text AS id, pet_id::text AS pet_id, text, visibility, is_archived, archived_at, created_at, updated_at
+    SELECT id::text AS id, pet_id::text AS pet_id, created_by_user_id::text AS created_by_user_id,
+           created_by_name, text, visibility, is_archived, archived_at, created_at, updated_at
     FROM pet_notes
     ORDER BY created_at ASC
   `;
@@ -829,7 +841,8 @@ async function fetchPetNotes(petId) {
 async function fetchAppointmentNotes(appointmentId) {
   if (appointmentId) {
     return sql`
-      SELECT id::text AS id, appointment_id::text AS appointment_id, text, visibility, is_archived, archived_at, created_at, updated_at
+      SELECT id::text AS id, appointment_id::text AS appointment_id, created_by_user_id::text AS created_by_user_id,
+             created_by_name, text, visibility, is_archived, archived_at, created_at, updated_at
       FROM appointment_notes
       WHERE appointment_id = ${appointmentId}::uuid
       ORDER BY created_at ASC
@@ -837,7 +850,8 @@ async function fetchAppointmentNotes(appointmentId) {
   }
 
   return sql`
-    SELECT id::text AS id, appointment_id::text AS appointment_id, text, visibility, is_archived, archived_at, created_at, updated_at
+    SELECT id::text AS id, appointment_id::text AS appointment_id, created_by_user_id::text AS created_by_user_id,
+           created_by_name, text, visibility, is_archived, archived_at, created_at, updated_at
     FROM appointment_notes
     ORDER BY created_at ASC
   `;
@@ -2426,24 +2440,56 @@ function validateNoteVisibility(value, defaultValue = "internal") {
   return visibility;
 }
 
-async function addOwnerNote(ownerId, text, visibility = "internal") {
+function getNoteAuthorContext(currentUser) {
+  const createdByName =
+    currentUser?.display_name ??
+    ([currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(" ") || null);
+
+  return {
+    createdByUserId: currentUser?.id ?? null,
+    createdByName,
+  };
+}
+
+async function addOwnerNote(ownerId, text, visibility = "internal", currentUser = null) {
+  const author = getNoteAuthorContext(currentUser);
   await sql`
-    INSERT INTO owner_notes (owner_id, text, visibility)
-    VALUES (${ownerId}::uuid, ${requiredString(text, "text")}, ${validateNoteVisibility(visibility)})
+    INSERT INTO owner_notes (owner_id, created_by_user_id, created_by_name, text, visibility)
+    VALUES (
+      ${ownerId}::uuid,
+      ${author.createdByUserId}::uuid,
+      ${author.createdByName},
+      ${requiredString(text, "text")},
+      ${validateNoteVisibility(visibility)}
+    )
   `;
 }
 
-async function addPetNote(petId, text, visibility = "internal") {
+async function addPetNote(petId, text, visibility = "internal", currentUser = null) {
+  const author = getNoteAuthorContext(currentUser);
   await sql`
-    INSERT INTO pet_notes (pet_id, text, visibility)
-    VALUES (${petId}::uuid, ${requiredString(text, "text")}, ${validateNoteVisibility(visibility)})
+    INSERT INTO pet_notes (pet_id, created_by_user_id, created_by_name, text, visibility)
+    VALUES (
+      ${petId}::uuid,
+      ${author.createdByUserId}::uuid,
+      ${author.createdByName},
+      ${requiredString(text, "text")},
+      ${validateNoteVisibility(visibility)}
+    )
   `;
 }
 
-async function addAppointmentNote(appointmentId, text, visibility = "internal") {
+async function addAppointmentNote(appointmentId, text, visibility = "internal", currentUser = null) {
+  const author = getNoteAuthorContext(currentUser);
   await sql`
-    INSERT INTO appointment_notes (appointment_id, text, visibility)
-    VALUES (${appointmentId}::uuid, ${requiredString(text, "text")}, ${validateNoteVisibility(visibility)})
+    INSERT INTO appointment_notes (appointment_id, created_by_user_id, created_by_name, text, visibility)
+    VALUES (
+      ${appointmentId}::uuid,
+      ${author.createdByUserId}::uuid,
+      ${author.createdByName},
+      ${requiredString(text, "text")},
+      ${validateNoteVisibility(visibility)}
+    )
   `;
 }
 
@@ -3592,7 +3638,7 @@ async function handleRequest(event) {
       return methodNotAllowed();
     }
     const payload = parseJsonBody(event);
-    await addOwnerNote(ownerId, payload.text, payload.visibility);
+    await addOwnerNote(ownerId, payload.text, payload.visibility, currentUser);
     return json(200, await getOwner(ownerId));
   }
 
@@ -3668,7 +3714,7 @@ async function handleRequest(event) {
       return methodNotAllowed();
     }
     const payload = parseJsonBody(event);
-    await addPetNote(petId, payload.text, payload.visibility);
+    await addPetNote(petId, payload.text, payload.visibility, currentUser);
     return json(200, await getPet(petId));
   }
 
@@ -3754,7 +3800,7 @@ async function handleRequest(event) {
       return methodNotAllowed();
     }
     const payload = parseJsonBody(event);
-    await addAppointmentNote(appointmentId, payload.text, payload.visibility);
+    await addAppointmentNote(appointmentId, payload.text, payload.visibility, currentUser);
     return json(200, await getAppointment(appointmentId));
   }
 

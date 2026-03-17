@@ -21,6 +21,7 @@ import {
   updateAppointmentStatus,
   type AppointmentUpsertInput,
 } from "../../lib/crmApi";
+import { getNotePostedByLabel } from "../../lib/noteUtils";
 import { useAppToast } from "../common/AppToastProvider";
 import ClientContactActions from "../common/ClientContactActions";
 import ConfirmDeleteModal from "../common/ConfirmDeleteModal";
@@ -753,6 +754,7 @@ export default function AppointmentDetailsModal({
                             <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
                               {note.visibility === "client" ? "Client-facing" : "Internal"}
                             </span>
+                            {getNotePostedByLabel(note) && <span>{getNotePostedByLabel(note)}</span>}
                             <span>{new Date(note.createdAt).toLocaleDateString()}</span>
                             {note.updatedAt && (
                               <span>Updated {new Date(note.updatedAt).toLocaleDateString()}</span>
@@ -812,6 +814,7 @@ export default function AppointmentDetailsModal({
                           <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
                             {note.visibility === "client" ? "Client-facing" : "Internal"}
                           </span>
+                          {getNotePostedByLabel(note) && <span>{getNotePostedByLabel(note)}</span>}
                           <span>{new Date(note.createdAt).toLocaleDateString()}</span>
                         </div>
                         <div className="note-card-text">{note.text}</div>
@@ -1014,6 +1017,7 @@ export default function AppointmentDetailsModal({
                             <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
                               {note.visibility === "client" ? "Client-facing" : "Internal"}
                             </span>
+                            {getNotePostedByLabel(note) && <span>{getNotePostedByLabel(note)}</span>}
                             <span>{new Date(note.createdAt).toLocaleDateString()}</span>
                           </div>
                           <div className="note-card-text">{note.text}</div>
@@ -1083,6 +1087,7 @@ export default function AppointmentDetailsModal({
                             <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
                               {note.visibility === "client" ? "Client-facing" : "Internal"}
                             </span>
+                            {getNotePostedByLabel(note) && <span>{getNotePostedByLabel(note)}</span>}
                             <span>Archived {note.archivedAt ? new Date(note.archivedAt).toLocaleDateString() : ""}</span>
                           </div>
                           <div className="note-card-text">{note.text}</div>

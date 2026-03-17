@@ -36,6 +36,7 @@ import {
   updatePetNote,
   type OwnerUpsertInput,
 } from "../lib/crmApi";
+import { getNotePostedByLabel } from "../lib/noteUtils";
 import type { Appointment, ContactMethod, NoteVisibility, Owner, Pet } from "../types/models";
 
 type ClientNoteEntityType = "client" | "pet" | "appointment";
@@ -47,6 +48,8 @@ interface ClientTimelineNote {
   entityLabel: string;
   text: string;
   visibility: NoteVisibility;
+  createdByUserId?: string;
+  createdByName?: string;
   createdAt: string;
   updatedAt?: string;
   isArchived?: boolean;
@@ -135,6 +138,8 @@ export default function ClientDetailsPage() {
               entityLabel: `${owner.firstName} ${owner.lastName}`,
               text: note.text,
               visibility: note.visibility,
+              createdByUserId: note.createdByUserId,
+              createdByName: note.createdByName,
               createdAt: note.createdAt,
               updatedAt: note.updatedAt,
               isArchived: note.isArchived,
@@ -148,6 +153,8 @@ export default function ClientDetailsPage() {
                 entityLabel: pet.name,
                 text: note.text,
                 visibility: note.visibility,
+                createdByUserId: note.createdByUserId,
+                createdByName: note.createdByName,
                 createdAt: note.createdAt,
                 updatedAt: note.updatedAt,
                 isArchived: note.isArchived,
@@ -163,6 +170,8 @@ export default function ClientDetailsPage() {
                 entityLabel: `${appointmentPet?.name ?? "Pet"} | ${new Date(appointment.start).toLocaleDateString()}`,
                 text: note.text,
                 visibility: note.visibility,
+                createdByUserId: note.createdByUserId,
+                createdByName: note.createdByName,
                 createdAt: note.createdAt,
                 updatedAt: note.updatedAt,
                 isArchived: note.isArchived,
@@ -618,6 +627,7 @@ export default function ClientDetailsPage() {
                             <Card.Body className="d-grid gap-2">
                               <div className="note-card-meta">
                                 <span className="client-note-type">client</span>
+                                {getNotePostedByLabel(note) && <span>{getNotePostedByLabel(note)}</span>}
                                 <span>{new Date(note.createdAt).toLocaleDateString()}</span>
                                 {note.updatedAt && <span>Updated {new Date(note.updatedAt).toLocaleDateString()}</span>}
                               </div>
@@ -782,6 +792,7 @@ export default function ClientDetailsPage() {
                       <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
                         {note.visibility === "client" ? "Client-facing" : "Internal"}
                       </span>
+                      {getNotePostedByLabel(note) && <span>{getNotePostedByLabel(note)}</span>}
                       <span>{note.entityLabel}</span>
                       <span>{new Date(note.createdAt).toLocaleString()}{note.updatedAt ? ` | Updated ${new Date(note.updatedAt).toLocaleString()}` : ""}</span>
                     </div>
@@ -835,6 +846,7 @@ export default function ClientDetailsPage() {
                           <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
                             {note.visibility === "client" ? "Client-facing" : "Internal"}
                           </span>
+                          {getNotePostedByLabel(note) && <span>{getNotePostedByLabel(note)}</span>}
                           <span>{note.entityLabel}</span>
                           <span>Archived {note.archivedAt ? new Date(note.archivedAt).toLocaleString() : ""}</span>
                         </div>

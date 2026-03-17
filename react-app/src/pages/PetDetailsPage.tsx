@@ -20,6 +20,7 @@ import {
   updatePetNote,
   type PetUpsertInput,
 } from "../lib/crmApi";
+import { getNotePostedByLabel } from "../lib/noteUtils";
 import { formatPetAge, toDateInputValue } from "../lib/petAge";
 import type { Appointment, NoteVisibility, Pet, Species } from "../types/models";
 
@@ -542,6 +543,7 @@ export default function PetDetailsPage() {
                                 <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
                                   {note.visibility === "client" ? "Client-facing" : "Internal"}
                                 </span>
+                                {getNotePostedByLabel(note) && <span>{getNotePostedByLabel(note)}</span>}
                                 <span>{new Date(note.createdAt).toLocaleDateString()}</span>
                               </div>
                               <div>{note.text}</div>

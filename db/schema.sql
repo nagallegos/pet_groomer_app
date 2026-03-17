@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS appointments (
 CREATE TABLE IF NOT EXISTS owner_notes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   owner_id UUID NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
+  created_by_user_id UUID REFERENCES app_users(id) ON DELETE SET NULL,
+  created_by_name TEXT,
   text TEXT NOT NULL,
   visibility TEXT NOT NULL DEFAULT 'internal' CHECK (visibility IN ('internal', 'client')),
   is_archived BOOLEAN NOT NULL DEFAULT FALSE,
@@ -65,6 +67,8 @@ CREATE TABLE IF NOT EXISTS owner_notes (
 CREATE TABLE IF NOT EXISTS pet_notes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   pet_id UUID NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
+  created_by_user_id UUID REFERENCES app_users(id) ON DELETE SET NULL,
+  created_by_name TEXT,
   text TEXT NOT NULL,
   visibility TEXT NOT NULL DEFAULT 'internal' CHECK (visibility IN ('internal', 'client')),
   is_archived BOOLEAN NOT NULL DEFAULT FALSE,
@@ -76,6 +80,8 @@ CREATE TABLE IF NOT EXISTS pet_notes (
 CREATE TABLE IF NOT EXISTS appointment_notes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   appointment_id UUID NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
+  created_by_user_id UUID REFERENCES app_users(id) ON DELETE SET NULL,
+  created_by_name TEXT,
   text TEXT NOT NULL,
   visibility TEXT NOT NULL DEFAULT 'internal' CHECK (visibility IN ('internal', 'client')),
   is_archived BOOLEAN NOT NULL DEFAULT FALSE,

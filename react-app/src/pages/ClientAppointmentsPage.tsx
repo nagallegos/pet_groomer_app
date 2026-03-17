@@ -6,6 +6,7 @@ import PageLoader from "../components/common/PageLoader";
 import { useAuth } from "../components/common/useAuth";
 import useInitialLoading from "../hooks/useInitialLoading";
 import { formatAppointmentServices } from "../lib/appointmentServices";
+import { getNotePostedByLabel } from "../lib/noteUtils";
 import type { Appointment } from "../types/models";
 
 export default function ClientAppointmentsPage() {
@@ -89,6 +90,7 @@ export default function ClientAppointmentsPage() {
                   {visibleNotes.map((note) => (
                     <div key={note.id} className="client-note-preview">
                       <div className="text-muted small mb-1">
+                        {getNotePostedByLabel(note) && <div>{getNotePostedByLabel(note)}</div>}
                         {new Date(note.createdAt).toLocaleDateString()}
                       </div>
                       <div>{note.text}</div>
@@ -153,6 +155,7 @@ export default function ClientAppointmentsPage() {
                     .map((note) => (
                       <div key={note.id} className="client-note-preview">
                         <div className="text-muted small mb-1">
+                          {getNotePostedByLabel(note) && <div>{getNotePostedByLabel(note)}</div>}
                           {new Date(note.createdAt).toLocaleDateString()}
                         </div>
                         <div>{note.text}</div>

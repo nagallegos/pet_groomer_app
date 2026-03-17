@@ -15,6 +15,7 @@ import {
   type PetUpsertInput,
 } from "../../lib/crmApi";
 import { formatAppointmentServices } from "../../lib/appointmentServices";
+import { getNotePostedByLabel } from "../../lib/noteUtils";
 import { formatPetAge, toDateInputValue } from "../../lib/petAge";
 import { useAppToast } from "../common/AppToastProvider";
 import ClientContactActions from "../common/ClientContactActions";
@@ -456,6 +457,7 @@ export default function PetQuickViewModal({
                             <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
                               {note.visibility === "client" ? "Client-facing" : "Internal"}
                             </span>
+                            {getNotePostedByLabel(note) && <span>{getNotePostedByLabel(note)}</span>}
                             <span>{new Date(note.createdAt).toLocaleDateString()}</span>
                             {note.updatedAt && (
                               <span>Updated {new Date(note.updatedAt).toLocaleDateString()}</span>
@@ -538,6 +540,7 @@ export default function PetQuickViewModal({
                             <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
                               {note.visibility === "client" ? "Client-facing" : "Internal"}
                             </span>
+                            {getNotePostedByLabel(note) && <span>{getNotePostedByLabel(note)}</span>}
                             <span>{new Date(note.createdAt).toLocaleDateString()}</span>
                           </div>
                           <div className="note-card-text">{note.text}</div>
@@ -771,6 +774,7 @@ export default function PetQuickViewModal({
                             <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
                               {note.visibility === "client" ? "Client-facing" : "Internal"}
                             </span>
+                            {getNotePostedByLabel(note) && <span>{getNotePostedByLabel(note)}</span>}
                             <span>{new Date(note.createdAt).toLocaleDateString()}</span>
                           </div>
                           <div className="note-card-text">{note.text}</div>
@@ -840,6 +844,7 @@ export default function PetQuickViewModal({
                             <span className={`note-visibility-pill note-visibility-pill-${note.visibility}`}>
                               {note.visibility === "client" ? "Client-facing" : "Internal"}
                             </span>
+                            {getNotePostedByLabel(note) && <span>{getNotePostedByLabel(note)}</span>}
                             <span>Archived {note.archivedAt ? new Date(note.archivedAt).toLocaleDateString() : ""}</span>
                           </div>
                           <div className="note-card-text">{note.text}</div>
