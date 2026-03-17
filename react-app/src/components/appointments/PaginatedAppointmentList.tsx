@@ -3,6 +3,7 @@ import { Button, Card, ListGroup } from "react-bootstrap";
 import { PencilSquare } from "react-bootstrap-icons";
 import { Link } from "react-router-dom";
 import { formatAppointmentServices } from "../../lib/appointmentServices";
+import { formatAppointmentCurrency, getAppointmentQuotePrice } from "../../lib/appointmentPricing";
 import type { Appointment, Owner, Pet } from "../../types/models";
 
 interface PaginatedAppointmentListProps {
@@ -131,7 +132,7 @@ export default function PaginatedAppointmentList({
 
                     <div className="appointment-list-actions">
                       <div className="appointment-list-cost">
-                        ${appointment.cost.toFixed(2)}
+                        Quote {formatAppointmentCurrency(getAppointmentQuotePrice(appointment))}
                       </div>
                       <Button
                         size="sm"

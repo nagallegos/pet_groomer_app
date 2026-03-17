@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Alert, Button, Card, Spinner } from "react-bootstrap";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, Button, Card, Form, Modal, Spinner } from "react-bootstrap";
 import { useSearchParams } from "react-router-dom";
 import { getApiBaseUrl } from "../lib/crmApi";
 
@@ -22,6 +22,11 @@ interface AppointmentResponseDetails {
     endsAt: string;
     status: string;
   };
+  groomerContact?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+  };
 }
 
 const API_BASE_URL = getApiBaseUrl();
@@ -36,16 +41,12 @@ export default function AppointmentResponsePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const getReceiptMessage = (action: ResponseAction) => {
-    if (action === "cancel") {
-      return "We've received your cancellation request. No further action is needed.";
-    }
-    if (action === "reschedule") {
-      return "We've received your request and will be reaching out to you as soon as possible.";
-    }
-    return "We've received your confirmation. No further action is needed.";
-  };
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [cancelNote, setCancelNote] = useState("");
+  const [rescheduleNote, setRescheduleNote] = useState("");
+  const [preferredDate, setPreferredDate] = useState("");
+  const [preferredTime, setPreferredTime] = useState("");
 
   useEffect(() => {
     if (!token) {
@@ -84,62 +85,26 @@ export default function AppointmentResponsePage() {
     };
   }, [token]);
 
-  useEffect(() => {
-    if (
-      !details ||
-      !initialAction ||
-      attemptedEmailActionRef.current ||
-      !details.availableActions.includes(initialAction) ||
-      message ||
-      isSubmitting
-    ) {
-      return;
-    }
+  const markCompletedState = (action: ResponseAction) => {
+    setDetails((current) =>
+      current
+        ? {
+            ...current,
+            usedAt: new Date().toISOString(),
+            availableActions: [],
+            appointment: {
+              ...current.appointment,
+              status: action === "confirm" ? "confirmed" : current.appointment.status,
+            },
+          }
+        : current,
+    );
+  };
 
-    void (async () => {
-      attemptedEmailActionRef.current = true;
-      setIsSubmitting(true);
-      setError(null);
-      try {
-        const response = await fetch(`${API_BASE_URL}/public/appointment-response/${token}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: initialAction }),
-        });
-        const payload = await response.json().catch(() => ({ error: "Unable to process response." }));
-        if (!response.ok) {
-          throw new Error(payload.error ?? "Unable to process response.");
-        }
-        setMessage(getReceiptMessage(initialAction));
-        setDetails((current) =>
-          current
-            ? {
-                ...current,
-                usedAt: new Date().toISOString(),
-                availableActions: [],
-                appointment: {
-                  ...current.appointment,
-                  status: initialAction === "confirm" ? "confirmed" : current.appointment.status,
-                },
-              }
-            : current,
-        );
-      } catch (submitError) {
-        setError(submitError instanceof Error ? submitError.message : "Unable to process response.");
-      } finally {
-        setIsSubmitting(false);
-      }
-    })();
-  }, [details, initialAction, isSubmitting, message, token]);
-
-  const shouldShowActionButtons =
-    Boolean(details) &&
-    !initialAction &&
-    !details?.usedAt &&
-    !details?.isExpired &&
-    (details?.availableActions.length ?? 0) > 0;
-
-  const handleAction = async (action: ResponseAction) => {
+  const submitAction = useCallback(async (
+    action: ResponseAction,
+    payload?: { clientNote?: string; preferredDate?: string; preferredTime?: string },
+  ) => {
     setIsSubmitting(true);
     setError(null);
 
@@ -147,32 +112,46 @@ export default function AppointmentResponsePage() {
       const response = await fetch(`${API_BASE_URL}/public/appointment-response/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({
+          action,
+          source: "public_page",
+          ...payload,
+        }),
       });
-      const payload = await response.json().catch(() => ({ error: "Unable to process response." }));
+      const result = await response.json().catch(() => ({ error: "Unable to process response." }));
       if (!response.ok) {
-        throw new Error(payload.error ?? "Unable to process response.");
+        throw new Error(result.error ?? "Unable to process response.");
       }
-      setMessage(getReceiptMessage(action));
-      setDetails((current) =>
-        current
-          ? {
-              ...current,
-              usedAt: new Date().toISOString(),
-              availableActions: [],
-              appointment: {
-                ...current.appointment,
-                status: action === "confirm" ? "confirmed" : current.appointment.status,
-              },
-            }
-          : current,
-      );
+      setMessage(result.status ?? "Your response has been received.");
+      markCompletedState(action);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to process response.");
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    if (
+      !details ||
+      initialAction !== "confirm" ||
+      attemptedEmailActionRef.current ||
+      !details.availableActions.includes("confirm") ||
+      message ||
+      isSubmitting
+    ) {
+      return;
+    }
+
+    attemptedEmailActionRef.current = true;
+    void submitAction("confirm");
+  }, [details, initialAction, isSubmitting, message, submitAction]);
+
+  const shouldShowActions =
+    Boolean(details) &&
+    !details?.usedAt &&
+    !details?.isExpired &&
+    (details?.availableActions.length ?? 0) > 0;
 
   return (
     <div className="login-page-shell">
@@ -197,42 +176,61 @@ export default function AppointmentResponsePage() {
           {message && <Alert variant="success" className="mb-0">{message}</Alert>}
 
           {details && !isLoading && (
-            <div className="appointment-detail-summary">
-              <div><strong>Pet:</strong> {details.appointment.petName}</div>
-              <div><strong>Client:</strong> {details.appointment.ownerName}</div>
-              <div><strong>Service:</strong> {details.appointment.serviceSummary}</div>
-              <div><strong>Starts:</strong> {details.appointment.startsAt}</div>
-              <div><strong>Ends:</strong> {details.appointment.endsAt}</div>
-              <div><strong>Status:</strong> {details.appointment.status}</div>
-            </div>
+            <>
+              <div className="appointment-detail-summary">
+                <div><strong>Pet:</strong> {details.appointment.petName}</div>
+                <div><strong>Client:</strong> {details.appointment.ownerName}</div>
+                <div><strong>Service:</strong> {details.appointment.serviceSummary}</div>
+                <div><strong>Starts:</strong> {details.appointment.startsAt}</div>
+                <div><strong>Ends:</strong> {details.appointment.endsAt}</div>
+                <div><strong>Status:</strong> {details.appointment.status}</div>
+              </div>
+
+              <Card className="border-0 bg-light">
+                <Card.Body className="d-grid gap-2">
+                  <div className="fw-semibold">Need help?</div>
+                  <div className="text-muted small">
+                    Contact the groomer if you have any issues with this appointment.
+                  </div>
+                  {details.groomerContact?.name && <div><strong>Name:</strong> {details.groomerContact.name}</div>}
+                  {details.groomerContact?.phone && <div><strong>Phone:</strong> {details.groomerContact.phone}</div>}
+                  {details.groomerContact?.email && <div><strong>Email:</strong> {details.groomerContact.email}</div>}
+                </Card.Body>
+              </Card>
+            </>
           )}
 
-          {shouldShowActionButtons && (
+          {shouldShowActions && (
             <div className="d-grid gap-2">
-              {details?.availableActions.map((action) => (
-                <Button
-                  key={action}
-                  onClick={() => {
-                    void handleAction(action);
-                  }}
-                  disabled={isSubmitting}
-                  variant={action === "confirm" ? "primary" : "outline-secondary"}
-                >
-                  {action === "confirm"
-                    ? "Confirm Appointment"
-                    : action === "cancel"
-                      ? "Request Cancellation"
-                      : "Request Reschedule"}
+              {details?.availableActions.includes("confirm") && (
+                <Button onClick={() => void submitAction("confirm")} disabled={isSubmitting}>
+                  Confirm Appointment
                 </Button>
-              ))}
+              )}
+              {details?.availableActions.includes("cancel") && (
+                <Button
+                  variant="outline-secondary"
+                  onClick={() => setShowCancelModal(true)}
+                  disabled={isSubmitting}
+                >
+                  Cancel Appointment
+                </Button>
+              )}
+              {details?.availableActions.includes("reschedule") && (
+                <Button
+                  variant="outline-secondary"
+                  onClick={() => setShowRescheduleModal(true)}
+                  disabled={isSubmitting}
+                >
+                  Request Reschedule
+                </Button>
+              )}
             </div>
           )}
 
           {details?.usedAt && (
             <div className="text-muted small">
-              {initialAction
-                ? "Your response has already been received."
-                : "This response link has already been used."}
+              Your response has already been received.
             </div>
           )}
 
@@ -242,13 +240,112 @@ export default function AppointmentResponsePage() {
             </div>
           )}
 
-          {initialAction && !isLoading && !error && !message && (
+          {initialAction === "confirm" && !isLoading && !error && !message && (
             <div className="text-muted small">
-              Processing your response...
+              Processing your confirmation...
             </div>
           )}
         </Card.Body>
       </Card>
+
+      <Modal show={showCancelModal} onHide={() => setShowCancelModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Cancel Appointment</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="d-grid gap-3">
+          <p className="mb-0">
+            Are you sure you want to cancel this appointment? If you would rather keep the visit and request a different time, choose reschedule instead.
+          </p>
+          <Form.Group>
+            <Form.Label>Cancellation note</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={4}
+              value={cancelNote}
+              onChange={(event) => setCancelNote(event.target.value)}
+              placeholder="Let the groomer know why you need to cancel."
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="outline-secondary"
+            onClick={() => {
+              setShowCancelModal(false);
+              setShowRescheduleModal(true);
+            }}
+          >
+            I’d Rather Reschedule
+          </Button>
+          <Button variant="secondary" onClick={() => setShowCancelModal(false)}>
+            Keep Appointment
+          </Button>
+          <Button
+            variant="danger"
+            disabled={isSubmitting || !cancelNote.trim()}
+            onClick={async () => {
+              await submitAction("cancel", { clientNote: cancelNote.trim() });
+              setShowCancelModal(false);
+            }}
+          >
+            {isSubmitting && <Spinner animation="border" size="sm" className="me-2" />}
+            Submit Cancellation
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showRescheduleModal} onHide={() => setShowRescheduleModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Request Reschedule</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="d-grid gap-3">
+          <Form.Group>
+            <Form.Label>Preferred date</Form.Label>
+            <Form.Control
+              type="date"
+              value={preferredDate}
+              onChange={(event) => setPreferredDate(event.target.value)}
+            />
+          </Form.Group>
+          <Form.Group>
+            <Form.Label>Preferred time</Form.Label>
+            <Form.Control
+              type="time"
+              value={preferredTime}
+              onChange={(event) => setPreferredTime(event.target.value)}
+            />
+          </Form.Group>
+          <Form.Group>
+            <Form.Label>Notes</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={5}
+              value={rescheduleNote}
+              onChange={(event) => setRescheduleNote(event.target.value)}
+              placeholder="Share what days or times work better for you."
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowRescheduleModal(false)}>
+            Cancel
+          </Button>
+          <Button
+            disabled={isSubmitting || !rescheduleNote.trim()}
+            onClick={async () => {
+              await submitAction("reschedule", {
+                clientNote: rescheduleNote.trim(),
+                preferredDate: preferredDate || undefined,
+                preferredTime: preferredTime || undefined,
+              });
+              setShowRescheduleModal(false);
+            }}
+          >
+            {isSubmitting && <Spinner animation="border" size="sm" className="me-2" />}
+            Send Reschedule Request
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

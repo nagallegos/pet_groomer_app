@@ -9,6 +9,11 @@ import {
   getAppointmentSelectedServices,
 } from "../../lib/appointmentServices";
 import {
+  formatAppointmentCurrency,
+  getAppointmentPaymentStatus,
+  getAppointmentQuotePrice,
+} from "../../lib/appointmentPricing";
+import {
   addAppointmentNote,
   archiveAppointment,
   archiveAppointmentNote,
@@ -30,6 +35,7 @@ import type {
   AppointmentStatus,
   NoteVisibility,
   Owner,
+  PaymentStatus,
   Pet,
 } from "../../types/models";
 
@@ -63,7 +69,9 @@ export default function AppointmentDetailsModal({
   const [endTime, setEndTime] = useState("");
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [customServiceType, setCustomServiceType] = useState("");
-  const [cost, setCost] = useState("");
+  const [quotePrice, setQuotePrice] = useState("");
+  const [actualPriceCharged, setActualPriceCharged] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("unpaid");
   const [status, setStatus] = useState<AppointmentStatus>("scheduled");
   const [noteText, setNoteText] = useState("");
   const [noteVisibility, setNoteVisibility] = useState<NoteVisibility>("internal");
@@ -94,7 +102,9 @@ export default function AppointmentDetailsModal({
       setEndTime(appointmentEnd.toTimeString().slice(0, 5));
       setSelectedServices(getAppointmentSelectedServices(appointment));
       setCustomServiceType(appointment.customServiceType ?? "");
-      setCost(appointment.cost.toFixed(2));
+      setQuotePrice(getAppointmentQuotePrice(appointment).toFixed(2));
+      setActualPriceCharged(appointment.actualPriceCharged?.toFixed(2) ?? "");
+      setPaymentStatus(getAppointmentPaymentStatus(appointment));
       setStatus(appointment.status);
       setNoteText("");
       setNoteVisibility("internal");
@@ -198,7 +208,10 @@ export default function AppointmentDetailsModal({
       serviceType: derivePrimaryServiceType(selectedServices),
       selectedServices,
       customServiceType: customSelected ? customServiceType : undefined,
-      cost: Number(cost) || 0,
+      quotePrice: Number(quotePrice) || 0,
+      actualPriceCharged:
+        actualPriceCharged.trim().length > 0 ? Number(actualPriceCharged) || 0 : undefined,
+      paymentStatus,
       status,
     };
 
@@ -610,7 +623,16 @@ export default function AppointmentDetailsModal({
               <strong>Breed:</strong> {pet.breed}
             </div>
             <div>
-              <strong>Cost:</strong> ${appointment.cost.toFixed(2)}
+              <strong>Quote:</strong> {formatAppointmentCurrency(getAppointmentQuotePrice(appointment))}
+            </div>
+            <div>
+              <strong>Actual Charged:</strong>{" "}
+              {appointment.actualPriceCharged != null
+                ? formatAppointmentCurrency(appointment.actualPriceCharged)
+                : "Not recorded"}
+            </div>
+            <div>
+              <strong>Payment:</strong> {getAppointmentPaymentStatus(appointment)}
             </div>
             <div>
               <strong>Services:</strong> {formatAppointmentServices(appointment)}
@@ -700,16 +722,45 @@ export default function AppointmentDetailsModal({
               </Form.Group>
 
               <Form.Group className="mb-3">
-                <Form.Label className="appointment-cost-highlight">Cost</Form.Label>
+                <Form.Label className="appointment-cost-highlight">Quote</Form.Label>
                 <Form.Control
                   type="number"
                   min="0"
                   step="0.01"
-                  value={cost}
-                  onChange={(e) => setCost(e.target.value)}
+                  value={quotePrice}
+                  onChange={(e) => setQuotePrice(e.target.value)}
                   placeholder="85.00"
                   className="appointment-cost-input"
                 />
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Actual Charged</Form.Label>
+                <Form.Control
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={actualPriceCharged}
+                  onChange={(e) => setActualPriceCharged(e.target.value)}
+                  placeholder="Leave blank until checkout"
+                />
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Payment Status</Form.Label>
+                <Form.Select
+                  value={paymentStatus}
+                  onChange={(e) => {
+                    const nextStatus = e.target.value as PaymentStatus;
+                    setPaymentStatus(nextStatus);
+                    if (nextStatus === "paid" && !actualPriceCharged.trim()) {
+                      setActualPriceCharged(quotePrice || "0.00");
+                    }
+                  }}
+                >
+                  <option value="unpaid">Unpaid</option>
+                  <option value="paid">Paid</option>
+                </Form.Select>
               </Form.Group>
 
               <div>
@@ -784,7 +835,19 @@ export default function AppointmentDetailsModal({
                 })}
               </div>
               <div><strong>Status:</strong> {status}</div>
-              <div><strong>Projected Cost:</strong> <span className="appointment-cost-highlight">${Number(cost || appointment.cost).toFixed(2)}</span></div>
+              <div>
+                <strong>Quote:</strong>{" "}
+                <span className="appointment-cost-highlight">
+                  {formatAppointmentCurrency(Number(quotePrice || getAppointmentQuotePrice(appointment)))}
+                </span>
+              </div>
+              <div>
+                <strong>Actual Charged:</strong>{" "}
+                {actualPriceCharged.trim()
+                  ? formatAppointmentCurrency(Number(actualPriceCharged))
+                  : "Not recorded"}
+              </div>
+              <div><strong>Payment:</strong> {paymentStatus}</div>
             </div>
           )}
 

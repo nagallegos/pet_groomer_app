@@ -9,6 +9,7 @@ import type {
   NoteVisibility,
   NoteItem,
   Owner,
+  PaymentStatus,
   Pet,
   Species,
   UserNotification,
@@ -81,7 +82,9 @@ export interface AppointmentUpsertInput {
   serviceType?: string;
   selectedServices?: string[];
   customServiceType?: string;
-  cost: number;
+  quotePrice: number;
+  actualPriceCharged?: number;
+  paymentStatus?: PaymentStatus;
   notes?: string;
   status?: AppointmentStatus;
 }
@@ -291,7 +294,9 @@ function normalizeAppointment(
       input.serviceType ?? derivePrimaryServiceType(input.selectedServices ?? []),
     selectedServices: input.selectedServices ?? [],
     customServiceType: input.customServiceType,
-    cost: input.cost,
+    quotePrice: input.quotePrice,
+    actualPriceCharged: input.actualPriceCharged,
+    paymentStatus: input.paymentStatus ?? existingAppointment?.paymentStatus ?? "unpaid",
     status: input.status ?? existingAppointment?.status ?? "scheduled",
     notes: input.notes
       ? [
@@ -411,7 +416,9 @@ export async function updateAppointmentStatus(
       serviceType: appointment.serviceType,
       selectedServices: appointment.selectedServices,
       customServiceType: appointment.customServiceType,
-      cost: appointment.cost,
+      quotePrice: appointment.quotePrice ?? 0,
+      actualPriceCharged: appointment.actualPriceCharged,
+      paymentStatus: appointment.paymentStatus ?? "unpaid",
       notes: appointment.notes.map((note) => note.text).join("\n"),
       status,
     },

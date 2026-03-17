@@ -5,6 +5,7 @@ import AnalyticsLineChart from "../components/analytics/AnalyticsLineChart";
 import { useAppData } from "../components/common/AppDataProvider";
 import PageLoader from "../components/common/PageLoader";
 import useInitialLoading from "../hooks/useInitialLoading";
+import { getAppointmentRecognizedRevenue } from "../lib/appointmentPricing";
 import type { Appointment } from "../types/models";
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -108,7 +109,7 @@ export default function AnalysisPage() {
             appointmentStart >= yearStart
           );
         })
-        .reduce((total, appointment) => total + appointment.cost, 0),
+        .reduce((total, appointment) => total + getAppointmentRecognizedRevenue(appointment), 0),
     [activeAppointments, now, yearStart],
   );
 
@@ -122,7 +123,7 @@ export default function AnalysisPage() {
             appointmentStart.getFullYear() === selectedRevenueYear
           );
         })
-        .reduce((total, appointment) => total + appointment.cost, 0),
+        .reduce((total, appointment) => total + getAppointmentRecognizedRevenue(appointment), 0),
     [activeAppointments, now, selectedRevenueYear],
   );
 
@@ -168,7 +169,7 @@ export default function AnalysisPage() {
       ),
       startOfDay(new Date(revenueRangeStart)),
       endOfDay(new Date(revenueRangeEnd)),
-      (appointment) => appointment.cost,
+      (appointment) => getAppointmentRecognizedRevenue(appointment),
     );
   }, [activeAppointments, now, revenueRangeEnd, revenueRangeStart]);
 
@@ -196,7 +197,7 @@ export default function AnalysisPage() {
           <p className="page-kicker mb-2">Analysis</p>
           <h2 className="mb-1">Revenue and Appointment Trends</h2>
           <p className="text-muted mb-0">
-            Track year-to-date performance and weekly booking patterns with adjustable date ranges.
+            Track charged revenue and weekly booking patterns with adjustable date ranges.
           </p>
         </div>
       </div>
@@ -289,7 +290,7 @@ export default function AnalysisPage() {
                 <div>
                   <Card.Title className="mb-1">Revenue Week to Week</Card.Title>
                   <p className="text-muted small mb-0">
-                    Revenue includes non-archived past appointments and excludes cancelled and no-show records.
+                    Revenue uses recorded charged amounts when available and falls back to the internal quote for older completed records.
                   </p>
                 </div>
 

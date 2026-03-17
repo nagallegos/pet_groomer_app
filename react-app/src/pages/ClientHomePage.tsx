@@ -90,9 +90,6 @@ export default function ClientHomePage() {
                           {new Date(appointment.start).toLocaleString()} | {appointment.status}
                         </div>
                       </div>
-                      <div className="text-muted small">
-                        ${appointment.cost.toFixed(0)}
-                      </div>
                     </Link>
                   );
                 })}

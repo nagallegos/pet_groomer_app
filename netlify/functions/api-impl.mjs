@@ -17,6 +17,7 @@ const appointmentStatuses = new Set([
   "cancelled",
   "no-show",
 ]);
+const paymentStatuses = new Set(["unpaid", "paid"]);
 const appUserRoles = new Set(["admin", "groomer", "client"]);
 const noteVisibilities = new Set(["internal", "client"]);
 const clientRequestTypes = new Set([
@@ -374,13 +375,25 @@ function mapAppointmentRow(row, notes = []) {
     serviceType: row.service_type ?? undefined,
     selectedServices: Array.isArray(row.selected_services) ? row.selected_services : [],
     customServiceType: row.custom_service_type ?? undefined,
-    cost: Number(row.cost ?? 0),
+    quotePrice: Number(row.quote_price ?? row.cost ?? 0),
+    actualPriceCharged:
+      row.actual_price_charged == null ? undefined : Number(row.actual_price_charged),
+    paymentStatus: row.payment_status ?? "unpaid",
     status: row.status,
     notes,
     confirmationSentAt: toIso(row.confirmation_sent_at),
     confirmedAt: toIso(row.confirmed_at),
     isArchived: row.is_archived,
     archivedAt: toIso(row.archived_at),
+  };
+}
+
+function sanitizeAppointmentForClient(appointment) {
+  return {
+    ...appointment,
+    quotePrice: undefined,
+    actualPriceCharged: undefined,
+    paymentStatus: undefined,
   };
 }
 
@@ -518,6 +531,9 @@ async function ensureSchema() {
           selected_services TEXT[] NOT NULL DEFAULT '{}',
           custom_service_type TEXT,
           cost NUMERIC(10, 2) NOT NULL DEFAULT 0,
+          quote_price NUMERIC(10, 2) NOT NULL DEFAULT 0,
+          actual_price_charged NUMERIC(10, 2),
+          payment_status TEXT NOT NULL DEFAULT 'unpaid' CHECK (payment_status IN ('unpaid', 'paid')),
           status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'confirmed', 'completed', 'cancelled', 'no-show')),
           confirmation_sent_at TIMESTAMPTZ,
           confirmed_at TIMESTAMPTZ,
@@ -708,6 +724,16 @@ async function ensureSchema() {
       await sql`ALTER TABLE appointment_notes ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'internal'`;
       await sql`ALTER TABLE appointment_notes ADD COLUMN IF NOT EXISTS created_by_user_id UUID REFERENCES app_users(id) ON DELETE SET NULL`;
       await sql`ALTER TABLE appointment_notes ADD COLUMN IF NOT EXISTS created_by_name TEXT`;
+      await sql`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS quote_price NUMERIC(10, 2) NOT NULL DEFAULT 0`;
+      await sql`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS actual_price_charged NUMERIC(10, 2)`;
+      await sql`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'unpaid'`;
+      await sql`UPDATE appointments SET quote_price = cost WHERE quote_price = 0 AND cost <> 0`;
+      await sql`ALTER TABLE appointments DROP CONSTRAINT IF EXISTS appointments_payment_status_check`;
+      await sql`
+        ALTER TABLE appointments
+        ADD CONSTRAINT appointments_payment_status_check
+        CHECK (payment_status IN ('unpaid', 'paid'))
+      `;
       await sql`ALTER TABLE pets ADD COLUMN IF NOT EXISTS birth_date DATE`;
       await sql`ALTER TABLE pets ADD COLUMN IF NOT EXISTS is_birth_date_estimated BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT ''`;
@@ -1019,7 +1045,8 @@ async function listAppointments() {
   const [appointmentRows, noteRows] = await Promise.all([
     sql`
       SELECT id::text AS id, owner_id::text AS owner_id, pet_id::text AS pet_id, start_at, end_at,
-             service_type, selected_services, custom_service_type, cost, status,
+             service_type, selected_services, custom_service_type, cost, quote_price,
+             actual_price_charged, payment_status, status,
              confirmation_sent_at, confirmed_at, is_archived, archived_at
       FROM appointments
       ORDER BY start_at ASC
@@ -1037,7 +1064,8 @@ async function getAppointment(id) {
   const rows = await sql`
     SELECT id::text AS id, owner_id::text AS owner_id, pet_id::text AS pet_id,
            start_at, end_at, service_type, selected_services, custom_service_type,
-           cost, status, confirmation_sent_at, confirmed_at, is_archived, archived_at
+           cost, quote_price, actual_price_charged, payment_status, status,
+           confirmation_sent_at, confirmed_at, is_archived, archived_at
     FROM appointments
     WHERE id = ${id}::uuid
   `;
@@ -1077,7 +1105,8 @@ async function getAppointmentWithRelations(appointmentId) {
   const appointmentRows = await sql`
     SELECT id::text AS id, owner_id::text AS owner_id, pet_id::text AS pet_id,
            start_at, end_at, service_type, selected_services, custom_service_type,
-           cost, status, confirmation_sent_at, confirmed_at, is_archived, archived_at
+           cost, quote_price, actual_price_charged, payment_status, status,
+           confirmation_sent_at, confirmed_at, is_archived, archived_at
     FROM appointments
     WHERE id = ${appointmentId}::uuid
     LIMIT 1
@@ -1350,6 +1379,23 @@ function buildAppointmentSummary(appointment, owner, pet) {
   };
 }
 
+function getPublicGroomerContact() {
+  const firstName =
+    process.env.APP_GROOMER_FIRST_NAME ??
+    process.env.APP_GROOMER_NAME?.split(" ")[0] ??
+    "Pet";
+  const lastName =
+    process.env.APP_GROOMER_LAST_NAME ??
+    process.env.APP_GROOMER_NAME?.split(" ").slice(1).join(" ") ??
+    "Groomer";
+
+  return {
+    name: `${firstName} ${lastName}`.trim(),
+    email: process.env.APP_GROOMER_EMAIL ?? process.env.EMAIL_REPLY_TO ?? undefined,
+    phone: process.env.APP_GROOMER_PHONE ?? undefined,
+  };
+}
+
 function formatAppointmentDateTime(value) {
   if (!value) {
     return "Not provided";
@@ -1387,6 +1433,10 @@ function getClientAvailableActions(appointmentStatus) {
   return [];
 }
 
+function buildAppointmentChangeRequestSubject(summary, action) {
+  return `${action === "cancel" ? "Cancel" : "Reschedule"} request for ${summary.petName}`;
+}
+
 function buildClientEmailNotification({
   summary,
   token,
@@ -1402,17 +1452,7 @@ function buildClientEmailNotification({
     ? ""
     : !responsePageUrl
       ? ""
-      : getClientAvailableActions(summary.status)
-        .map((action) => {
-          const label =
-            action === "confirm"
-              ? "Confirm Appointment"
-              : action === "cancel"
-                ? "Request Cancellation"
-                : "Request Reschedule";
-          return `<a href="${responsePageUrl}&action=${action}" style="display:inline-block;margin:0 8px 10px 0;padding:11px 16px;border-radius:10px;text-decoration:none;font-weight:600;font-family:Arial,Helvetica,sans-serif;background:${action === "confirm" ? "#7a5ccf" : "#f1eefb"};color:${action === "confirm" ? "#ffffff" : "#3f2d74"};border:1px solid #cbbcf0;">${label}</a>`;
-        })
-        .join("");
+      : `<a href="${responsePageUrl}" style="display:inline-block;margin:0 8px 10px 0;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700;font-family:Arial,Helvetica,sans-serif;background:#7a5ccf;color:#ffffff;border:1px solid #6a4fc0;">Manage Appointment</a>`;
   const subject = isCancellation
     ? `Appointment Update for ${summary.petName}`
     : notificationType === "reminder_24h"
@@ -1440,9 +1480,9 @@ function buildClientEmailNotification({
       <div style="margin:0;padding:20px;background:#f6f2ff;">
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e7defa;border-radius:16px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#2f2850;">
           <tr>
-            <td style="padding:16px 22px;background:linear-gradient(135deg,#7a5ccf,#a98de9);color:#ffffff;">
-              <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.9;">Barks Bubbles &amp; Love</div>
-              <div style="font-size:20px;font-weight:700;margin-top:4px;">Appointment Update</div>
+            <td style="padding:16px 22px;background:linear-gradient(135deg,#f1e8ff,#dccdfd);color:#1f172f;">
+              <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.85;">Barks Bubbles &amp; Love</div>
+              <div style="font-size:20px;font-weight:700;margin-top:4px;color:#111111;">Appointment Update</div>
             </td>
           </tr>
           <tr>
@@ -1487,10 +1527,7 @@ function buildClientTextNotification({ summary, token, notificationType, isCance
     notificationType === "reminder_24h"
       ? "Reminder:"
       : "Scheduled:";
-  const actions = getClientAvailableActions(summary.status)
-    .map((action) => action.toUpperCase())
-    .join(", or ");
-  return `${prefix} ${summary.petName} on ${formattedStart}. Reply ${actions}.${responsePageUrl ? ` Manage online: ${responsePageUrl}` : ""}`;
+  return `${prefix} ${summary.petName} on ${formattedStart}.${responsePageUrl ? ` Manage online: ${responsePageUrl}` : ""}`;
 }
 
 function getRequestTypeLabel(requestType) {
@@ -2284,10 +2321,11 @@ async function getAppointmentResponseDetails(token) {
     isExpired: new Date(tokenRecord.expires_at).getTime() < Date.now(),
     availableActions: getClientAvailableActions(details.appointment.status),
     appointment: summary,
+    groomerContact: getPublicGroomerContact(),
   };
 }
 
-async function processAppointmentResponseToken(token, action, source) {
+async function processAppointmentResponseToken(token, action, source, payload = {}) {
   if (!["confirm", "cancel", "reschedule"].includes(action)) {
     throw new Error("action is invalid.");
   }
@@ -2319,13 +2357,40 @@ async function processAppointmentResponseToken(token, action, source) {
   if (action === "confirm") {
     await updateAppointmentConfirmationState(details.appointment.id);
   } else {
+    if (source === "public_page") {
+      const clientNote = requiredString(payload.clientNote, "clientNote");
+      const preferredDate = optionalString(payload.preferredDate);
+      const preferredTime = optionalString(payload.preferredTime);
+      await createClientRequest(
+        {
+          ownerId: details.owner.id,
+          petId: details.pet.id,
+          requestType: "appointment_change",
+          status: "open",
+          subject: buildAppointmentChangeRequestSubject(summary, action),
+          clientNote,
+          details: {
+            appointmentChange: {
+              appointmentId: details.appointment.id,
+              changeType: action,
+              preferredDate,
+              preferredTime,
+            },
+          },
+        },
+        null,
+      );
+    }
+
     await createAppointmentResponseRequest(
       details.appointment.id,
       details.owner.id,
       action,
       source,
     );
-    await notifyGroomersOfClientRequest(summary, action, source);
+    if (source !== "public_page") {
+      await notifyGroomersOfClientRequest(summary, action, source);
+    }
   }
 
   await sql`
@@ -2886,6 +2951,13 @@ function validateAppointmentPayload(payload) {
     throw new Error("status is invalid.");
   }
 
+  const paymentStatus = payload.paymentStatus
+    ? requiredString(payload.paymentStatus, "paymentStatus")
+    : "unpaid";
+  if (!paymentStatuses.has(paymentStatus)) {
+    throw new Error("paymentStatus is invalid.");
+  }
+
   const start = requiredDate(payload.start, "start");
   const end = requiredDate(payload.end, "end");
   if (new Date(end) <= new Date(start)) {
@@ -2906,7 +2978,13 @@ function validateAppointmentPayload(payload) {
     serviceType: optionalString(payload.serviceType),
     selectedServices,
     customServiceType: optionalString(payload.customServiceType),
-    cost: optionalNumber(payload.cost, "cost") ?? 0,
+    quotePrice:
+      optionalNumber(
+        payload.quotePrice ?? payload.cost,
+        payload.quotePrice != null ? "quotePrice" : "cost",
+      ) ?? 0,
+    actualPriceCharged: optionalNumber(payload.actualPriceCharged, "actualPriceCharged"),
+    paymentStatus,
     notes: typeof payload.notes === "string" ? payload.notes : undefined,
     status,
   };
@@ -3039,7 +3117,8 @@ async function createAppointment(payload) {
   const rows = await sql`
     INSERT INTO appointments (
       owner_id, pet_id, start_at, end_at, service_type, selected_services,
-      custom_service_type, cost, status, confirmed_at
+      custom_service_type, cost, quote_price, actual_price_charged, payment_status,
+      status, confirmed_at
     )
     VALUES (
       ${input.ownerId}::uuid,
@@ -3049,7 +3128,10 @@ async function createAppointment(payload) {
       ${input.serviceType},
       ${input.selectedServices},
       ${input.customServiceType},
-      ${input.cost},
+      ${input.quotePrice},
+      ${input.quotePrice},
+      ${input.actualPriceCharged},
+      ${input.paymentStatus},
       ${input.status},
       ${confirmedAt}
     )
@@ -3091,7 +3173,10 @@ async function updateAppointment(id, payload) {
         service_type = ${input.serviceType},
         selected_services = ${input.selectedServices},
         custom_service_type = ${input.customServiceType},
-        cost = ${input.cost},
+        cost = ${input.quotePrice},
+        quote_price = ${input.quotePrice},
+        actual_price_charged = ${input.actualPriceCharged},
+        payment_status = ${input.paymentStatus},
         status = ${input.status},
         confirmed_at = ${confirmedAt},
         updated_at = NOW()
@@ -3363,12 +3448,14 @@ async function handleRequest(event) {
     }
     if (method === "POST") {
       const payload = parseJsonBody(event);
+      const source = payload.source === "public_page" ? "public_page" : "email_link";
       return json(
         200,
         await processAppointmentResponseToken(
           token,
           requiredString(payload.action, "action").toLowerCase(),
-          "email_link",
+          source,
+          payload,
         ),
       );
     }
@@ -3516,7 +3603,9 @@ async function handleRequest(event) {
         owners: ownerScopeId ? owners.filter((owner) => owner.id === ownerScopeId) : [],
         pets: ownerScopeId ? pets.filter((pet) => pet.ownerId === ownerScopeId) : [],
         appointments: ownerScopeId
-          ? appointments.filter((appointment) => appointment.ownerId === ownerScopeId)
+          ? appointments
+              .filter((appointment) => appointment.ownerId === ownerScopeId)
+              .map(sanitizeAppointmentForClient)
           : [],
         requests,
       });

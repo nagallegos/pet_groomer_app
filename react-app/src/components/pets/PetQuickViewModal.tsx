@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Button, Card, Dropdown, Form, ListGroup, Modal, Spinner } from "react-bootstrap";
 import { PencilSquare } from "react-bootstrap-icons";
 import { useNavigate } from "react-router-dom";
+import AppointmentFormModal from "../appointments/AppointmentFormModal";
+import { useAppData } from "../common/AppDataProvider";
 import {
   addPetNote,
   archivePet,
@@ -51,7 +53,9 @@ export default function PetQuickViewModal({
 }: PetQuickViewModalProps) {
   const navigate = useNavigate();
   const { showToast } = useAppToast();
+  const { setAppointments } = useAppData();
   const [isEditing, setIsEditing] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [name, setName] = useState("");
   const [species, setSpecies] = useState<Species>("dog");
   const [breed, setBreed] = useState("");
@@ -301,6 +305,11 @@ export default function PetQuickViewModal({
                     <PencilSquare aria-hidden="true" />
                     <span className="visually-hidden">Edit pet</span>
                   </Dropdown.Item>
+                  {owner && (
+                    <Dropdown.Item onClick={() => setShowScheduleModal(true)}>
+                      Schedule Appointment
+                    </Dropdown.Item>
+                  )}
                   {allowPageNavigation && (
                     <Dropdown.Item onClick={handlePetPageClick}>
                       Pet Page
@@ -934,6 +943,28 @@ export default function PetQuickViewModal({
           </Button>
         </Modal.Footer>
       </Modal>
+
+      {owner && (
+        <AppointmentFormModal
+          show={showScheduleModal}
+          onHide={() => setShowScheduleModal(false)}
+          owners={[owner]}
+          pets={[pet]}
+          lockedOwnerId={owner.id}
+          lockedPetId={pet.id}
+          initialOwnerId={owner.id}
+          initialPetId={pet.id}
+          onSaved={(appointment) => {
+            setAppointments((currentAppointments) => [...currentAppointments, appointment]);
+            setShowScheduleModal(false);
+            showToast({
+              title: "Appointment Scheduled",
+              body: "The appointment was created for this pet and client.",
+              variant: "success",
+            });
+          }}
+        />
+      )}
     </Modal>
   );
 }

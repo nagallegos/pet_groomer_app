@@ -8,10 +8,15 @@ import { ChevronDownIcon, SearchIcon } from "../components/common/AppIcons";
 import PageLoader from "../components/common/PageLoader";
 import useInitialLoading from "../hooks/useInitialLoading";
 import { formatAppointmentServices } from "../lib/appointmentServices";
+import {
+  formatAppointmentCurrency,
+  getAppointmentActualPriceCharged,
+  getAppointmentQuotePrice,
+} from "../lib/appointmentPricing";
 import type { Appointment } from "../types/models";
 
 type HistoryStatusFilter = "all" | Appointment["status"];
-type HistorySortField = "date" | "client" | "pet" | "cost";
+type HistorySortField = "date" | "client" | "pet" | "quote";
 type HistorySortDirection = "asc" | "desc";
 type HistoryGroupMode = "month" | "status" | "client";
 
@@ -113,8 +118,8 @@ export default function AppointmentHistoryPage() {
           );
         }
 
-        if (sortField === "cost") {
-          return (a.cost - b.cost) * direction;
+        if (sortField === "quote") {
+          return (getAppointmentQuotePrice(a) - getAppointmentQuotePrice(b)) * direction;
         }
 
         const aValue =
@@ -288,7 +293,7 @@ export default function AppointmentHistoryPage() {
                     <option value="date">Date</option>
                     <option value="client">Client</option>
                     <option value="pet">Pet</option>
-                    <option value="cost">Cost</option>
+                    <option value="quote">Quote</option>
                   </Form.Select>
                 </Form.Group>
 
@@ -401,7 +406,9 @@ export default function AppointmentHistoryPage() {
                           {appointment.status}
                         </Badge>
                         <div className="appointment-list-cost">
-                          ${appointment.cost.toFixed(2)}
+                          {appointment.status === "completed" && getAppointmentActualPriceCharged(appointment) != null
+                            ? `Charged ${formatAppointmentCurrency(getAppointmentActualPriceCharged(appointment) ?? 0)}`
+                            : `Quote ${formatAppointmentCurrency(getAppointmentQuotePrice(appointment))}`}
                         </div>
                         <Button
                           size="sm"

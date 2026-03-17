@@ -697,6 +697,9 @@ export const mockAppointments: Appointment[] = Array.from(
     const status = appointmentStatuses[index % appointmentStatuses.length];
     const { start, end } = createAppointmentDate(index);
     const serviceType = serviceTypes[index % serviceTypes.length];
+    const quotePrice = serviceCosts[serviceType] + ((index % 4) * 5);
+    const actualPriceCharged =
+      status === "completed" ? quotePrice + ((index % 3) * 5) : undefined;
     const notes =
       index % 9 === 0
         ? [
@@ -716,7 +719,9 @@ export const mockAppointments: Appointment[] = Array.from(
       status,
       serviceType,
       selectedServices: [serviceType],
-      cost: serviceCosts[serviceType] + ((index % 4) * 5),
+      quotePrice,
+      actualPriceCharged,
+      paymentStatus: status === "completed" ? "paid" : "unpaid",
       notes,
       confirmationSentAt:
         status === "confirmed" || status === "scheduled"

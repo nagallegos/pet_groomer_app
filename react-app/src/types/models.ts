@@ -7,6 +7,7 @@ export type AppointmentStatus =
   | "completed"
   | "cancelled"
   | "no-show";
+export type PaymentStatus = "unpaid" | "paid";
 export type ClientRequestType =
   | "appointment"
   | "appointment_change"
@@ -93,6 +94,8 @@ export type AppointmentChangeType = "cancel" | "reschedule";
 export interface AppointmentChangeRequestDetails {
   appointmentId: string;
   changeType: AppointmentChangeType;
+  preferredDate?: string;
+  preferredTime?: string;
 }
 
 export interface NewPetRequestDetails {
@@ -124,7 +127,9 @@ export interface Appointment {
   serviceType?: string;
   selectedServices?: string[];
   customServiceType?: string;
-  cost: number;
+  quotePrice?: number;
+  actualPriceCharged?: number;
+  paymentStatus?: PaymentStatus;
   status: AppointmentStatus;
   notes: NoteItem[];
   confirmationSentAt?: string;

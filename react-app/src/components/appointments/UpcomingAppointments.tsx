@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Badge, Button, ButtonGroup, Card, ListGroup } from "react-bootstrap";
 import { formatAppointmentServices } from "../../lib/appointmentServices";
+import { formatAppointmentCurrency, getAppointmentQuotePrice } from "../../lib/appointmentPricing";
 import type { Appointment, Owner, Pet } from "../../types/models";
 
 interface UpcomingAppointmentsProps {
@@ -19,12 +20,6 @@ export default function UpcomingAppointments({
   onAppointmentClick,
 }: UpcomingAppointmentsProps) {
   const [range, setRange] = useState<RangeOption>("week");
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(value);
-
   const filteredAppointments = useMemo(() => {
     const now = new Date();
     const end = new Date(now);
@@ -151,7 +146,7 @@ export default function UpcomingAppointments({
                       {formatAppointmentServices(appt)}
                     </div>
                     <div className="small fw-semibold appointment-cost-highlight">
-                      {formatCurrency(appt.cost)}
+                      Quote {formatAppointmentCurrency(getAppointmentQuotePrice(appt))}
                     </div>
                   </div>
 

@@ -24,6 +24,7 @@ interface AppointmentFormModalProps {
   owners: Owner[];
   pets: Pet[];
   lockedOwnerId?: string;
+  lockedPetId?: string;
   initialOwnerId?: string;
   initialPetId?: string;
   initialDate?: string;
@@ -38,6 +39,7 @@ export default function AppointmentFormModal({
   owners,
   pets,
   lockedOwnerId,
+  lockedPetId,
   initialOwnerId = "",
   initialPetId = "",
   initialDate = "",
@@ -53,7 +55,7 @@ export default function AppointmentFormModal({
   const [endTime, setEndTime] = useState(initialEndTime);
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [customServiceType, setCustomServiceType] = useState("");
-  const [cost, setCost] = useState("");
+  const [quotePrice, setQuotePrice] = useState("");
   const [draftNotes, setDraftNotes] = useState<DraftAppointmentNote[]>([]);
   const [noteDraftText, setNoteDraftText] = useState("");
   const [noteDraftVisibility, setNoteDraftVisibility] = useState<NoteVisibility>("internal");
@@ -71,7 +73,7 @@ export default function AppointmentFormModal({
       setEndTime(initialEndTime);
       setSelectedServices([]);
       setCustomServiceType("");
-      setCost("");
+      setQuotePrice("");
       setDraftNotes([]);
       setNoteDraftText("");
       setNoteDraftVisibility("internal");
@@ -98,6 +100,13 @@ export default function AppointmentFormModal({
         ? activeOwners.find((owner) => owner.id === lockedOwnerId) ?? null
         : null,
     [activeOwners, lockedOwnerId],
+  );
+  const lockedPet = useMemo(
+    () =>
+      lockedPetId
+        ? pets.find((pet) => pet.id === lockedPetId && !pet.isArchived) ?? null
+        : null,
+    [lockedPetId, pets],
   );
 
   const availablePets = useMemo(() => {
@@ -197,7 +206,8 @@ export default function AppointmentFormModal({
       serviceType: derivePrimaryServiceType(selectedServices),
       selectedServices,
       customServiceType: customSelected ? customServiceType : undefined,
-      cost: Number(cost) || 0,
+      quotePrice: Number(quotePrice) || 0,
+      paymentStatus: "unpaid" as const,
       status: "scheduled" as const,
     };
 
@@ -296,7 +306,7 @@ export default function AppointmentFormModal({
               value={petId}
               onChange={(e) => setPetId(e.target.value)}
               required
-              disabled={!ownerId}
+              disabled={!ownerId || !!lockedPet}
               aria-labelledby="petLabel"
             >
               <option value="">Select a pet</option>
@@ -306,6 +316,11 @@ export default function AppointmentFormModal({
                 </option>
               ))}
             </Form.Select>
+            {lockedPet && (
+              <Form.Text muted>
+                This appointment is locked to this pet from the current page.
+              </Form.Text>
+            )}
           </Form.Group>
 
           <div className="row g-3">
@@ -385,18 +400,21 @@ export default function AppointmentFormModal({
           )}
 
           <Form.Group className="mb-3">
-            <Form.Label id="costLabel" className="appointment-cost-highlight">Projected Cost</Form.Label>
+            <Form.Label id="costLabel" className="appointment-cost-highlight">Quote</Form.Label>
             <Form.Control
               type="number"
               min="0"
               step="0.01"
-              value={cost}
-              onChange={(e) => setCost(e.target.value)}
+              value={quotePrice}
+              onChange={(e) => setQuotePrice(e.target.value)}
               placeholder="85.00"
-              title="Enter projected appointment cost"
+              title="Enter internal appointment quote"
               aria-labelledby="costLabel"
               className="appointment-cost-input"
             />
+            <Form.Text muted>
+              This quote is internal only and is not shown in the client portal.
+            </Form.Text>
           </Form.Group>
 
           <div className="d-grid gap-3">

@@ -81,8 +81,7 @@ export default function ClientAppointmentsPage() {
                       {new Date(appointment.start).toLocaleString()} • {appointment.status}
                     </div>
                   </div>
-                  <div className="text-muted small">${appointment.cost.toFixed(0)}</div>
-                </div>
+              </div>
                 <div className="text-muted small">
                   Service: {appointment.serviceType || "Grooming Appointment"}
                 </div>
@@ -142,10 +141,6 @@ export default function ClientAppointmentsPage() {
               <div>
                 <div className="text-muted small">Status</div>
                 <div>{activeAppointment.status}</div>
-              </div>
-              <div>
-                <div className="text-muted small">Cost</div>
-                <div>${activeAppointment.cost.toFixed(2)}</div>
               </div>
               <div>
                 <div className="text-muted small mb-2">Notes</div>

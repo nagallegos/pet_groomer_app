@@ -601,8 +601,10 @@ export default function PetDetailsPage() {
       <AppointmentFormModal
         show={showScheduleModal}
         onHide={() => setShowScheduleModal(false)}
-        owners={owners}
-        pets={pets}
+        owners={[owner]}
+        pets={[pet]}
+        lockedOwnerId={owner.id}
+        lockedPetId={pet.id}
         initialOwnerId={owner.id}
         initialPetId={pet.id}
         onSaved={(appointment) => {

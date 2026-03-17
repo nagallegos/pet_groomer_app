@@ -137,7 +137,6 @@ export default function ClientPetsPage() {
                                 {appointment.serviceType || "Grooming"} • {appointment.status}
                               </div>
                             </div>
-                            <div className="text-muted small">${appointment.cost.toFixed(0)}</div>
                           </div>
                         ))}
                         {petAppointments.length === 0 && (

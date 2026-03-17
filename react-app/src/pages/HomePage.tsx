@@ -6,6 +6,7 @@ import UpcomingAppointments from "../components/appointments/UpcomingAppointment
 import { useAppData } from "../components/common/AppDataProvider";
 import PageLoader from "../components/common/PageLoader";
 import useInitialLoading from "../hooks/useInitialLoading";
+import { getAppointmentQuotePrice } from "../lib/appointmentPricing";
 import type { Appointment } from "../types/models";
 
 const now = new Date();
@@ -62,7 +63,7 @@ function projectedRevenue(appointments: Appointment[], days?: number) {
 
       return days ? start <= end : true;
     })
-    .reduce((total, appointment) => total + appointment.cost, 0);
+    .reduce((total, appointment) => total + getAppointmentQuotePrice(appointment), 0);
 }
 
 export default function HomePage() {

@@ -299,12 +299,15 @@ const makeAppointment = async (ownerId, petId, date, status) => {
   const end = new Date(start);
   end.setHours(start.getHours() + 1);
   const serviceType = pick(services);
-  const cost = randomInt(35, 120);
+  const quotePrice = randomInt(35, 120);
+  const actualPriceCharged =
+    status === "completed" ? quotePrice + randomInt(0, 20) : null;
+  const paymentStatus = status === "completed" && random() < 0.85 ? "paid" : "unpaid";
 
   const rows = await sql`
     INSERT INTO appointments (
       owner_id, pet_id, start_at, end_at, service_type,
-      selected_services, cost, status
+      selected_services, cost, quote_price, actual_price_charged, payment_status, status
     )
     VALUES (
       ${ownerId}::uuid,
@@ -313,7 +316,10 @@ const makeAppointment = async (ownerId, petId, date, status) => {
       ${toIso(end)},
       ${serviceType},
       ${[serviceType]},
-      ${cost},
+      ${quotePrice},
+      ${quotePrice},
+      ${actualPriceCharged},
+      ${paymentStatus},
       ${status}
     )
     RETURNING id::text AS id
