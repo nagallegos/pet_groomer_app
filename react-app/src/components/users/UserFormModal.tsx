@@ -38,6 +38,9 @@ export default function UserFormModal({
   const [ownerId, setOwnerId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const linkedOwner = owners.find((owner) => owner.id === ownerId) ?? null;
+  const isClientRole = role === "client";
+  const syncedClientEmail = isClientRole ? linkedOwner?.email ?? "" : email;
 
   useEffect(() => {
     if (!show) {
@@ -69,7 +72,7 @@ export default function UserFormModal({
         {
           firstName,
           lastName,
-          email,
+          email: syncedClientEmail || email,
           username: username || undefined,
           phone,
           role,
@@ -119,7 +122,18 @@ export default function UserFormModal({
           <div className="settings-form-stack">
             <Form.Group>
               <Form.Label>Email Address</Form.Label>
-              <Form.Control type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+              <Form.Control
+                type="email"
+                value={isClientRole ? syncedClientEmail : email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+                disabled={isClientRole}
+              />
+              {isClientRole && (
+                <Form.Text className="text-muted">
+                  Client user email is synced from the linked client record.
+                </Form.Text>
+              )}
             </Form.Group>
             <Form.Group>
               <Form.Label>Username</Form.Label>
@@ -154,6 +168,11 @@ export default function UserFormModal({
                     </option>
                   ))}
                 </Form.Select>
+                {linkedOwner && (
+                  <Form.Text className="text-muted">
+                    This account will use {linkedOwner.email}.
+                  </Form.Text>
+                )}
               </Form.Group>
             )}
             <Form.Group>

@@ -47,6 +47,7 @@ export interface Owner {
   lastName: string;
   phone: string;
   email: string;
+  hasPortalAccount?: boolean;
   preferredContactMethod: ContactMethod;
   address?: string;
   notes: NoteItem[];

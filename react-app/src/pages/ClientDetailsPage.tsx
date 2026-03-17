@@ -124,25 +124,6 @@ export default function ClientDetailsPage() {
     setSelectedNoteEntityId(owner.id);
   }, [owner]);
 
-  const noteTargets = useMemo(
-    () =>
-      owner
-        ? [
-            { entityType: "client" as const, entityId: owner.id, label: `${owner.firstName} ${owner.lastName} (Client)` },
-            ...pets.map((pet) => ({ entityType: "pet" as const, entityId: pet.id, label: `${pet.name} (Pet)` })),
-            ...clientAppointments.map((appointment) => {
-              const appointmentPet = pets.find((pet) => pet.id === appointment.petId);
-              return {
-                entityType: "appointment" as const,
-                entityId: appointment.id,
-                label: `${appointmentPet?.name ?? "Pet"} Appointment ${new Date(appointment.start).toLocaleDateString()}`,
-              };
-            }),
-          ]
-        : [],
-    [clientAppointments, owner, pets],
-  );
-
   const timelineNotes = useMemo<ClientTimelineNote[]>(
     () =>
       owner
@@ -881,14 +862,15 @@ export default function ClientDetailsPage() {
         <Modal.Body>
           {noteSaveError && <Alert variant="danger" className="mb-3">{noteSaveError}</Alert>}
           <Form.Group className="mb-3">
-            <Form.Label>Attach Note To</Form.Label>
-            <Form.Select value={`${selectedNoteEntityType}:${selectedNoteEntityId}`} onChange={(event) => { const [entityType, entityId] = event.target.value.split(":"); setSelectedNoteEntityType(entityType as ClientNoteEntityType); setSelectedNoteEntityId(entityId); }}>
-              {noteTargets.map((target) => (
-                <option key={`${target.entityType}:${target.entityId}`} value={`${target.entityType}:${target.entityId}`}>
-                  {target.label}
-                </option>
-              ))}
-            </Form.Select>
+            <Form.Label>Attached To</Form.Label>
+            <Form.Control
+              type="text"
+              value={`${owner.firstName} ${owner.lastName} (Client)`}
+              readOnly
+            />
+            <Form.Text className="text-muted">
+              Notes added here stay attached to this client.
+            </Form.Text>
           </Form.Group>
           <Form.Group className="mb-3">
             <Form.Label>Note</Form.Label>

@@ -36,6 +36,8 @@ export interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (input: UserProfileInput) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  sendPasswordResetEmail: () => Promise<void>;
 }
 
 const API_BASE_URL = getApiBaseUrl();
@@ -111,6 +113,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateProfile: async (input) => {
         const payload = await authRequest("/auth/profile", "PUT", input);
         setUser(payload.user);
+      },
+      changePassword: async (currentPassword, newPassword) => {
+        await authRequest("/auth/change-password", "POST", {
+          currentPassword,
+          newPassword,
+        });
+      },
+      sendPasswordResetEmail: async () => {
+        if (!user?.email) {
+          throw new Error("No email address is available for this account.");
+        }
+        await authRequest("/auth/request-password-reset", "POST", {
+          email: user.email,
+        });
       },
     }),
     [isLoading, user],

@@ -40,7 +40,10 @@ export default function ClientGrid({
                   className="client-list-item"
                   onClick={() => onClientClick(owner)}
                 >
-                  {owner.firstName} {owner.lastName}
+                  <span>{owner.firstName} {owner.lastName}</span>
+                  <span className={`user-status-badge ms-2${owner.hasPortalAccount ? "" : " user-status-badge-inactive"}`}>
+                    {owner.hasPortalAccount ? "Portal" : "No portal"}
+                  </span>
                 </Button>
               </ListGroup.Item>
             ))}

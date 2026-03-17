@@ -303,12 +303,45 @@ function mapOwnerRow(row, notes = []) {
     lastName: row.last_name,
     phone: row.phone,
     email: row.email,
+    hasPortalAccount: row.has_portal_account ?? false,
     preferredContactMethod: row.preferred_contact_method,
     address: row.address ?? undefined,
     notes,
     isArchived: row.is_archived,
     archivedAt: toIso(row.archived_at),
   };
+}
+
+async function getLinkedClientUserForOwner(ownerId, excludeUserId = null) {
+  const rows = await sql`
+    SELECT id::text AS id, email
+    FROM app_users
+    WHERE owner_id = ${ownerId}::uuid
+      AND role = 'client'
+      AND (${excludeUserId}::uuid IS NULL OR id <> ${excludeUserId}::uuid)
+    ORDER BY created_at ASC
+  `;
+
+  if (rows.length > 1) {
+    throw new Error("Only one client user account can be linked to a client record.");
+  }
+
+  return rows[0] ?? null;
+}
+
+async function getOwnerEmailForClientUser(ownerId) {
+  const rows = await sql`
+    SELECT id::text AS id, email
+    FROM owners
+    WHERE id = ${ownerId}::uuid
+    LIMIT 1
+  `;
+
+  if (rows.length === 0) {
+    throw new Error("Linked client record was not found.");
+  }
+
+  return rows[0].email;
 }
 
 function mapPetRow(row, notes = []) {
@@ -900,7 +933,13 @@ async function listOwners() {
   const [ownerRows, noteRows] = await Promise.all([
     sql`
       SELECT id::text AS id, first_name, last_name, phone, email, preferred_contact_method,
-             address, is_archived, archived_at
+             address, is_archived, archived_at,
+             EXISTS(
+               SELECT 1
+               FROM app_users u
+               WHERE u.owner_id = owners.id
+                 AND u.role = 'client'
+             ) AS has_portal_account
       FROM owners
       ORDER BY last_name ASC, first_name ASC
     `,
@@ -914,7 +953,13 @@ async function listOwners() {
 async function getOwner(id) {
   const rows = await sql`
     SELECT id::text AS id, first_name, last_name, phone, email, preferred_contact_method,
-           address, is_archived, archived_at
+           address, is_archived, archived_at,
+           EXISTS(
+             SELECT 1
+             FROM app_users u
+             WHERE u.owner_id = owners.id
+               AND u.role = 'client'
+           ) AS has_portal_account
     FROM owners
     WHERE id = ${id}::uuid
   `;
@@ -1030,7 +1075,13 @@ async function getAppointmentWithRelations(appointmentId) {
 
   const appointment = mapAppointmentRow(appointmentRows[0]);
   const ownerRows = await sql`
-    SELECT id::text AS id, first_name, last_name, phone, email, preferred_contact_method, address, is_archived, archived_at
+    SELECT id::text AS id, first_name, last_name, phone, email, preferred_contact_method, address, is_archived, archived_at,
+           EXISTS(
+             SELECT 1
+             FROM app_users u
+             WHERE u.owner_id = owners.id
+               AND u.role = 'client'
+           ) AS has_portal_account
     FROM owners
     WHERE id = ${appointment.ownerId}::uuid
     LIMIT 1
@@ -1701,6 +1752,19 @@ async function getCurrentUser(event) {
   return rows[0] ?? null;
 }
 
+async function getUserAuthRecordById(userId) {
+  const rows = await sql`
+    SELECT id::text AS id, email, username, password_hash, role, display_name, first_name,
+           last_name, phone, owner_id::text AS owner_id, notify_by_email,
+           notify_by_text, theme_name, theme_mode, is_active, failed_login_attempts, locked_at,
+           created_at, updated_at
+    FROM app_users
+    WHERE id = ${userId}::uuid
+    LIMIT 1
+  `;
+  return rows[0] ?? null;
+}
+
 function validateUserProfilePayload(payload) {
   const firstName = requiredString(payload.firstName, "firstName");
   const lastName = requiredString(payload.lastName, "lastName");
@@ -1786,6 +1850,11 @@ function validateManagedUserPayload(payload, { isNew = false } = {}) {
 async function updateCurrentUserProfile(userId, payload) {
   const input = validateUserProfilePayload(payload);
   const displayName = `${input.firstName} ${input.lastName}`.trim();
+  const currentUser = await getUserAuthRecordById(userId);
+
+  if (!currentUser) {
+    return null;
+  }
 
   const duplicateEmail = await sql`
     SELECT id::text AS id
@@ -1818,16 +1887,65 @@ async function updateCurrentUserProfile(userId, payload) {
               failed_login_attempts, locked_at
   `;
 
+  if (currentUser.role === "client" && currentUser.owner_id) {
+    await sql`
+      UPDATE owners
+      SET email = ${input.email},
+          updated_at = NOW()
+      WHERE id = ${currentUser.owner_id}::uuid
+    `;
+  }
+
   return rows[0] ? mapAppUser(rows[0]) : null;
+}
+
+async function changeCurrentUserPassword(userId, payload) {
+  const currentPassword = requiredString(payload.currentPassword, "currentPassword");
+  const newPassword = requiredString(payload.newPassword, "newPassword");
+
+  if (newPassword.length < 8) {
+    throw new Error("New password must be at least 8 characters.");
+  }
+
+  if (currentPassword === newPassword) {
+    throw new Error("New password must be different from your current password.");
+  }
+
+  const user = await getUserAuthRecordById(userId);
+  if (!user) {
+    throw new Error("User not found.");
+  }
+
+  if (!verifyPassword(currentPassword, user.password_hash)) {
+    throw new Error("Current password is incorrect.");
+  }
+
+  await sql`
+    UPDATE app_users
+    SET password_hash = ${hashPassword(newPassword)},
+        updated_at = NOW()
+    WHERE id = ${userId}::uuid
+  `;
+
+  return { ok: true };
 }
 
 async function createAppUser(payload) {
   const input = validateManagedUserPayload(payload, { isNew: true });
+  const synchronizedEmail =
+    input.role === "client" && input.ownerId
+      ? await getOwnerEmailForClientUser(input.ownerId)
+      : input.email;
   const displayName = `${input.firstName} ${input.lastName}`.trim();
+
+  if (input.role === "client" && input.ownerId) {
+    await getLinkedClientUserForOwner(input.ownerId);
+  }
+
   const duplicateEmail = await sql`
     SELECT id::text AS id
     FROM app_users
-    WHERE email = ${input.email}
+    WHERE email = ${synchronizedEmail}
     LIMIT 1
   `;
 
@@ -1853,7 +1971,7 @@ async function createAppUser(payload) {
       owner_id, notify_by_email, notify_by_text, is_active
     )
     VALUES (
-      ${input.email},
+      ${synchronizedEmail},
       ${input.username},
       ${hashPassword(input.password)},
       ${input.role},
@@ -1877,6 +1995,10 @@ async function createAppUser(payload) {
 
 async function updateAppUser(userId, payload, currentUserId) {
   const input = validateManagedUserPayload(payload);
+  const synchronizedEmail =
+    input.role === "client" && input.ownerId
+      ? await getOwnerEmailForClientUser(input.ownerId)
+      : input.email;
   const displayName = `${input.firstName} ${input.lastName}`.trim();
   const existing = await sql`
     SELECT id::text AS id
@@ -1897,10 +2019,14 @@ async function updateAppUser(userId, payload, currentUserId) {
     throw new Error("You cannot change your own role.");
   }
 
+  if (input.role === "client" && input.ownerId) {
+    await getLinkedClientUserForOwner(input.ownerId, userId);
+  }
+
   const duplicateEmail = await sql`
     SELECT id::text AS id
     FROM app_users
-    WHERE email = ${input.email}
+    WHERE email = ${synchronizedEmail}
       AND id <> ${userId}::uuid
     LIMIT 1
   `;
@@ -1924,7 +2050,7 @@ async function updateAppUser(userId, payload, currentUserId) {
 
   await sql`
     UPDATE app_users
-    SET email = ${input.email},
+    SET email = ${synchronizedEmail},
         username = ${input.username},
         role = ${input.role},
         display_name = ${displayName},
@@ -2762,6 +2888,22 @@ async function createOwner(payload) {
 
 async function updateOwner(id, payload) {
   const input = validateOwnerPayload(payload);
+  const linkedClientUser = await getLinkedClientUserForOwner(id);
+
+  if (linkedClientUser) {
+    const duplicateEmail = await sql`
+      SELECT id::text AS id
+      FROM app_users
+      WHERE email = ${input.email}
+        AND id <> ${linkedClientUser.id}::uuid
+      LIMIT 1
+    `;
+
+    if (duplicateEmail.length > 0) {
+      throw new Error("That email address is already in use by another user account.");
+    }
+  }
+
   const rows = await sql`
     UPDATE owners
     SET first_name = ${input.firstName},
@@ -2776,6 +2918,15 @@ async function updateOwner(id, payload) {
   `;
   if (rows.length === 0) {
     return null;
+  }
+
+  if (linkedClientUser) {
+    await sql`
+      UPDATE app_users
+      SET email = ${input.email},
+          updated_at = NOW()
+      WHERE id = ${linkedClientUser.id}::uuid
+    `;
   }
 
   if (input.notes !== undefined) {
@@ -3190,6 +3341,15 @@ async function handleRequest(event) {
 
     const user = await updateCurrentUserProfile(currentUser.id, parseJsonBody(event));
     return user ? json(200, { user }) : notFound("User not found.");
+  }
+
+  if (path === "/auth/change-password" && method === "POST") {
+    currentUser = await getCurrentUser(event);
+    if (!currentUser) {
+      return unauthorized();
+    }
+
+    return json(200, await changeCurrentUserPassword(currentUser.id, parseJsonBody(event)));
   }
 
   if (!path.startsWith("/auth/")) {

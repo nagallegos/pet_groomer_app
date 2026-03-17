@@ -40,16 +40,10 @@ export default function SettingsMenu({
           variant={mobile ? "outline-light" : "outline-secondary"}
           className={classes}
         >
-          {mobile ? (
-            <>
-              <span aria-hidden="true" className="topbar-btn-icon">
-                <Gear />
-              </span>
-              <span className="visually-hidden">Settings</span>
-            </>
-          ) : (
-            "Settings"
-          )}
+          <span aria-hidden="true" className="topbar-btn-icon">
+            <Gear />
+          </span>
+          <span className="visually-hidden">Settings</span>
         </Dropdown.Toggle>
 
         <Dropdown.Menu className="settings-dropdown-menu">
@@ -108,18 +102,21 @@ export default function SettingsMenu({
             </span>
           </div>
 
-          <Dropdown.Divider />
-
-          <Dropdown.Header>Archives</Dropdown.Header>
-          <Dropdown.Item as={Link} to="/archives/clients" onClick={onNavigate}>
-            Client Archives
-          </Dropdown.Item>
-          <Dropdown.Item as={Link} to="/archives/pets" onClick={onNavigate}>
-            Pet Archives
-          </Dropdown.Item>
-          <Dropdown.Item as={Link} to="/archives/appointments" onClick={onNavigate}>
-            Appointment Archives
-          </Dropdown.Item>
+          {user?.role !== "client" && (
+            <>
+              <Dropdown.Divider />
+              <Dropdown.Header>Archives</Dropdown.Header>
+              <Dropdown.Item as={Link} to="/archives/clients" onClick={onNavigate}>
+                Client Archives
+              </Dropdown.Item>
+              <Dropdown.Item as={Link} to="/archives/pets" onClick={onNavigate}>
+                Pet Archives
+              </Dropdown.Item>
+              <Dropdown.Item as={Link} to="/archives/appointments" onClick={onNavigate}>
+                Appointment Archives
+              </Dropdown.Item>
+            </>
+          )}
           <Dropdown.Divider />
           <Dropdown.Item
             onClick={() => {
