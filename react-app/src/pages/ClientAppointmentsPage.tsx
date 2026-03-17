@@ -22,22 +22,26 @@ export default function ClientAppointmentsPage() {
         .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime()),
     [appointments, user?.ownerId],
   );
+  const searchParamAppointmentId = searchParams.get("appointmentId");
+  const searchParamAppointment = useMemo(
+    () =>
+      searchParamAppointmentId
+        ? clientAppointments.find((appointment) => appointment.id === searchParamAppointmentId) ?? null
+        : null,
+    [clientAppointments, searchParamAppointmentId],
+  );
+  const activeAppointment = selectedAppointment ?? searchParamAppointment;
 
   useEffect(() => {
-    const appointmentId = searchParams.get("appointmentId");
-    if (!appointmentId || selectedAppointment) {
+    if (!searchParamAppointment) {
       return;
     }
-    const target = clientAppointments.find((appointment) => appointment.id === appointmentId);
-    if (target) {
-      setSelectedAppointment(target);
-      setSearchParams((current) => {
-        const next = new URLSearchParams(current);
-        next.delete("appointmentId");
-        return next;
-      });
-    }
-  }, [clientAppointments, searchParams, selectedAppointment, setSearchParams]);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("appointmentId");
+      return next;
+    });
+  }, [searchParamAppointment, setSearchParams]);
 
   if (isLoading) {
     return <PageLoader label="Loading appointments..." />;
@@ -108,7 +112,7 @@ export default function ClientAppointmentsPage() {
       </div>
 
       <Modal
-        show={!!selectedAppointment}
+        show={!!activeAppointment}
         onHide={() => setSelectedAppointment(null)}
         centered
         fullscreen="sm-down"
@@ -117,34 +121,34 @@ export default function ClientAppointmentsPage() {
           <Modal.Title>Appointment Details</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {selectedAppointment && (
+          {activeAppointment && (
             <div className="d-grid gap-3">
               <div>
                 <div className="text-muted small">Pet</div>
                 <div className="fw-semibold">
-                  {pets.find((item) => item.id === selectedAppointment.petId)?.name ?? "Pet"}
+                  {pets.find((item) => item.id === activeAppointment.petId)?.name ?? "Pet"}
                 </div>
               </div>
               <div>
                 <div className="text-muted small">When</div>
-                <div>{new Date(selectedAppointment.start).toLocaleString()}</div>
+                <div>{new Date(activeAppointment.start).toLocaleString()}</div>
               </div>
               <div>
                 <div className="text-muted small">Services</div>
-                <div>{formatAppointmentServices(selectedAppointment)}</div>
+                <div>{formatAppointmentServices(activeAppointment)}</div>
               </div>
               <div>
                 <div className="text-muted small">Status</div>
-                <div>{selectedAppointment.status}</div>
+                <div>{activeAppointment.status}</div>
               </div>
               <div>
                 <div className="text-muted small">Cost</div>
-                <div>${selectedAppointment.cost.toFixed(2)}</div>
+                <div>${activeAppointment.cost.toFixed(2)}</div>
               </div>
               <div>
                 <div className="text-muted small mb-2">Notes</div>
                 <div className="d-grid gap-2">
-                  {selectedAppointment.notes
+                  {activeAppointment.notes
                     .filter((note) => !note.isArchived && note.visibility === "client")
                     .map((note) => (
                       <div key={note.id} className="client-note-preview">
@@ -154,7 +158,7 @@ export default function ClientAppointmentsPage() {
                         <div>{note.text}</div>
                       </div>
                     ))}
-                  {selectedAppointment.notes.filter((note) => !note.isArchived && note.visibility === "client").length === 0 && (
+                  {activeAppointment.notes.filter((note) => !note.isArchived && note.visibility === "client").length === 0 && (
                     <div className="text-muted small">No notes were shared for this appointment.</div>
                   )}
                 </div>

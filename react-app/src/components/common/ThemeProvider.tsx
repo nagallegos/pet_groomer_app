@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "./useAuth";
 
 export type ThemeMode = "light" | "dark";
@@ -28,37 +28,29 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  const [themeMode, setThemeModeState] = useState<ThemeMode>(() => {
-    const savedMode =
-      window.localStorage.getItem("bb-love-theme-mode") ??
-      window.localStorage.getItem("bb-love-theme");
-    return savedMode === "dark" ? "dark" : "light";
-  });
-  const [themeName, setThemeNameState] = useState<ThemeName>(() => {
-    const savedName = window.localStorage.getItem("bb-love-theme-name");
-    return normalizeThemeName(savedName);
-  });
+function getStoredThemeMode() {
+  const savedMode =
+    window.localStorage.getItem("bb-love-theme-mode") ??
+    window.localStorage.getItem("bb-love-theme");
+  return savedMode === "dark" ? "dark" : "light";
+}
 
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
+function getStoredThemeName() {
+  const savedName = window.localStorage.getItem("bb-love-theme-name");
+  return normalizeThemeName(savedName);
+}
 
-    if (user.themeName) {
-      setThemeNameState(normalizeThemeName(user.themeName));
-    }
-    if (user.themeMode) {
-      setThemeModeState(user.themeMode);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (themeName === "high-contrast" && themeMode === "dark") {
-      setThemeModeState("light");
-    }
-  }, [themeMode, themeName]);
+function ThemeProviderInner({
+  children,
+  initialThemeMode,
+  initialThemeName,
+}: {
+  children: ReactNode;
+  initialThemeMode: ThemeMode;
+  initialThemeName: ThemeName;
+}) {
+  const [themeMode, setThemeModeState] = useState<ThemeMode>(initialThemeMode);
+  const [themeName, setThemeNameState] = useState<ThemeName>(initialThemeName);
 
   useEffect(() => {
     document.documentElement.dataset.theme = themeMode;
@@ -68,20 +60,24 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem("bb-love-theme-name", themeName);
   }, [themeMode, themeName]);
 
-  const setThemeMode = (mode: ThemeMode) => {
+  const setThemeMode = useCallback((mode: ThemeMode) => {
     if (themeName === "high-contrast" && mode === "dark") {
       setThemeModeState("light");
       return;
     }
     setThemeModeState(mode);
-  };
+  }, [themeName]);
 
-  const setThemeName = (name: ThemeName) => {
+  const setThemeName = useCallback((name: ThemeName) => {
     setThemeNameState(name);
     if (name === "high-contrast") {
       setThemeModeState("light");
     }
-  };
+  }, []);
+
+  const toggleThemeMode = useCallback(() => {
+    setThemeMode(themeMode === "dark" ? "light" : "dark");
+  }, [setThemeMode, themeMode]);
 
   const value = useMemo(
     () => ({
@@ -89,14 +85,32 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       themeName,
       setThemeMode,
       setThemeName,
-      toggleThemeMode: () =>
-        setThemeMode(themeMode === "dark" ? "light" : "dark"),
+      toggleThemeMode,
       isDarkModeAvailable: themeName !== "high-contrast",
     }),
-    [themeMode, themeName],
+    [setThemeMode, setThemeName, themeMode, themeName, toggleThemeMode],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const initialThemeName = normalizeThemeName(user?.themeName ?? getStoredThemeName());
+  const initialThemeMode =
+    initialThemeName === "high-contrast"
+      ? "light"
+      : (user?.themeMode ?? getStoredThemeMode());
+
+  return (
+    <ThemeProviderInner
+      key={`${user?.id ?? "guest"}:${user?.themeName ?? "none"}:${user?.themeMode ?? "none"}`}
+      initialThemeMode={initialThemeMode}
+      initialThemeName={initialThemeName}
+    >
+      {children}
+    </ThemeProviderInner>
+  );
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

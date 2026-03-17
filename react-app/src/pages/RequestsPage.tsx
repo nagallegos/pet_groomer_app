@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button, Card, Col, Form, Modal, Row } from "react-bootstrap";
 import { PencilSquare } from "react-bootstrap-icons";
 import { useSearchParams } from "react-router-dom";
@@ -175,56 +175,7 @@ export default function RequestsPage() {
     }
   }, [isClient, ownerId, searchParams, setSearchParams]);
 
-  useEffect(() => {
-    const requestId = searchParams.get("requestId");
-    if (!requestId || showModal) {
-      return;
-    }
-
-    const targetRequest = requests.find((item) => item.id === requestId);
-    if (targetRequest) {
-      openEdit(targetRequest);
-      setSearchParams((current) => {
-        const next = new URLSearchParams(current);
-        next.delete("requestId");
-        return next;
-      });
-    }
-  }, [requests, searchParams, setSearchParams, showModal]);
-
-  if (isLoading) {
-    return <PageLoader label="Loading requests..." />;
-  }
-
-  const resetForm = () => {
-    setEditingRequest(null);
-    setIsReadOnly(false);
-    setRequestType("appointment");
-    setSubject("");
-    setClientNote("");
-    setResolutionNote("");
-    setInternalNote("");
-    setStatus("open");
-    setPetId("");
-    setSelectedPetIds([]);
-    setAppointmentId("");
-    setAppointmentChangeType("cancel");
-    setSelectedOwnerId(isClient ? ownerId : "");
-    setProfileAttribute("contact_info");
-    setPendingPet(emptyPendingPet());
-    setSaveError(null);
-    setInfoMessage(null);
-  };
-
-  const openCreate = (type?: ClientRequestType) => {
-    resetForm();
-    if (type) {
-      setRequestType(type);
-    }
-    setShowModal(true);
-  };
-
-  function openEdit(request: ClientRequest) {
+  const openEdit = useCallback((request: ClientRequest) => {
     setEditingRequest(request);
     setIsReadOnly(isClient || isRequestClosed(request.status));
     setRequestType(request.requestType);
@@ -258,7 +209,56 @@ export default function RequestsPage() {
     setSaveError(null);
     setInfoMessage(null);
     setShowModal(true);
+  }, [isClient]);
+
+  useEffect(() => {
+    const requestId = searchParams.get("requestId");
+    if (!requestId || showModal) {
+      return;
+    }
+
+    const targetRequest = requests.find((item) => item.id === requestId);
+    if (targetRequest) {
+      openEdit(targetRequest);
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete("requestId");
+        return next;
+      });
+    }
+  }, [openEdit, requests, searchParams, setSearchParams, showModal]);
+
+  if (isLoading) {
+    return <PageLoader label="Loading requests..." />;
   }
+
+  const resetForm = () => {
+    setEditingRequest(null);
+    setIsReadOnly(false);
+    setRequestType("appointment");
+    setSubject("");
+    setClientNote("");
+    setResolutionNote("");
+    setInternalNote("");
+    setStatus("open");
+    setPetId("");
+    setSelectedPetIds([]);
+    setAppointmentId("");
+    setAppointmentChangeType("cancel");
+    setSelectedOwnerId(isClient ? ownerId : "");
+    setProfileAttribute("contact_info");
+    setPendingPet(emptyPendingPet());
+    setSaveError(null);
+    setInfoMessage(null);
+  };
+
+  const openCreate = (type?: ClientRequestType) => {
+    resetForm();
+    if (type) {
+      setRequestType(type);
+    }
+    setShowModal(true);
+  };
 
   const updatePendingPet = <K extends keyof PendingPetProfile>(field: K, value: PendingPetProfile[K]) => {
     setPendingPet((current) => ({ ...current, [field]: value }));
