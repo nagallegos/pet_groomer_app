@@ -8,6 +8,37 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes("node_modules")) {
+              return undefined;
+            }
+
+            if (
+              id.includes("react-big-calendar")
+            ) {
+              return "vendor-calendar";
+            }
+
+            if (id.includes("date-fns")) {
+              return "vendor-date";
+            }
+
+            if (
+              id.includes("react-bootstrap") ||
+              id.includes("bootstrap") ||
+              id.includes("react-bootstrap-icons")
+            ) {
+              return "vendor-ui";
+            }
+
+            return undefined;
+          },
+        },
+      },
+    },
     server: {
       proxy: {
         "/api": {

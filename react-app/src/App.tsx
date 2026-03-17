@@ -1,31 +1,38 @@
+import { Suspense, lazy } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppDataProvider } from "./components/common/AppDataProvider";
 import { AuthProvider } from "./components/common/AuthProvider";
+import PageLoader from "./components/common/PageLoader";
 import RequireAuth from "./components/common/RequireAuth";
 import { ThemeProvider } from "./components/common/ThemeProvider";
 import AppLayout from "./components/layout/AppLayout";
-import LoginPage from "./pages/LoginPage";
-import HomePage from "./pages/HomePage";
-import ContactsPage from "./pages/ContactsPage";
-import PetsPage from "./pages/PetsPage";
-import SchedulePage from "./pages/SchedulePage";
-import AnalysisPage from "./pages/AnalysisPage";
-import AppointmentHistoryPage from "./pages/AppointmentHistoryPage";
-import ArchivePage from "./pages/ArchivePage";
-import ClientDetailsPage from "./pages/ClientDetailsPage";
-import PetDetailsPage from "./pages/PetDetailsPage";
-import UsersPage from "./pages/UsersPage";
-import AppointmentResponsePage from "./pages/AppointmentResponsePage";
-import ClientHomePage from "./pages/ClientHomePage";
-import ClientPetsPage from "./pages/ClientPetsPage";
-import ClientAppointmentsPage from "./pages/ClientAppointmentsPage";
-import RequestsPage from "./pages/RequestsPage";
-import NotificationsPage from "./pages/NotificationsPage";
-import PersonalizationPage from "./pages/PersonalizationPage";
-import RequestPasswordResetPage from "./pages/RequestPasswordResetPage";
-import ResetPasswordPage from "./pages/ResetPasswordPage";
-import AccountSetupPage from "./pages/AccountSetupPage";
 import { useAuth } from "./components/common/useAuth";
+
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const HomePage = lazy(() => import("./pages/HomePage"));
+const ContactsPage = lazy(() => import("./pages/ContactsPage"));
+const PetsPage = lazy(() => import("./pages/PetsPage"));
+const SchedulePage = lazy(() => import("./pages/SchedulePage"));
+const AnalysisPage = lazy(() => import("./pages/AnalysisPage"));
+const AppointmentHistoryPage = lazy(() => import("./pages/AppointmentHistoryPage"));
+const ArchivePage = lazy(() => import("./pages/ArchivePage"));
+const ClientDetailsPage = lazy(() => import("./pages/ClientDetailsPage"));
+const PetDetailsPage = lazy(() => import("./pages/PetDetailsPage"));
+const UsersPage = lazy(() => import("./pages/UsersPage"));
+const AppointmentResponsePage = lazy(() => import("./pages/AppointmentResponsePage"));
+const ClientHomePage = lazy(() => import("./pages/ClientHomePage"));
+const ClientPetsPage = lazy(() => import("./pages/ClientPetsPage"));
+const ClientAppointmentsPage = lazy(() => import("./pages/ClientAppointmentsPage"));
+const RequestsPage = lazy(() => import("./pages/RequestsPage"));
+const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
+const PersonalizationPage = lazy(() => import("./pages/PersonalizationPage"));
+const RequestPasswordResetPage = lazy(() => import("./pages/RequestPasswordResetPage"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
+const AccountSetupPage = lazy(() => import("./pages/AccountSetupPage"));
+
+function RouteFallback() {
+  return <PageLoader label="Loading page..." />;
+}
 
 function HomeRoute() {
   const { user } = useAuth();
@@ -42,48 +49,50 @@ const App = () => {
     <AuthProvider>
       <ThemeProvider>
         <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/forgot-password" element={<RequestPasswordResetPage />} />
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
-            <Route path="/account-setup" element={<AccountSetupPage />} />
-            <Route path="/appointment-response" element={<AppointmentResponsePage />} />
-            <Route
-              element={
-                <RequireAuth />
-              }
-            >
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/forgot-password" element={<RequestPasswordResetPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/account-setup" element={<AccountSetupPage />} />
+              <Route path="/appointment-response" element={<AppointmentResponsePage />} />
               <Route
                 element={
-                  <AppDataProvider>
-                    <AppLayout />
-                  </AppDataProvider>
+                  <RequireAuth />
                 }
               >
-                <Route path="/" element={<Navigate to="/home" replace />} />
-                <Route path="home" element={<HomeRoute />} />
-                <Route path="pets" element={<PetsRoute />} />
-                <Route path="requests" element={<RequestsPage />} />
-                <Route path="notifications" element={<NotificationsPage />} />
-                <Route path="personalization" element={<PersonalizationPage />} />
-                <Route path="appointments" element={<RequireAuth allowedRoles={["client"]} />}>
-                  <Route index element={<ClientAppointmentsPage />} />
-                </Route>
-                <Route element={<RequireAuth allowedRoles={["admin", "groomer"]} />}>
-                  <Route path="analysis" element={<AnalysisPage />} />
-                  <Route path="contacts" element={<ContactsPage />} />
-                  <Route path="schedule" element={<SchedulePage />} />
-                  <Route path="appointments/history" element={<AppointmentHistoryPage />} />
-                  <Route path="archives/:archiveType" element={<ArchivePage />} />
-                  <Route path="clients/:clientId" element={<ClientDetailsPage />} />
-                  <Route path="pets/:petId" element={<PetDetailsPage />} />
-                </Route>
-                <Route element={<RequireAuth allowedRoles={["admin"]} />}>
-                  <Route path="users" element={<UsersPage />} />
+                <Route
+                  element={
+                    <AppDataProvider>
+                      <AppLayout />
+                    </AppDataProvider>
+                  }
+                >
+                  <Route path="/" element={<Navigate to="/home" replace />} />
+                  <Route path="home" element={<HomeRoute />} />
+                  <Route path="pets" element={<PetsRoute />} />
+                  <Route path="requests" element={<RequestsPage />} />
+                  <Route path="notifications" element={<NotificationsPage />} />
+                  <Route path="personalization" element={<PersonalizationPage />} />
+                  <Route path="appointments" element={<RequireAuth allowedRoles={["client"]} />}>
+                    <Route index element={<ClientAppointmentsPage />} />
+                  </Route>
+                  <Route element={<RequireAuth allowedRoles={["admin", "groomer"]} />}>
+                    <Route path="analysis" element={<AnalysisPage />} />
+                    <Route path="contacts" element={<ContactsPage />} />
+                    <Route path="schedule" element={<SchedulePage />} />
+                    <Route path="appointments/history" element={<AppointmentHistoryPage />} />
+                    <Route path="archives/:archiveType" element={<ArchivePage />} />
+                    <Route path="clients/:clientId" element={<ClientDetailsPage />} />
+                    <Route path="pets/:petId" element={<PetDetailsPage />} />
+                  </Route>
+                  <Route element={<RequireAuth allowedRoles={["admin"]} />}>
+                    <Route path="users" element={<UsersPage />} />
+                  </Route>
                 </Route>
               </Route>
-            </Route>
-          </Routes>
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </ThemeProvider>
     </AuthProvider>

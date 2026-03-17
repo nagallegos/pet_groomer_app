@@ -58,6 +58,17 @@ function ThemeProviderInner({
     document.documentElement.setAttribute("data-bs-theme", themeMode);
     window.localStorage.setItem("bb-love-theme-mode", themeMode);
     window.localStorage.setItem("bb-love-theme-name", themeName);
+
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeColorMeta) {
+      const computed = getComputedStyle(document.documentElement);
+      const themeColor =
+        computed.getPropertyValue("--mobile-topbar-solid").trim() ||
+        computed.getPropertyValue("--brand-forest").trim();
+      if (themeColor) {
+        themeColorMeta.setAttribute("content", themeColor);
+      }
+    }
   }, [themeMode, themeName]);
 
   const setThemeMode = useCallback((mode: ThemeMode) => {

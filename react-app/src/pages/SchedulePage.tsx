@@ -127,8 +127,8 @@ function getAppointmentStatusTheme(status: Appointment["status"]) {
     case "scheduled":
     default:
       return {
-        background: "#7f63c8",
-        border: "#684cb2",
+        background: "var(--appointment-status-scheduled)",
+        border: "var(--appointment-status-scheduled-border)",
         text: "#fbf9ff",
         dotClassName: "appointment-status-dot-scheduled",
       };
@@ -550,11 +550,10 @@ export default function SchedulePage() {
         onUpdated={(updatedAppointment) => {
           if (updatedAppointment.isArchived) {
             setAppointments((currentAppointments) =>
-              currentAppointments.map(
-                (appointment) =>
-                  appointment.id === updatedAppointment.id
-                    ? updatedAppointment
-                    : appointment,
+              currentAppointments.map((appointment) =>
+                appointment.id === updatedAppointment.id
+                  ? updatedAppointment
+                  : appointment,
               ),
             );
             setSelectedAppointment(null);
