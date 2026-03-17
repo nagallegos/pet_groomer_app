@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Badge, Button, ButtonGroup, Card, ListGroup } from "react-bootstrap";
 import { formatAppointmentServices } from "../../lib/appointmentServices";
-import { formatAppointmentCurrency, getAppointmentQuotePrice } from "../../lib/appointmentPricing";
+import { getAppointmentFinancialSummary } from "../../lib/appointmentPricing";
 import type { Appointment, Owner, Pet } from "../../types/models";
 
 interface UpcomingAppointmentsProps {
@@ -146,7 +146,7 @@ export default function UpcomingAppointments({
                       {formatAppointmentServices(appt)}
                     </div>
                     <div className="small fw-semibold appointment-cost-highlight">
-                      Quote {formatAppointmentCurrency(getAppointmentQuotePrice(appt))}
+                      {getAppointmentFinancialSummary(appt)}
                     </div>
                   </div>
 

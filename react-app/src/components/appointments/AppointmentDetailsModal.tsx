@@ -623,9 +623,6 @@ export default function AppointmentDetailsModal({
               <strong>Breed:</strong> {pet.breed}
             </div>
             <div>
-              <strong>Services:</strong> {formatAppointmentServices(appointment)}
-            </div>
-            <div>
               <strong>Preferred Contact:</strong> {owner.preferredContactMethod}
             </div>
           </div>
@@ -823,6 +820,7 @@ export default function AppointmentDetailsModal({
                 })}
               </div>
               <div><strong>Status:</strong> {status}</div>
+              <div><strong>Services:</strong> {formatAppointmentServices(appointment)}</div>
               <div>
                 <strong>Quote:</strong>{" "}
                 <span className="appointment-cost-highlight">
@@ -879,6 +877,9 @@ export default function AppointmentDetailsModal({
 
           <div className="border rounded p-3 bg-light">
             <div className="fw-semibold mb-2">Client Contact Info</div>
+            <div className="mb-2">
+              <strong>Client:</strong> {owner.firstName} {owner.lastName}
+            </div>
             <ClientContactActions phone={owner.phone} email={owner.email} stacked />
           </div>
           </Modal.Body>

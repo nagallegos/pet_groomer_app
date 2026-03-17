@@ -21,6 +21,15 @@ export function getAppointmentRecognizedRevenue(appointment: Appointment) {
   return appointment.actualPriceCharged ?? getAppointmentQuotePrice(appointment);
 }
 
+export function getAppointmentFinancialSummary(appointment: Appointment) {
+  if (appointment.actualPriceCharged == null) {
+    return `Quote: ${formatAppointmentCurrency(getAppointmentQuotePrice(appointment))}`;
+  }
+
+  const paymentLabel = getAppointmentPaymentStatus(appointment) === "paid" ? "Paid" : "Unpaid";
+  return `${paymentLabel}: ${formatAppointmentCurrency(appointment.actualPriceCharged)}`;
+}
+
 export function formatAppointmentCurrency(value: number) {
   return currencyFormatter.format(value);
 }

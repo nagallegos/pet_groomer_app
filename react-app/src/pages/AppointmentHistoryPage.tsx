@@ -9,8 +9,7 @@ import PageLoader from "../components/common/PageLoader";
 import useInitialLoading from "../hooks/useInitialLoading";
 import { formatAppointmentServices } from "../lib/appointmentServices";
 import {
-  formatAppointmentCurrency,
-  getAppointmentActualPriceCharged,
+  getAppointmentFinancialSummary,
   getAppointmentQuotePrice,
 } from "../lib/appointmentPricing";
 import type { Appointment } from "../types/models";
@@ -406,9 +405,7 @@ export default function AppointmentHistoryPage() {
                           {appointment.status}
                         </Badge>
                         <div className="appointment-list-cost">
-                          {appointment.status === "completed" && getAppointmentActualPriceCharged(appointment) != null
-                            ? `Charged ${formatAppointmentCurrency(getAppointmentActualPriceCharged(appointment) ?? 0)}`
-                            : `Quote ${formatAppointmentCurrency(getAppointmentQuotePrice(appointment))}`}
+                          {getAppointmentFinancialSummary(appointment)}
                         </div>
                         <Button
                           size="sm"
