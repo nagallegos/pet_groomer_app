@@ -30,6 +30,18 @@ export function getAppointmentFinancialSummary(appointment: Appointment) {
   return `${paymentLabel}: ${formatAppointmentCurrency(appointment.actualPriceCharged)}`;
 }
 
+export function getClientAppointmentPaidSummary(appointment: Appointment) {
+  if (
+    appointment.status !== "completed" ||
+    getAppointmentPaymentStatus(appointment) !== "paid" ||
+    appointment.actualPriceCharged == null
+  ) {
+    return null;
+  }
+
+  return `Paid: ${formatAppointmentCurrency(appointment.actualPriceCharged)}`;
+}
+
 export function formatAppointmentCurrency(value: number) {
   return currencyFormatter.format(value);
 }
