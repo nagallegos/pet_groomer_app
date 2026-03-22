@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { Container } from "react-bootstrap";
+import { Button, Container } from "react-bootstrap";
 import { AppToastProvider } from "../common/AppToastProvider";
 import { Outlet } from "react-router-dom";
 import { useAuth } from "../common/useAuth";
 import { CURRENT_RELEASE, getReleaseNotesSeenKey } from "../../lib/releaseNotes";
 import NotificationBell from "./NotificationBell";
+import ReleaseNotesContent from "./ReleaseNotesContent";
 import ReleaseNotesModal from "./ReleaseNotesModal";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
@@ -13,6 +14,7 @@ export default function AppLayout() {
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [showDesktopSidebar, setShowDesktopSidebar] = useState(false);
   const [dismissedReleaseNotesKey, setDismissedReleaseNotesKey] = useState<string | null>(null);
+  const [showReleaseNotesPanel, setShowReleaseNotesPanel] = useState(false);
   const { user } = useAuth();
   const roleLabel =
     user?.role === "admin"
@@ -82,6 +84,30 @@ export default function AppLayout() {
         release={CURRENT_RELEASE}
         onClose={handleCloseReleaseNotes}
       />
+      {user && (
+        <div className="release-notes-dock">
+          {showReleaseNotesPanel && (
+            <div className="release-notes-panel">
+              <ReleaseNotesContent release={CURRENT_RELEASE} />
+              <div className="release-notes-panel-actions">
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={() => setShowReleaseNotesPanel(false)}
+                >
+                  Collapse
+                </Button>
+              </div>
+            </div>
+          )}
+          <Button
+            className="release-notes-toggle"
+            onClick={() => setShowReleaseNotesPanel((current) => !current)}
+          >
+            v{CURRENT_RELEASE.version}
+          </Button>
+        </div>
+      )}
     </AppToastProvider>
   );
 }

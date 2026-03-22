@@ -14,10 +14,20 @@ export interface AppRelease {
 // Bump this entry and update the notes below whenever you want a new first-open release popup.
 export const RELEASE_HISTORY: AppRelease[] = [
   {
-    version: "1.3.0",
+    version: "1.3.1",
     releasedOn: "2026-03-22",
-    headline: "Client contact updates and notification controls",
+    headline: "Release notes popup and quick-open version dock",
     notes: [
+      {
+        title: "Version notes now appear on new releases",
+        details:
+          "The app now shows a first-open release note popup when a new version is detected for a signed-in user.",
+      },
+      {
+        title: "Version badge added to the bottom-right corner",
+        details:
+          "You can open the current release notes anytime from the floating version button in the app shell.",
+      },
       {
         title: "Client contacts can be added without email or phone",
         details:
