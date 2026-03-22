@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS owners (
   last_name TEXT NOT NULL,
   phone TEXT,
   email TEXT,
-  preferred_contact_method TEXT NOT NULL CHECK (preferred_contact_method IN ('text', 'email')),
+  preferred_contact_method TEXT NOT NULL CHECK (preferred_contact_method IN ('text', 'email', 'messenger')),
   address TEXT,
   is_archived BOOLEAN NOT NULL DEFAULT FALSE,
   archived_at TIMESTAMPTZ,

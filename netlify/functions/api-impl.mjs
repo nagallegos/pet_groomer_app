@@ -8,7 +8,7 @@ const databaseUrl =
 
 const sql = databaseUrl ? neon(databaseUrl) : neon();
 
-const contactMethods = new Set(["text", "email"]);
+const contactMethods = new Set(["text", "email", "messenger"]);
 const speciesValues = new Set(["dog", "cat"]);
 const appointmentStatuses = new Set([
   "scheduled",
@@ -494,7 +494,7 @@ async function ensureSchema() {
           last_name TEXT NOT NULL,
           phone TEXT,
           email TEXT,
-          preferred_contact_method TEXT NOT NULL CHECK (preferred_contact_method IN ('text', 'email')),
+          preferred_contact_method TEXT NOT NULL CHECK (preferred_contact_method IN ('text', 'email', 'messenger')),
           address TEXT,
           is_archived BOOLEAN NOT NULL DEFAULT FALSE,
           archived_at TIMESTAMPTZ,
@@ -738,6 +738,34 @@ async function ensureSchema() {
       await sql`ALTER TABLE pets ADD COLUMN IF NOT EXISTS is_birth_date_estimated BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`ALTER TABLE owners ALTER COLUMN phone DROP NOT NULL`;
       await sql`ALTER TABLE owners ALTER COLUMN email DROP NOT NULL`;
+      await sql`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            WHERE t.relname = 'owners'
+              AND c.conname = 'owners_preferred_contact_method_check'
+              AND pg_get_constraintdef(c.oid) NOT LIKE '%messenger%'
+          ) THEN
+            ALTER TABLE owners DROP CONSTRAINT owners_preferred_contact_method_check;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            WHERE t.relname = 'owners'
+              AND c.conname = 'owners_preferred_contact_method_check'
+              AND pg_get_constraintdef(c.oid) LIKE '%messenger%'
+          ) THEN
+            ALTER TABLE owners
+            ADD CONSTRAINT owners_preferred_contact_method_check
+            CHECK (preferred_contact_method IN ('text', 'email', 'messenger'));
+          END IF;
+        END $$;
+      `;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT ''`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT ''`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS username TEXT UNIQUE`;
@@ -1343,7 +1371,7 @@ async function listActiveUsersByOwner(ownerId) {
 }
 
 async function sendUserContactNotification(user, { subject, html, text }) {
-  if (!user.email) {
+  if (!user.email || user.notifyByEmail === false) {
     return;
   }
   await deliverEmailNotification({ to: user.email, subject, html, text });
@@ -1658,7 +1686,7 @@ async function notifyGroomersOfClientRequest(summary, action, source) {
 
   await Promise.all(
     groomers
-      .filter((groomer) => Boolean(groomer.email))
+      .filter((groomer) => Boolean(groomer.email) && groomer.notifyByEmail !== false)
       .map((groomer) =>
         deliverEmailNotification({
           to: groomer.email,
@@ -2913,7 +2941,7 @@ function validateOwnerPayload(payload) {
   );
 
   if (!contactMethods.has(preferredContactMethod)) {
-    throw new Error("preferredContactMethod must be text or email.");
+    throw new Error("preferredContactMethod must be text, email, or messenger.");
   }
 
   return {

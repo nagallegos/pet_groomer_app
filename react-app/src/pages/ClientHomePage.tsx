@@ -141,7 +141,13 @@ export default function ClientHomePage() {
                 </div>
                 <div>
                   <div className="text-muted small">Preferred Contact</div>
-                  <div>{owner.preferredContactMethod === "text" ? "Text" : "Email"}</div>
+                  <div>
+                    {owner.preferredContactMethod === "text"
+                      ? "Text"
+                      : owner.preferredContactMethod === "email"
+                        ? "Email"
+                        : "Messenger"}
+                  </div>
                 </div>
                 <div>
                   <div className="text-muted small">Email</div>

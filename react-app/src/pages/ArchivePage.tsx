@@ -107,7 +107,7 @@ export default function ArchivePage() {
           searchLabel: "Search Archived Clients",
           searchPlaceholder: "Search by first name, last name, email, or phone",
           filterLabel: "Preferred Contact",
-          filterOptions: ["all", "text", "email"],
+          filterOptions: ["all", "text", "email", "messenger"],
           sortOptions: [
             { value: "name", label: "Client Name" },
             { value: "lastName", label: "Last Name" },
@@ -259,7 +259,9 @@ export default function ArchivePage() {
           groupValue === "preferredContactMethod"
             ? owner.preferredContactMethod === "text"
               ? "Text"
-              : "Email"
+              : owner.preferredContactMethod === "email"
+                ? "Email"
+                : "Messenger"
             : (sortValue === "lastName" ? owner.lastName : owner.firstName)
                 .charAt(0)
                 .toUpperCase() || "#";

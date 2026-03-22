@@ -1,4 +1,4 @@
-export type ContactMethod = "text" | "email";
+export type ContactMethod = "text" | "email" | "messenger";
 export type Species = "dog" | "cat";
 export type NoteVisibility = "internal" | "client";
 export type AppointmentStatus =
