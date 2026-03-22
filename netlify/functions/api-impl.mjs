@@ -304,8 +304,8 @@ function mapOwnerRow(row, notes = []) {
     id: row.id,
     firstName: row.first_name,
     lastName: row.last_name,
-    phone: row.phone,
-    email: row.email,
+    phone: row.phone ?? "",
+    email: row.email ?? "",
     hasPortalAccount: row.has_portal_account ?? false,
     preferredContactMethod: row.preferred_contact_method,
     address: row.address ?? undefined,
@@ -492,8 +492,8 @@ async function ensureSchema() {
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           first_name TEXT NOT NULL,
           last_name TEXT NOT NULL,
-          phone TEXT NOT NULL,
-          email TEXT NOT NULL,
+          phone TEXT,
+          email TEXT,
           preferred_contact_method TEXT NOT NULL CHECK (preferred_contact_method IN ('text', 'email')),
           address TEXT,
           is_archived BOOLEAN NOT NULL DEFAULT FALSE,
@@ -736,6 +736,8 @@ async function ensureSchema() {
       `;
       await sql`ALTER TABLE pets ADD COLUMN IF NOT EXISTS birth_date DATE`;
       await sql`ALTER TABLE pets ADD COLUMN IF NOT EXISTS is_birth_date_estimated BOOLEAN NOT NULL DEFAULT FALSE`;
+      await sql`ALTER TABLE owners ALTER COLUMN phone DROP NOT NULL`;
+      await sql`ALTER TABLE owners ALTER COLUMN email DROP NOT NULL`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT ''`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT ''`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS username TEXT UNIQUE`;
@@ -2917,8 +2919,8 @@ function validateOwnerPayload(payload) {
   return {
     firstName: requiredString(payload.firstName, "firstName"),
     lastName: requiredString(payload.lastName, "lastName"),
-    phone: requiredString(payload.phone, "phone"),
-    email: requiredString(payload.email, "email"),
+    phone: optionalString(payload.phone),
+    email: optionalString(payload.email),
     preferredContactMethod,
     address: optionalString(payload.address),
     notes: typeof payload.notes === "string" ? payload.notes : undefined,
