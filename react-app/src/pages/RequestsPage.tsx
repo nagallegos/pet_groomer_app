@@ -27,6 +27,7 @@ const requestTypeLabels: Record<ClientRequestType, string> = {
   appointment_change: "Cancel/Reschedule Request",
   new_pet: "New Pet Request",
   profile_update: "Profile Update",
+  app_issue: "App Issue",
   general: "General Request",
 };
 
@@ -55,6 +56,17 @@ const emptyPendingPet = (): PendingPetProfile => ({
   isBirthDateEstimated: false,
 });
 
+function isLegacyAppUpdateRequest(request: ClientRequest) {
+  return (
+    request.requestType === "general" &&
+    request.subject.trim().toLowerCase().startsWith("app update:")
+  );
+}
+
+function getDisplayRequestType(request: ClientRequest): ClientRequestType {
+  return isLegacyAppUpdateRequest(request) ? "app_issue" : request.requestType;
+}
+
 function formatPendingPetSummary(pet: PendingPetProfile) {
   const parts = [pet.name || "Pending pet", speciesLabels[pet.species], pet.breed].filter(Boolean);
   return parts.join(" | ");
@@ -78,6 +90,8 @@ function getRequestTypeIcon(type: ClientRequestType) {
       return "P";
     case "profile_update":
       return "U";
+    case "app_issue":
+      return "!";
     case "general":
     default:
       return "G";
@@ -115,6 +129,7 @@ export default function RequestsPage() {
   const [selectedOwnerId, setSelectedOwnerId] = useState("");
   const [profileAttribute, setProfileAttribute] = useState<ProfileRequestAttribute>("contact_info");
   const [pendingPet, setPendingPet] = useState<PendingPetProfile>(emptyPendingPet());
+  const [requestView, setRequestView] = useState<"all" | "app_issues">("all");
 
   const isClient = user?.role === "client";
   const ownerId = user?.ownerId ?? "";
@@ -143,11 +158,26 @@ export default function RequestsPage() {
   );
   const selectedAppointment = appointments.find((item) => item.id === appointmentId);
   const selectedAppointmentInList = sortedAppointments.some((item) => item.id === appointmentId);
-  const visibleRequests = useMemo(
+  const visibleRequests = useMemo(() => {
+    const sortedRequests = [...requests].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+
+    if (requestView === "app_issues") {
+      return sortedRequests.filter(
+        (request) =>
+          request.requestType === "app_issue" || isLegacyAppUpdateRequest(request),
+      );
+    }
+
+    return sortedRequests;
+  }, [requestView, requests]);
+  const appIssueCount = useMemo(
     () =>
-      [...requests].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      ),
+      requests.filter(
+        (request) =>
+          request.requestType === "app_issue" || isLegacyAppUpdateRequest(request),
+      ).length,
     [requests],
   );
   const isPendingPetSelected =
@@ -161,7 +191,7 @@ export default function RequestsPage() {
 
   useEffect(() => {
     const type = searchParams.get("type");
-    if (type && ["appointment", "appointment_change", "new_pet", "profile_update", "general"].includes(type)) {
+    if (type && ["appointment", "appointment_change", "new_pet", "profile_update", "app_issue", "general"].includes(type)) {
       setRequestType(type as ClientRequestType);
       if (isClient) {
         setSelectedOwnerId(ownerId);
@@ -330,7 +360,7 @@ export default function RequestsPage() {
       }
     }
 
-    if ((requestType === "profile_update" || requestType === "general") && !subject.trim()) {
+    if ((requestType === "profile_update" || requestType === "app_issue" || requestType === "general") && !subject.trim()) {
       return "A subject is required.";
     }
 
@@ -420,6 +450,24 @@ export default function RequestsPage() {
         details: {
           profileUpdate: {
             attribute: profileAttribute,
+          },
+        },
+      };
+    }
+
+    if (requestType === "app_issue") {
+      return {
+        ownerId: ownerIdForPayload,
+        petId: petId || undefined,
+        requestType,
+        subject: subject.trim(),
+        clientNote,
+        resolutionNote: isClient ? undefined : resolutionNote || undefined,
+        internalNote: isClient ? undefined : internalNote || undefined,
+        status: isClient ? "open" : status,
+        details: {
+          appIssue: {
+            relatedPetOptional: true,
           },
         },
       };
@@ -557,6 +605,8 @@ export default function RequestsPage() {
         return "bg-success-subtle text-success-emphasis";
       case "profile_update":
         return "bg-warning-subtle text-warning-emphasis";
+      case "app_issue":
+        return "bg-danger-subtle text-danger-emphasis";
       case "general":
       default:
         return "bg-info-subtle text-info-emphasis";
@@ -655,9 +705,25 @@ export default function RequestsPage() {
       </div>
 
       {!isClient && (
-        <Alert variant="info" className="mb-4">
-          This log includes appointment requests, cancel/reschedule requests, new pet requests, profile updates, and general client requests.
-        </Alert>
+        <>
+          <Alert variant="info" className="mb-3">
+            This log includes appointment requests, cancel/reschedule requests, new pet requests, profile updates, app issues, and general client requests.
+          </Alert>
+          <div className="d-flex flex-wrap gap-2 mb-4">
+            <Button
+              variant={requestView === "all" ? "primary" : "outline-primary"}
+              onClick={() => setRequestView("all")}
+            >
+              All Requests
+            </Button>
+            <Button
+              variant={requestView === "app_issues" ? "primary" : "outline-primary"}
+              onClick={() => setRequestView("app_issues")}
+            >
+              App Issues ({appIssueCount})
+            </Button>
+          </div>
+        </>
       )}
 
       <Row className="g-3">
@@ -665,6 +731,7 @@ export default function RequestsPage() {
           const owner = owners.find((item) => item.id === request.ownerId);
           const pet = pets.find((item) => item.id === request.petId);
           const summary = renderRequestSummary(request);
+          const displayRequestType = getDisplayRequestType(request);
 
           return (
             <Col xs={12} lg={6} key={request.id}>
@@ -673,18 +740,18 @@ export default function RequestsPage() {
                   <div className="client-summary-row align-items-start">
                     <div>
                       <div className="d-flex flex-wrap align-items-center gap-2 mb-1">
-                        <span className={`request-type-mark request-type-mark-${request.requestType.replace("_", "-")}`}>
-                          {getRequestTypeIcon(request.requestType)}
+                        <span className={`request-type-mark request-type-mark-${displayRequestType.replace("_", "-")}`}>
+                          {getRequestTypeIcon(displayRequestType)}
                         </span>
                         <div className="fw-semibold">{request.subject}</div>
                       </div>
                       <div className="text-muted small">
-                        {requestTypeLabels[request.requestType]} | {new Date(request.createdAt).toLocaleString()}
+                        {requestTypeLabels[displayRequestType]} | {new Date(request.createdAt).toLocaleString()}
                       </div>
                     </div>
                     <div className="d-flex flex-column align-items-end gap-2">
-                      <Badge pill className={`request-type-badge ${getRequestTypeBadgeClass(request.requestType)}`}>
-                        {requestTypeLabels[request.requestType]}
+                      <Badge pill className={`request-type-badge ${getRequestTypeBadgeClass(displayRequestType)}`}>
+                        {requestTypeLabels[displayRequestType]}
                       </Badge>
                       <Badge bg="light" text="dark" className="request-status-badge">
                         {formatRequestStatus(request.status)}
@@ -756,7 +823,11 @@ export default function RequestsPage() {
       {visibleRequests.length === 0 && (
         <Card className="shadow-sm">
           <Card.Body className="text-muted small">
-            {isClient ? "You do not have any requests yet." : "No requests have been logged yet."}
+            {isClient
+              ? "You do not have any requests yet."
+              : requestView === "app_issues"
+                ? "No app issues have been logged yet."
+                : "No requests have been logged yet."}
           </Card.Body>
         </Card>
       )}
@@ -988,7 +1059,7 @@ export default function RequestsPage() {
                 </>
               )}
 
-              {requestType === "general" && (
+              {(requestType === "app_issue" || requestType === "general") && (
                 <>
                   <Form.Group>
                     <Form.Label>Related Pet</Form.Label>
@@ -1012,6 +1083,11 @@ export default function RequestsPage() {
                       onChange={(event) => setSubject(event.target.value)}
                       required
                       disabled={isReadOnly}
+                      placeholder={
+                        requestType === "app_issue"
+                          ? "Example: App Issue - Requests page should show newest first"
+                          : undefined
+                      }
                     />
                   </Form.Group>
                 </>
@@ -1019,7 +1095,7 @@ export default function RequestsPage() {
 
               <Form.Group>
                 <Form.Label>
-                  {requestType === "profile_update" || requestType === "general"
+                  {requestType === "profile_update" || requestType === "app_issue" || requestType === "general"
                     ? "Request Note"
                     : requestType === "appointment_change"
                       ? "Notes"

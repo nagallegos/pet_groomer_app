@@ -545,6 +545,7 @@ export default function ClientDetailsPage() {
                     <Form.Select value={preferredContactMethod} onChange={(event) => setPreferredContactMethod(event.target.value as ContactMethod)}>
                       <option value="text">Text</option>
                       <option value="email">Email</option>
+                      <option value="messenger">Messenger</option>
                     </Form.Select>
                   </Form.Group>
                   <Form.Group className="mb-3">

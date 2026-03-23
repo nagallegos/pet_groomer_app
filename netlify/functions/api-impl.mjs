@@ -8,7 +8,7 @@ const databaseUrl =
 
 const sql = databaseUrl ? neon(databaseUrl) : neon();
 
-const contactMethods = new Set(["text", "email"]);
+const contactMethods = new Set(["text", "email", "messenger"]);
 const speciesValues = new Set(["dog", "cat"]);
 const appointmentStatuses = new Set([
   "scheduled",
@@ -25,6 +25,7 @@ const clientRequestTypes = new Set([
   "appointment_change",
   "new_pet",
   "profile_update",
+  "app_issue",
   "general",
 ]);
 const clientRequestStatuses = new Set(["open", "in_review", "resolved", "closed"]);
@@ -304,8 +305,8 @@ function mapOwnerRow(row, notes = []) {
     id: row.id,
     firstName: row.first_name,
     lastName: row.last_name,
-    phone: row.phone,
-    email: row.email,
+    phone: row.phone ?? "",
+    email: row.email ?? "",
     hasPortalAccount: row.has_portal_account ?? false,
     preferredContactMethod: row.preferred_contact_method,
     address: row.address ?? undefined,
@@ -492,9 +493,9 @@ async function ensureSchema() {
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           first_name TEXT NOT NULL,
           last_name TEXT NOT NULL,
-          phone TEXT NOT NULL,
-          email TEXT NOT NULL,
-          preferred_contact_method TEXT NOT NULL CHECK (preferred_contact_method IN ('text', 'email')),
+          phone TEXT,
+          email TEXT,
+          preferred_contact_method TEXT NOT NULL CHECK (preferred_contact_method IN ('text', 'email', 'messenger')),
           address TEXT,
           is_archived BOOLEAN NOT NULL DEFAULT FALSE,
           archived_at TIMESTAMPTZ,
@@ -683,7 +684,7 @@ async function ensureSchema() {
           owner_id UUID NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
           pet_id UUID REFERENCES pets(id) ON DELETE SET NULL,
           created_by_user_id UUID REFERENCES app_users(id) ON DELETE SET NULL,
-          request_type TEXT NOT NULL CHECK (request_type IN ('appointment', 'appointment_change', 'new_pet', 'profile_update', 'general')),
+          request_type TEXT NOT NULL CHECK (request_type IN ('appointment', 'appointment_change', 'new_pet', 'profile_update', 'app_issue', 'general')),
           status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_review', 'resolved', 'closed')),
           subject TEXT NOT NULL,
           client_note TEXT NOT NULL,
@@ -736,6 +737,36 @@ async function ensureSchema() {
       `;
       await sql`ALTER TABLE pets ADD COLUMN IF NOT EXISTS birth_date DATE`;
       await sql`ALTER TABLE pets ADD COLUMN IF NOT EXISTS is_birth_date_estimated BOOLEAN NOT NULL DEFAULT FALSE`;
+      await sql`ALTER TABLE owners ALTER COLUMN phone DROP NOT NULL`;
+      await sql`ALTER TABLE owners ALTER COLUMN email DROP NOT NULL`;
+      await sql`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            WHERE t.relname = 'owners'
+              AND c.conname = 'owners_preferred_contact_method_check'
+              AND pg_get_constraintdef(c.oid) NOT LIKE '%messenger%'
+          ) THEN
+            ALTER TABLE owners DROP CONSTRAINT owners_preferred_contact_method_check;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            WHERE t.relname = 'owners'
+              AND c.conname = 'owners_preferred_contact_method_check'
+              AND pg_get_constraintdef(c.oid) LIKE '%messenger%'
+          ) THEN
+            ALTER TABLE owners
+            ADD CONSTRAINT owners_preferred_contact_method_check
+            CHECK (preferred_contact_method IN ('text', 'email', 'messenger'));
+          END IF;
+        END $$;
+      `;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT ''`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT ''`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS username TEXT UNIQUE`;
@@ -765,7 +796,7 @@ async function ensureSchema() {
 
           ALTER TABLE client_requests
           ADD CONSTRAINT client_requests_request_type_check
-          CHECK (request_type IN ('appointment', 'appointment_change', 'new_pet', 'profile_update', 'general'));
+          CHECK (request_type IN ('appointment', 'appointment_change', 'new_pet', 'profile_update', 'app_issue', 'general'));
         END $$;
       `;
       await sql`
@@ -1341,7 +1372,7 @@ async function listActiveUsersByOwner(ownerId) {
 }
 
 async function sendUserContactNotification(user, { subject, html, text }) {
-  if (!user.email) {
+  if (!user.email || user.notifyByEmail === false) {
     return;
   }
   await deliverEmailNotification({ to: user.email, subject, html, text });
@@ -1538,6 +1569,8 @@ function getRequestTypeLabel(requestType) {
       return "New Pet Request";
     case "profile_update":
       return "Profile Update";
+    case "app_issue":
+      return "App Issue";
     case "general":
       return "General Request";
     default:
@@ -1656,7 +1689,7 @@ async function notifyGroomersOfClientRequest(summary, action, source) {
 
   await Promise.all(
     groomers
-      .filter((groomer) => Boolean(groomer.email))
+      .filter((groomer) => Boolean(groomer.email) && groomer.notifyByEmail !== false)
       .map((groomer) =>
         deliverEmailNotification({
           to: groomer.email,
@@ -2911,14 +2944,14 @@ function validateOwnerPayload(payload) {
   );
 
   if (!contactMethods.has(preferredContactMethod)) {
-    throw new Error("preferredContactMethod must be text or email.");
+    throw new Error("preferredContactMethod must be text, email, or messenger.");
   }
 
   return {
     firstName: requiredString(payload.firstName, "firstName"),
     lastName: requiredString(payload.lastName, "lastName"),
-    phone: requiredString(payload.phone, "phone"),
-    email: requiredString(payload.email, "email"),
+    phone: optionalString(payload.phone),
+    email: optionalString(payload.email),
     preferredContactMethod,
     address: optionalString(payload.address),
     notes: typeof payload.notes === "string" ? payload.notes : undefined,

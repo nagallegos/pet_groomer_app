@@ -257,6 +257,7 @@ export default function ClientFormModal({
             >
               <option value="text">Text</option>
               <option value="email">Email</option>
+              <option value="messenger">Messenger</option>
             </Form.Select>
           </Form.Group>
 

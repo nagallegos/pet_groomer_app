@@ -12,6 +12,7 @@ const requestTypeLabels = {
   appointment_change: "Cancel/Reschedule request",
   new_pet: "New pet request",
   profile_update: "Profile update",
+  app_issue: "App issue",
   general: "General request",
 } as const;
 
@@ -141,7 +142,13 @@ export default function ClientHomePage() {
                 </div>
                 <div>
                   <div className="text-muted small">Preferred Contact</div>
-                  <div>{owner.preferredContactMethod === "text" ? "Text" : "Email"}</div>
+                  <div>
+                    {owner.preferredContactMethod === "text"
+                      ? "Text"
+                      : owner.preferredContactMethod === "email"
+                        ? "Email"
+                        : "Messenger"}
+                  </div>
                 </div>
                 <div>
                   <div className="text-muted small">Email</div>

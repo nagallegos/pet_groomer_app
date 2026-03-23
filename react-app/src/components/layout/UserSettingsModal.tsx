@@ -206,7 +206,7 @@ export default function UserSettingsModal({
                 />
               </div>
               <div className="text-muted small mt-2">
-                Email notifications use the address above.
+                Turn this off if you want to keep the account active but stop notification emails.
               </div>
             </div>
 

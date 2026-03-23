@@ -193,7 +193,7 @@ export default function UserFormModal({
               <Form.Check
                 type="switch"
                 id="managed-user-email-notify"
-                label="Email notifications enabled"
+                label="Send email notifications"
                 checked={notifyByEmail}
                 onChange={(event) => setNotifyByEmail(event.target.checked)}
               />
