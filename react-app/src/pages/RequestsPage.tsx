@@ -27,6 +27,7 @@ const requestTypeLabels: Record<ClientRequestType, string> = {
   appointment_change: "Cancel/Reschedule Request",
   new_pet: "New Pet Request",
   profile_update: "Profile Update",
+  app_issue: "App Issue",
   general: "General Request",
 };
 
@@ -78,6 +79,8 @@ function getRequestTypeIcon(type: ClientRequestType) {
       return "P";
     case "profile_update":
       return "U";
+    case "app_issue":
+      return "!";
     case "general":
     default:
       return "G";
@@ -161,7 +164,7 @@ export default function RequestsPage() {
 
   useEffect(() => {
     const type = searchParams.get("type");
-    if (type && ["appointment", "appointment_change", "new_pet", "profile_update", "general"].includes(type)) {
+    if (type && ["appointment", "appointment_change", "new_pet", "profile_update", "app_issue", "general"].includes(type)) {
       setRequestType(type as ClientRequestType);
       if (isClient) {
         setSelectedOwnerId(ownerId);
@@ -330,7 +333,7 @@ export default function RequestsPage() {
       }
     }
 
-    if ((requestType === "profile_update" || requestType === "general") && !subject.trim()) {
+    if ((requestType === "profile_update" || requestType === "app_issue" || requestType === "general") && !subject.trim()) {
       return "A subject is required.";
     }
 
@@ -420,6 +423,24 @@ export default function RequestsPage() {
         details: {
           profileUpdate: {
             attribute: profileAttribute,
+          },
+        },
+      };
+    }
+
+    if (requestType === "app_issue") {
+      return {
+        ownerId: ownerIdForPayload,
+        petId: petId || undefined,
+        requestType,
+        subject: subject.trim(),
+        clientNote,
+        resolutionNote: isClient ? undefined : resolutionNote || undefined,
+        internalNote: isClient ? undefined : internalNote || undefined,
+        status: isClient ? "open" : status,
+        details: {
+          appIssue: {
+            relatedPetOptional: true,
           },
         },
       };
@@ -557,6 +578,8 @@ export default function RequestsPage() {
         return "bg-success-subtle text-success-emphasis";
       case "profile_update":
         return "bg-warning-subtle text-warning-emphasis";
+      case "app_issue":
+        return "bg-danger-subtle text-danger-emphasis";
       case "general":
       default:
         return "bg-info-subtle text-info-emphasis";
@@ -656,7 +679,7 @@ export default function RequestsPage() {
 
       {!isClient && (
         <Alert variant="info" className="mb-4">
-          This log includes appointment requests, cancel/reschedule requests, new pet requests, profile updates, and general client requests.
+          This log includes appointment requests, cancel/reschedule requests, new pet requests, profile updates, app issues, and general client requests.
         </Alert>
       )}
 
@@ -988,7 +1011,7 @@ export default function RequestsPage() {
                 </>
               )}
 
-              {requestType === "general" && (
+              {(requestType === "app_issue" || requestType === "general") && (
                 <>
                   <Form.Group>
                     <Form.Label>Related Pet</Form.Label>
@@ -1012,6 +1035,11 @@ export default function RequestsPage() {
                       onChange={(event) => setSubject(event.target.value)}
                       required
                       disabled={isReadOnly}
+                      placeholder={
+                        requestType === "app_issue"
+                          ? "Example: App Issue - Requests page should show newest first"
+                          : undefined
+                      }
                     />
                   </Form.Group>
                 </>
@@ -1019,7 +1047,7 @@ export default function RequestsPage() {
 
               <Form.Group>
                 <Form.Label>
-                  {requestType === "profile_update" || requestType === "general"
+                  {requestType === "profile_update" || requestType === "app_issue" || requestType === "general"
                     ? "Request Note"
                     : requestType === "appointment_change"
                       ? "Notes"

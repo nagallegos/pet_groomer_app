@@ -13,6 +13,7 @@ export type ClientRequestType =
   | "appointment_change"
   | "new_pet"
   | "profile_update"
+  | "app_issue"
   | "general";
 export type ClientRequestStatus = "open" | "in_review" | "resolved" | "closed";
 export type ClientRequestEventType =
@@ -110,11 +111,16 @@ export interface GeneralRequestDetails {
   relatedPetOptional?: boolean;
 }
 
+export interface AppIssueRequestDetails {
+  relatedPetOptional?: boolean;
+}
+
 export interface ClientRequestDetails {
   appointment?: AppointmentRequestDetails;
   appointmentChange?: AppointmentChangeRequestDetails;
   newPet?: NewPetRequestDetails;
   profileUpdate?: ProfileUpdateRequestDetails;
+  appIssue?: AppIssueRequestDetails;
   general?: GeneralRequestDetails;
 }
 

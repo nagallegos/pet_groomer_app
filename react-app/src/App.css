@@ -3735,6 +3735,11 @@ textarea.form-control {
   color: var(--soft-tag-text);
 }
 
+.request-type-mark-app-issue {
+  background: rgba(var(--bs-danger-rgb), 0.15);
+  color: var(--bs-danger);
+}
+
 .request-type-mark-general {
   background: var(--brand-cream-deep);
   color: var(--soft-tag-text);

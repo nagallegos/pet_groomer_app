@@ -12,6 +12,7 @@ const requestTypeLabels = {
   appointment_change: "Cancel/Reschedule request",
   new_pet: "New pet request",
   profile_update: "Profile update",
+  app_issue: "App issue",
   general: "General request",
 } as const;
 

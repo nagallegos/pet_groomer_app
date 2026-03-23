@@ -25,6 +25,7 @@ const clientRequestTypes = new Set([
   "appointment_change",
   "new_pet",
   "profile_update",
+  "app_issue",
   "general",
 ]);
 const clientRequestStatuses = new Set(["open", "in_review", "resolved", "closed"]);
@@ -683,7 +684,7 @@ async function ensureSchema() {
           owner_id UUID NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
           pet_id UUID REFERENCES pets(id) ON DELETE SET NULL,
           created_by_user_id UUID REFERENCES app_users(id) ON DELETE SET NULL,
-          request_type TEXT NOT NULL CHECK (request_type IN ('appointment', 'appointment_change', 'new_pet', 'profile_update', 'general')),
+          request_type TEXT NOT NULL CHECK (request_type IN ('appointment', 'appointment_change', 'new_pet', 'profile_update', 'app_issue', 'general')),
           status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_review', 'resolved', 'closed')),
           subject TEXT NOT NULL,
           client_note TEXT NOT NULL,
@@ -795,7 +796,7 @@ async function ensureSchema() {
 
           ALTER TABLE client_requests
           ADD CONSTRAINT client_requests_request_type_check
-          CHECK (request_type IN ('appointment', 'appointment_change', 'new_pet', 'profile_update', 'general'));
+          CHECK (request_type IN ('appointment', 'appointment_change', 'new_pet', 'profile_update', 'app_issue', 'general'));
         END $$;
       `;
       await sql`
@@ -1568,6 +1569,8 @@ function getRequestTypeLabel(requestType) {
       return "New Pet Request";
     case "profile_update":
       return "Profile Update";
+    case "app_issue":
+      return "App Issue";
     case "general":
       return "General Request";
     default:
