@@ -1497,6 +1497,25 @@ a {
 :root[data-theme="dark"] .settings-preferences-card {
   border-color: var(--soft-surface-border);
   background: var(--soft-surface-bg);
+  color: var(--brand-ink);
+}
+
+:root[data-theme="dark"] .settings-preferences-card .form-check-label,
+:root[data-theme="dark"] .settings-preferences-card .text-muted,
+:root[data-theme="dark"] .search-panel-card .form-label,
+:root[data-theme="dark"] .search-panel-card .text-muted,
+:root[data-theme="dark"] .notification-card .text-muted,
+:root[data-theme="dark"] .client-accordion-grid .accordion-button .text-muted,
+:root[data-theme="dark"] .theme-card .text-muted {
+  color: #d7cceb !important;
+}
+
+:root[data-theme="dark"] .theme-card,
+:root[data-theme="dark"] .search-panel-card,
+:root[data-theme="dark"] .settings-preferences-card,
+:root[data-theme="dark"] .client-accordion-grid .accordion-item,
+:root[data-theme="dark"] .notification-card {
+  box-shadow: 0 18px 36px rgba(5, 4, 10, 0.22);
 }
 
 .login-page-shell {
@@ -1657,21 +1676,21 @@ a {
 
 .btn-outline-primary {
   --bs-btn-color: var(--brand-forest);
-  --bs-btn-border-color: rgba(47, 107, 92, 0.3);
-  --bs-btn-hover-bg: rgba(47, 107, 92, 0.08);
+  --bs-btn-border-color: color-mix(in srgb, var(--brand-forest) 30%, transparent);
+  --bs-btn-hover-bg: color-mix(in srgb, var(--brand-forest) 8%, transparent);
   --bs-btn-hover-border-color: var(--brand-forest);
   --bs-btn-hover-color: var(--brand-forest-deep);
-  --bs-btn-active-bg: rgba(47, 107, 92, 0.14);
+  --bs-btn-active-bg: color-mix(in srgb, var(--brand-forest) 14%, transparent);
   --bs-btn-active-border-color: var(--brand-forest);
   --bs-btn-active-color: var(--brand-forest-deep);
 }
 
 .btn-outline-secondary {
-  --bs-btn-color: #8e6a45;
-  --bs-btn-border-color: rgba(200, 155, 104, 0.45);
-  --bs-btn-hover-bg: rgba(200, 155, 104, 0.12);
-  --bs-btn-hover-border-color: #c89b68;
-  --bs-btn-hover-color: #7a5937;
+  --bs-btn-color: var(--brand-forest-deep);
+  --bs-btn-border-color: color-mix(in srgb, var(--brand-forest) 35%, transparent);
+  --bs-btn-hover-bg: color-mix(in srgb, var(--brand-forest) 12%, transparent);
+  --bs-btn-hover-border-color: color-mix(in srgb, var(--brand-forest) 55%, white 45%);
+  --bs-btn-hover-color: var(--brand-forest-deep);
 }
 
 .btn-outline-danger {
@@ -1769,10 +1788,10 @@ a {
 }
 
 :root[data-theme="dark"] .btn-outline-secondary {
-  --bs-btn-color: #e3d6ff;
-  --bs-btn-border-color: rgba(227, 214, 255, 0.34);
-  --bs-btn-hover-bg: rgba(185, 154, 234, 0.18);
-  --bs-btn-hover-border-color: rgba(227, 214, 255, 0.48);
+  --bs-btn-color: #f5f0ff;
+  --bs-btn-border-color: color-mix(in srgb, var(--brand-forest) 42%, white 18%);
+  --bs-btn-hover-bg: color-mix(in srgb, var(--brand-forest) 22%, transparent);
+  --bs-btn-hover-border-color: color-mix(in srgb, var(--brand-forest) 60%, white 28%);
   --bs-btn-hover-color: #ffffff;
 }
 
@@ -2906,6 +2925,17 @@ textarea.form-control {
 :root[data-theme="dark"] .theme-card {
   background: var(--brand-foam);
   border-color: var(--brand-border);
+  color: var(--brand-ink);
+}
+
+:root[data-theme="dark"] .theme-card .form-check-input {
+  border-color: color-mix(in srgb, var(--brand-forest) 58%, white 24%);
+  background-color: color-mix(in srgb, var(--brand-foam) 84%, black 16%);
+}
+
+:root[data-theme="dark"] .theme-card .form-check-input:checked {
+  background-color: var(--brand-forest);
+  border-color: var(--brand-forest);
 }
 
 :root[data-theme="dark"] .theme-card:hover,
@@ -3692,6 +3722,25 @@ textarea.form-control {
   border-radius: 1rem;
 }
 
+.client-accordion-grid .accordion-button {
+  border-radius: 1rem;
+}
+
+:root[data-theme="dark"] .client-accordion-grid .accordion-button {
+  background: color-mix(in srgb, var(--brand-foam) 88%, black 12%);
+  color: var(--brand-ink);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .client-accordion-grid .accordion-button:not(.collapsed) {
+  background: color-mix(in srgb, var(--brand-forest) 20%, var(--brand-foam));
+  color: var(--brand-ink);
+}
+
+:root[data-theme="dark"] .client-accordion-grid .accordion-button::after {
+  filter: brightness(1.9) saturate(0);
+}
+
 .request-status-pill,
 .request-status-badge {
   text-transform: capitalize;
@@ -3701,6 +3750,16 @@ textarea.form-control {
   border: 1px solid rgba(15, 23, 42, 0.08);
   font-weight: 700;
   letter-spacing: 0.01em;
+}
+
+:root[data-theme="dark"] .request-type-badge {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+:root[data-theme="dark"] .request-status-badge {
+  background: color-mix(in srgb, var(--brand-foam) 88%, black 12%) !important;
+  color: var(--brand-ink) !important;
+  border: 1px solid var(--soft-surface-border);
 }
 
 .request-type-mark {
@@ -3758,6 +3817,41 @@ textarea.form-control {
 .request-activity-item {
   display: grid;
   gap: 0.2rem;
+}
+
+.request-readonly-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.request-readonly-field {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--soft-surface-border);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+:root[data-theme="dark"] .request-readonly-field {
+  background: var(--soft-surface-bg);
+  border-color: var(--soft-surface-border);
+  color: var(--brand-ink);
+}
+
+:root[data-theme="dark"] .text-success,
+:root[data-theme="dark"] .text-success-emphasis {
+  color: #b9f3d0 !important;
+}
+
+:root[data-theme="dark"] .bg-success-subtle {
+  background: color-mix(in srgb, var(--brand-forest) 18%, rgba(255, 255, 255, 0.06)) !important;
+}
+
+:root[data-theme="dark"] .notification-type-pill,
+:root[data-theme="dark"] .request-type-mark,
+:root[data-theme="dark"] .mode-indicator {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 .request-activity-time {

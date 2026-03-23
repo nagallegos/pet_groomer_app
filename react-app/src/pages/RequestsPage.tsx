@@ -104,6 +104,21 @@ function buildRequestTimeline(request: ClientRequest): ClientRequestEvent[] {
   );
 }
 
+function ReadOnlyField({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | null;
+}) {
+  return (
+    <div className="request-readonly-field">
+      <div className="text-muted small">{label}</div>
+      <div>{value?.trim() ? value : "Not provided"}</div>
+    </div>
+  );
+}
+
 export default function RequestsPage() {
   const isLoading = useInitialLoading();
   const { user } = useAuth();
@@ -613,6 +628,122 @@ export default function RequestsPage() {
     }
   };
 
+  const displayRequestType = editingRequest ? getDisplayRequestType(editingRequest) : requestType;
+
+  const buildReadOnlyDetails = () => {
+    if (!editingRequest) {
+      return null;
+    }
+
+    const requestOwner = owners.find((owner) => owner.id === editingRequest.ownerId);
+    const relatedPet = pets.find((pet) => pet.id === editingRequest.petId);
+    const appointmentRequestPetNames =
+      editingRequest.requestType === "appointment"
+        ? (editingRequest.details?.appointment?.petIds ?? [])
+            .map((id) => pets.find((pet) => pet.id === id)?.name)
+            .filter((name): name is string => Boolean(name))
+        : [];
+    const appointmentChange = editingRequest.details?.appointmentChange;
+    const linkedAppointment = appointmentChange
+      ? appointments.find((appointment) => appointment.id === appointmentChange.appointmentId)
+      : null;
+    const linkedAppointmentPet = linkedAppointment
+      ? pets.find((pet) => pet.id === linkedAppointment.petId)
+      : null;
+
+    return (
+      <div className="request-readonly-grid">
+        <ReadOnlyField label="Request Type" value={requestTypeLabels[displayRequestType]} />
+        <ReadOnlyField
+          label="Client"
+          value={requestOwner ? `${requestOwner.firstName} ${requestOwner.lastName}` : null}
+        />
+        {(displayRequestType === "app_issue" || displayRequestType === "general") && (
+          <ReadOnlyField label="Related Pet" value={relatedPet?.name ?? "No pet selected"} />
+        )}
+        {editingRequest.requestType === "appointment" && (
+          <>
+            <ReadOnlyField
+              label="Pets"
+              value={
+                appointmentRequestPetNames.length > 0
+                  ? appointmentRequestPetNames.join(", ")
+                  : editingRequest.details?.appointment?.pendingPet
+                    ? formatPendingPetSummary(editingRequest.details.appointment.pendingPet)
+                    : null
+              }
+            />
+            <ReadOnlyField label="Subject" value={editingRequest.subject} />
+          </>
+        )}
+        {editingRequest.requestType === "appointment_change" && (
+          <>
+            <ReadOnlyField
+              label="Appointment"
+              value={
+                linkedAppointment
+                  ? `${linkedAppointmentPet?.name ?? "Pet"} | ${new Date(linkedAppointment.start).toLocaleString()}`
+                  : null
+              }
+            />
+            <ReadOnlyField
+              label="Change Type"
+              value={appointmentChange ? appointmentChangeLabels[appointmentChange.changeType] : null}
+            />
+          </>
+        )}
+        {editingRequest.requestType === "new_pet" && (
+          <ReadOnlyField
+            label="Pending Pet"
+            value={
+              editingRequest.details?.newPet?.pendingPet
+                ? formatPendingPetSummary(editingRequest.details.newPet.pendingPet)
+                : null
+            }
+          />
+        )}
+        {editingRequest.requestType === "profile_update" && (
+          <ReadOnlyField
+            label="Profile Attribute"
+            value={
+              editingRequest.details?.profileUpdate
+                ? profileAttributeLabels[editingRequest.details.profileUpdate.attribute]
+                : null
+            }
+          />
+        )}
+        {(editingRequest.requestType === "profile_update" ||
+          editingRequest.requestType === "app_issue" ||
+          editingRequest.requestType === "general") && (
+          <ReadOnlyField label="Subject" value={editingRequest.subject} />
+        )}
+        <ReadOnlyField
+          label={
+            editingRequest.requestType === "profile_update" ||
+            editingRequest.requestType === "app_issue" ||
+            editingRequest.requestType === "general"
+              ? "Request Note"
+              : editingRequest.requestType === "appointment_change"
+                ? "Notes"
+                : "Additional Details"
+          }
+          value={editingRequest.clientNote}
+        />
+        {isClient ? (
+          editingRequest.resolutionNote ? (
+            <ReadOnlyField label="Groomer Update" value={editingRequest.resolutionNote} />
+          ) : null
+        ) : (
+          <>
+            <ReadOnlyField label="Client Update" value={editingRequest.resolutionNote} />
+            <ReadOnlyField label="Status" value={formatRequestStatus(editingRequest.status)} />
+            <ReadOnlyField label="Internal Note" value={editingRequest.internalNote} />
+          </>
+        )}
+      </div>
+    );
+  };
+
   const renderPendingPetFields = () => (
     <div className="d-grid gap-3">
       <Form.Group>
@@ -860,8 +991,8 @@ export default function RequestsPage() {
                       <div className="text-muted small">Activity Timeline</div>
                       <div className="fw-semibold">{editingRequest.subject}</div>
                     </div>
-                    <Badge pill className={`request-type-badge ${getRequestTypeBadgeClass(editingRequest.requestType)}`}>
-                      {requestTypeLabels[editingRequest.requestType]}
+                    <Badge pill className={`request-type-badge ${getRequestTypeBadgeClass(displayRequestType)}`}>
+                      {requestTypeLabels[displayRequestType]}
                     </Badge>
                   </div>
                   <div className="request-timeline-list">
@@ -894,6 +1025,10 @@ export default function RequestsPage() {
                 </div>
               )}
 
+              {isReadOnly && editingRequest ? (
+                buildReadOnlyDetails()
+              ) : (
+                <>
               <Form.Group>
                   <Form.Label>Request Type</Form.Label>
                   <Form.Select
@@ -1155,6 +1290,8 @@ export default function RequestsPage() {
                       disabled={isReadOnly}
                     />
                   </Form.Group>
+                </>
+              )}
                 </>
               )}
             </div>

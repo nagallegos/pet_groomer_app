@@ -107,11 +107,12 @@ function ThemeProviderInner({
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const initialThemeName = normalizeThemeName(user?.themeName ?? getStoredThemeName());
-  const initialThemeMode =
-    initialThemeName === "high-contrast"
+  const initialThemeName = user ? normalizeThemeName(user.themeName ?? getStoredThemeName()) : "lavender";
+  const initialThemeMode = user
+    ? initialThemeName === "high-contrast"
       ? "light"
-      : (user?.themeMode ?? getStoredThemeMode());
+      : (user.themeMode ?? getStoredThemeMode())
+    : "light";
 
   return (
     <ThemeProviderInner

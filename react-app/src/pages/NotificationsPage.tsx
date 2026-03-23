@@ -154,7 +154,7 @@ export default function NotificationsPage() {
       </div>
 
       <Card className="shadow-sm mb-3">
-        <Card.Body className="d-flex flex-column flex-md-row gap-3 align-items-md-center">
+        <Card.Body className="search-panel-card d-flex flex-column flex-md-row gap-3 align-items-md-center">
           <Form.Control
             placeholder="Search notifications..."
             value={search}

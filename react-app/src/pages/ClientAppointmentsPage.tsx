@@ -213,7 +213,7 @@ export default function ClientAppointmentsPage() {
       </div>
 
       <Card className="shadow-sm mb-4">
-        <Card.Body>
+        <Card.Body className="search-panel-card">
           <Row className="g-3 align-items-end">
             <Col xs={12} lg={6}>
               <Form.Group className="search-panel-main">
