@@ -14,34 +14,34 @@ export interface AppRelease {
 // Bump this entry and update the notes below whenever you want a new first-open release popup.
 export const RELEASE_HISTORY: AppRelease[] = [
   {
-    version: "1.3.1",
-    releasedOn: "2026-03-22",
-    headline: "Release notes popup and quick-open version dock",
+    version: "1.3.2",
+    releasedOn: "2026-03-23",
+    headline: "App issue workflow and dark mode polish updates",
     notes: [
       {
-        title: "Version notes now appear on new releases",
+        title: "App issues can be logged without selecting a client",
         details:
-          "The app now shows a first-open release note popup when a new version is detected for a signed-in user.",
+          "Staff can now submit app issues without tying them to a client, while regular client-related requests still keep their normal client requirement.",
       },
       {
-        title: "Version badge added to the bottom-right corner",
+        title: "App issue routing is now admin-focused",
         details:
-          "You can open the current release notes anytime from the floating version button in the app shell.",
+          "App issue notifications now go to admins, and groomers no longer see the admin/dev app issue queue.",
       },
       {
-        title: "Client contacts can be added without email or phone",
+        title: "Request cards now have a cleaner read-only view",
         details:
-          "Owner records now save even when contact details are incomplete, which fits Facebook Messenger and partial intake workflows better.",
+          "Opening an existing request no longer feels like editing by default, and request details now show in a true view mode until edit is chosen.",
       },
       {
-        title: "Messenger is now a preferred contact method",
+        title: "Dark mode got another polish pass",
         details:
-          "New and existing client contacts can be marked with Messenger as the preferred way to reach them.",
+          "Theme cards, request indicators, notifications, client portal panels, pets accordion headers, and appointment history contact surfaces were adjusted to match the selected theme more cleanly.",
       },
       {
-        title: "User email notifications respect account preferences",
+        title: "Mobile modal behavior is more comfortable",
         details:
-          "Staff and client users can keep their account active while turning notification emails on or off from their settings.",
+          "Small-screen modals now have better safe-area spacing, an easier-to-hit close button, and improved scroll containment behind the modal.",
       },
     ],
   },
