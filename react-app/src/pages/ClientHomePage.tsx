@@ -4,6 +4,7 @@ import { useAppData } from "../components/common/AppDataProvider";
 import PageLoader from "../components/common/PageLoader";
 import { useAuth } from "../components/common/useAuth";
 import useInitialLoading from "../hooks/useInitialLoading";
+import type { ClientRequestType } from "../types/models";
 
 const CLIENT_PORTAL_NOW = Date.now();
 
@@ -18,6 +19,13 @@ const requestTypeLabels = {
 
 function formatRequestStatus(status: string) {
   return status.replace(/_/g, " ");
+}
+
+function getDisplayRequestType(request: { requestType: ClientRequestType; subject: string }): ClientRequestType {
+  return request.requestType === "general" &&
+    request.subject.trim().toLowerCase().startsWith("app update:")
+    ? "app_issue"
+    : request.requestType;
 }
 
 export default function ClientHomePage() {
@@ -110,19 +118,23 @@ export default function ClientHomePage() {
                 </Link>
               </div>
               <div className="d-grid gap-3">
-                {clientRequests.slice(0, 4).map((request) => (
-                  <Link
-                    key={request.id}
-                    className="client-summary-row client-summary-link"
-                    to={`/requests?requestId=${request.id}`}
-                  >
-                    <div>
-                      <div className="fw-semibold">{request.subject}</div>
-                      <div className="text-muted small">{requestTypeLabels[request.requestType]}</div>
-                    </div>
-                    <span className="request-status-pill">{formatRequestStatus(request.status)}</span>
-                  </Link>
-                ))}
+                {clientRequests.slice(0, 4).map((request) => {
+                  const displayRequestType = getDisplayRequestType(request);
+
+                  return (
+                    <Link
+                      key={request.id}
+                      className="client-summary-row client-summary-link"
+                      to={`/requests?requestId=${request.id}`}
+                    >
+                      <div>
+                        <div className="fw-semibold">{request.subject}</div>
+                        <div className="text-muted small">{requestTypeLabels[displayRequestType]}</div>
+                      </div>
+                      <span className="request-status-pill">{formatRequestStatus(request.status)}</span>
+                    </Link>
+                  );
+                })}
                 {clientRequests.length === 0 && (
                   <div className="text-muted small">No requests yet.</div>
                 )}
@@ -152,11 +164,11 @@ export default function ClientHomePage() {
                 </div>
                 <div>
                   <div className="text-muted small">Email</div>
-                  <div>{owner.email}</div>
+                  <div>{owner.email || "Not provided"}</div>
                 </div>
                 <div>
                   <div className="text-muted small">Phone</div>
-                  <div>{owner.phone}</div>
+                  <div>{owner.phone || "Not provided"}</div>
                 </div>
               </div>
             </Card.Body>

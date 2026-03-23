@@ -1743,6 +1743,11 @@ a {
   color: var(--brand-ink);
 }
 
+:root[data-theme="dark"] .notification-dropdown-time,
+:root[data-theme="dark"] .notification-dropdown-item .text-muted {
+  color: #d7cceb !important;
+}
+
 :root[data-theme="dark"] .notification-dropdown-item.is-unread {
   background: var(--notification-unread-bg);
 }
@@ -3744,6 +3749,18 @@ textarea.form-control {
 .request-status-pill,
 .request-status-badge {
   text-transform: capitalize;
+}
+
+.request-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.24rem 0.65rem;
+  border-radius: 999px;
+  background: var(--soft-surface-bg);
+  border: 1px solid var(--soft-surface-border);
+  color: var(--brand-ink);
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .request-type-badge {
