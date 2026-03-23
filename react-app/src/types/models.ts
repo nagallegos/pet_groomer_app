@@ -146,7 +146,7 @@ export interface Appointment {
 
 export interface ClientRequest {
   id: string;
-  ownerId: string;
+  ownerId?: string;
   petId?: string;
   createdByUserId?: string;
   requestType: ClientRequestType;

@@ -90,7 +90,7 @@ export interface AppointmentUpsertInput {
 }
 
 export interface ClientRequestUpsertInput {
-  ownerId: string;
+  ownerId?: string;
   petId?: string;
   requestType: ClientRequestType;
   subject: string;

@@ -681,7 +681,7 @@ async function ensureSchema() {
       await sql`
         CREATE TABLE IF NOT EXISTS client_requests (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          owner_id UUID NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
+          owner_id UUID REFERENCES owners(id) ON DELETE CASCADE,
           pet_id UUID REFERENCES pets(id) ON DELETE SET NULL,
           created_by_user_id UUID REFERENCES app_users(id) ON DELETE SET NULL,
           request_type TEXT NOT NULL CHECK (request_type IN ('appointment', 'appointment_change', 'new_pet', 'profile_update', 'app_issue', 'general')),
@@ -779,6 +779,7 @@ async function ensureSchema() {
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER NOT NULL DEFAULT 0`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ`;
       await sql`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`;
+      await sql`ALTER TABLE client_requests ALTER COLUMN owner_id DROP NOT NULL`;
       await sql`ALTER TABLE client_requests ADD COLUMN IF NOT EXISTS details JSONB NOT NULL DEFAULT '{}'::jsonb`;
       await sql`ALTER TABLE client_requests ADD COLUMN IF NOT EXISTS resolution_note TEXT`;
       await sql`
@@ -945,7 +946,8 @@ async function listClientRequestEventsByRequestIds(requestIds, { includeStaffOnl
   }, new Map());
 }
 
-async function listClientRequests({ ownerId, includeStaffOnly = false } = {}) {
+async function listClientRequests({ ownerId, includeStaffOnly = false, viewerRole = null } = {}) {
+  const excludeAppIssues = viewerRole === "groomer";
   const rows = ownerId
     ? await sql`
         SELECT id::text AS id, owner_id::text AS owner_id, pet_id::text AS pet_id,
@@ -953,6 +955,7 @@ async function listClientRequests({ ownerId, includeStaffOnly = false } = {}) {
                subject, client_note, resolution_note, internal_note, details, resolved_at, created_at, updated_at
         FROM client_requests
         WHERE owner_id = ${ownerId}::uuid
+          AND (${excludeAppIssues} = FALSE OR request_type <> 'app_issue')
         ORDER BY created_at DESC
       `
     : await sql`
@@ -960,6 +963,7 @@ async function listClientRequests({ ownerId, includeStaffOnly = false } = {}) {
                created_by_user_id::text AS created_by_user_id, request_type, status,
                subject, client_note, resolution_note, internal_note, details, resolved_at, created_at, updated_at
         FROM client_requests
+        WHERE (${excludeAppIssues} = FALSE OR request_type <> 'app_issue')
         ORDER BY created_at DESC
       `;
 
@@ -976,13 +980,15 @@ async function listClientRequests({ ownerId, includeStaffOnly = false } = {}) {
   );
 }
 
-async function getClientRequest(requestId, { includeStaffOnly = false } = {}) {
+async function getClientRequest(requestId, { includeStaffOnly = false, viewerRole = null } = {}) {
+  const excludeAppIssues = viewerRole === "groomer";
   const rows = await sql`
     SELECT id::text AS id, owner_id::text AS owner_id, pet_id::text AS pet_id,
            created_by_user_id::text AS created_by_user_id, request_type, status,
            subject, client_note, resolution_note, internal_note, details, resolved_at, created_at, updated_at
     FROM client_requests
     WHERE id = ${requestId}::uuid
+      AND (${excludeAppIssues} = FALSE OR request_type <> 'app_issue')
     LIMIT 1
   `;
 
@@ -1579,7 +1585,9 @@ function getRequestTypeLabel(requestType) {
 }
 
 async function notifyStaffOfRequest(requestRecord) {
-  const recipients = await listActiveUsersByRoles(["admin", "groomer"]);
+  const recipients = await listActiveUsersByRoles(
+    requestRecord.requestType === "app_issue" ? ["admin"] : ["admin", "groomer"],
+  );
   const title = `${getRequestTypeLabel(requestRecord.requestType)} received`;
   const body = requestRecord.subject;
   const href = `/requests?requestId=${requestRecord.id}`;
@@ -1599,6 +1607,9 @@ async function notifyStaffOfRequest(requestRecord) {
 }
 
 async function notifyClientUsersOfRequestUpdate(requestRecord) {
+  if (!requestRecord.ownerId) {
+    return;
+  }
   const recipients = await listActiveUsersByOwner(requestRecord.ownerId);
   const title = `${getRequestTypeLabel(requestRecord.requestType)} updated`;
   const body = requestRecord.subject;
@@ -2774,7 +2785,7 @@ function validateClientRequestPayload(payload, { isNew = false } = {}) {
     throw new Error("status is invalid.");
   }
 
-  const ownerId = requiredString(payload.ownerId, "ownerId");
+  const ownerId = optionalString(payload.ownerId);
   const petId = optionalString(payload.petId);
   const subject = requiredString(payload.subject, "subject");
   const clientNote = requiredString(payload.clientNote, "clientNote");
@@ -2784,6 +2795,10 @@ function validateClientRequestPayload(payload, { isNew = false } = {}) {
 
   if (!isNew && !payload.status) {
     throw new Error("status is required.");
+  }
+
+  if (!ownerId && requestType !== "app_issue") {
+    throw new Error("ownerId is required.");
   }
 
   return {
@@ -2806,7 +2821,7 @@ async function createClientRequest(payload, currentUser) {
       owner_id, pet_id, created_by_user_id, request_type, status, subject, client_note, resolution_note, internal_note, details
     )
     VALUES (
-      ${input.ownerId}::uuid,
+      ${input.ownerId ? `${input.ownerId}` : null}::uuid,
       ${input.petId}::uuid,
       ${currentUser?.id ?? null}::uuid,
       ${input.requestType},
@@ -2847,7 +2862,7 @@ async function updateClientRequest(requestId, payload, currentUser) {
 
   const rows = await sql`
     UPDATE client_requests
-    SET owner_id = ${input.ownerId}::uuid,
+    SET owner_id = ${input.ownerId ? `${input.ownerId}` : null}::uuid,
         pet_id = ${input.petId}::uuid,
         request_type = ${input.requestType},
         status = ${input.status},
@@ -3628,7 +3643,11 @@ async function handleRequest(event) {
       listOwners(),
       listPets(),
       listAppointments(),
-      listClientRequests(ownerScopeId ? { ownerId: ownerScopeId } : { includeStaffOnly: true }),
+      listClientRequests(
+        ownerScopeId
+          ? { ownerId: ownerScopeId, viewerRole: currentUser?.role ?? null }
+          : { includeStaffOnly: true, viewerRole: currentUser?.role ?? null },
+      ),
     ]);
 
     if (isClient) {
@@ -3652,10 +3671,10 @@ async function handleRequest(event) {
       if (!currentUser.owner_id) {
         return json(200, []);
       }
-      return json(200, await listClientRequests({ ownerId: currentUser.owner_id }));
+      return json(200, await listClientRequests({ ownerId: currentUser.owner_id, viewerRole: currentUser.role }));
     }
 
-    return json(200, await listClientRequests({ includeStaffOnly: true }));
+    return json(200, await listClientRequests({ includeStaffOnly: true, viewerRole: currentUser.role }));
   }
 
   if (path === "/requests" && method === "POST") {
@@ -3681,6 +3700,7 @@ async function handleRequest(event) {
 
     const existingRequest = await getClientRequest(requestId, {
       includeStaffOnly: currentUser.role !== "client",
+      viewerRole: currentUser.role,
     });
     if (!existingRequest) {
       return notFound("Request not found.");

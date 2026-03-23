@@ -736,6 +736,37 @@ a {
     top: calc(var(--safe-area-top) + 4.75rem);
     transform: none !important;
   }
+
+  .modal-dialog {
+    margin:
+      max(0.75rem, var(--safe-area-top))
+      max(0.5rem, var(--safe-area-right))
+      max(0.75rem, var(--safe-area-bottom))
+      max(0.5rem, var(--safe-area-left));
+  }
+
+  .modal-header {
+    padding-top: calc(var(--safe-area-top) + 0.9rem);
+    padding-left: calc(1rem + var(--safe-area-left));
+    padding-right: calc(1rem + var(--safe-area-right));
+  }
+
+  .modal-body {
+    padding-left: calc(1rem + var(--safe-area-left));
+    padding-right: calc(1rem + var(--safe-area-right));
+    padding-bottom: calc(1rem + var(--safe-area-bottom));
+  }
+
+  .modal-footer {
+    padding-left: calc(1rem + var(--safe-area-left));
+    padding-right: calc(1rem + var(--safe-area-right));
+    padding-bottom: calc(1rem + var(--safe-area-bottom));
+  }
+
+  .modal-header .btn-close {
+    margin-top: 0.15rem;
+    padding: 0.85rem;
+  }
 }
 
 .notification-dropdown-header {
@@ -1583,6 +1614,10 @@ a {
   line-height: 1.45;
 }
 
+.appointment-contact-summary {
+  margin-top: 0.5rem;
+}
+
 .settings-dropdown-menu {
   min-width: 14rem;
 }
@@ -1887,6 +1922,29 @@ textarea.form-control {
 .modal-header,
 .modal-footer {
   border-color: rgba(93, 120, 111, 0.12);
+}
+
+body.modal-open {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body.modal-open .app-shell,
+body.modal-open .page-content {
+  overscroll-behavior: none;
+}
+
+.modal {
+  overscroll-behavior: contain;
+}
+
+.modal-dialog {
+  margin-top: max(1rem, var(--safe-area-top));
+  margin-bottom: max(1rem, var(--safe-area-bottom));
+}
+
+.modal-header .btn-close {
+  margin-right: 0;
 }
 
 .dropdown-menu {

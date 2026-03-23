@@ -875,7 +875,7 @@ export default function AppointmentDetailsModal({
             </div>
           )}
 
-          <div className="border rounded p-3 bg-light">
+          <div className="appointment-detail-summary appointment-contact-summary">
             <div className="fw-semibold mb-2">Client Contact Info</div>
             <div className="mb-2">
               <strong>Client:</strong> {owner.firstName} {owner.lastName}

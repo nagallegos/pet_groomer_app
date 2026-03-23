@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS appointment_response_requests (
 
 CREATE TABLE IF NOT EXISTS client_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  owner_id UUID NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
+  owner_id UUID REFERENCES owners(id) ON DELETE CASCADE,
   pet_id UUID REFERENCES pets(id) ON DELETE SET NULL,
   created_by_user_id UUID REFERENCES app_users(id) ON DELETE SET NULL,
   request_type TEXT NOT NULL CHECK (request_type IN ('appointment', 'appointment_change', 'new_pet', 'profile_update', 'app_issue', 'general')),

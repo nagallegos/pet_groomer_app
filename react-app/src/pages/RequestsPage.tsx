@@ -149,6 +149,7 @@ export default function RequestsPage() {
   const isClient = user?.role === "client";
   const ownerId = user?.ownerId ?? "";
   const activeOwnerId = isClient ? ownerId : selectedOwnerId;
+  const requiresClientSelection = !(requestType === "app_issue" && !isClient);
   const availablePets = pets.filter(
     (pet) => !pet.isArchived && (!activeOwnerId || pet.ownerId === activeOwnerId),
   );
@@ -238,7 +239,7 @@ export default function RequestsPage() {
     );
     setAppointmentId(request.details?.appointmentChange?.appointmentId ?? "");
     setAppointmentChangeType(request.details?.appointmentChange?.changeType ?? "cancel");
-    setSelectedOwnerId(request.ownerId);
+    setSelectedOwnerId(request.ownerId ?? "");
     setProfileAttribute(request.details?.profileUpdate?.attribute ?? "contact_info");
     setPendingPet(
       request.details?.appointment?.pendingPet ??
@@ -336,7 +337,7 @@ export default function RequestsPage() {
   };
 
   const validateForm = () => {
-    if (!activeOwnerId) {
+    if (requiresClientSelection && !activeOwnerId) {
       return "A client is required.";
     }
 
@@ -390,7 +391,9 @@ export default function RequestsPage() {
     ? editingRequest.ownerId
     : isClient
       ? ownerId
-      : selectedOwnerId;
+      : requestType === "app_issue"
+        ? selectedOwnerId || undefined
+        : selectedOwnerId;
 
   const buildPayload = (): ClientRequestUpsertInput => {
     if (requestType === "appointment") {
@@ -656,7 +659,7 @@ export default function RequestsPage() {
         <ReadOnlyField label="Request Type" value={requestTypeLabels[displayRequestType]} />
         <ReadOnlyField
           label="Client"
-          value={requestOwner ? `${requestOwner.firstName} ${requestOwner.lastName}` : null}
+          value={requestOwner ? `${requestOwner.firstName} ${requestOwner.lastName}` : editingRequest.requestType === "app_issue" ? "Not linked to a client" : null}
         />
         {(displayRequestType === "app_issue" || displayRequestType === "general") && (
           <ReadOnlyField label="Related Pet" value={relatedPet?.name ?? "No pet selected"} />
@@ -891,7 +894,7 @@ export default function RequestsPage() {
                   </div>
 
                   <div className="text-muted small">
-                    Client: {owner ? `${owner.firstName} ${owner.lastName}` : "Unknown client"}
+                    Client: {owner ? `${owner.firstName} ${owner.lastName}` : displayRequestType === "app_issue" ? "Not linked to a client" : "Unknown client"}
                     {pet ? ` | Pet: ${pet.name}` : ""}
                   </div>
 
@@ -1052,7 +1055,7 @@ export default function RequestsPage() {
               </Form.Group>
 
               <Form.Group>
-                <Form.Label>Client</Form.Label>
+                <Form.Label>{requestType === "app_issue" && !isClient ? "Client (Optional)" : "Client"}</Form.Label>
                 <Form.Select
                   value={selectedOwnerId}
                   onChange={(event) => {
@@ -1061,9 +1064,9 @@ export default function RequestsPage() {
                     setSelectedPetIds([]);
                   }}
                   disabled={isReadOnly || isClient || !!editingRequest}
-                  required
+                  required={requiresClientSelection}
                 >
-                  <option value="">Select a client</option>
+                  <option value="">{requestType === "app_issue" && !isClient ? "No client selected" : "Select a client"}</option>
                   {owners
                     .filter((owner) => !owner.isArchived)
                     .map((owner) => (
