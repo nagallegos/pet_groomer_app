@@ -14,6 +14,7 @@ import type {
   Species,
   UserNotification,
 } from "../types/models";
+import { buildSessionAuthHeaders } from "./sessionAuth";
 
 export type AppUserRole = "admin" | "groomer" | "client";
 
@@ -130,8 +131,14 @@ export function setBackendAvailable(isAvailable: boolean) {
 async function request<T>(path: string, method: string, body?: unknown): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
-    headers: body === undefined ? undefined : {
-      "Content-Type": "application/json",
+    credentials: "include",
+    headers: {
+      ...buildSessionAuthHeaders(),
+      ...(body === undefined
+        ? {}
+        : {
+            "Content-Type": "application/json",
+          }),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });

@@ -486,6 +486,34 @@ a {
     max(1rem, var(--safe-area-left));
 }
 
+.install-prompt-banner.alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+  border: 1px solid rgba(127, 90, 180, 0.16);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: var(--brand-shadow-soft);
+}
+
+.install-prompt-copy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.install-prompt-copy strong {
+  color: var(--brand-forest-deep);
+}
+
+.install-prompt-copy span {
+  color: var(--bs-body-color);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
 .desktop-user-banner {
   display: flex;
   align-items: center;
@@ -3346,6 +3374,22 @@ body.modal-open .page-content {
     padding-left: calc(max(1rem, var(--safe-area-left)) + var(--mobile-safe-inline-gap));
     padding-right: calc(max(1rem, var(--safe-area-right)) + var(--mobile-safe-inline-gap));
     padding-bottom: max(1.5rem, var(--safe-area-bottom));
+  }
+
+  .install-prompt-banner.alert {
+    align-items: flex-start;
+    flex-direction: column;
+    padding-right: 3rem;
+  }
+
+  .install-prompt-banner .btn-close {
+    position: absolute;
+    top: 0.9rem;
+    right: 0.9rem;
+  }
+
+  .install-prompt-banner .btn {
+    width: 100%;
   }
 
   .topbar-mobile > .container-fluid {

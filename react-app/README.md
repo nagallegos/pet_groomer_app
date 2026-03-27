@@ -19,6 +19,39 @@ Create a production build with:
 npm run build
 ```
 
+## Mobile App Packaging
+
+This project now supports Capacitor, so the same React codebase can power:
+
+- the hosted web app
+- the installable PWA
+- packaged Android and iPhone apps
+
+Useful commands:
+
+```bash
+npm run mobile:assets
+npm run cap:doctor
+npm run mobile:android
+npm run mobile:ios
+npm run cap:open:android
+npm run cap:open:ios
+```
+
+What they do:
+
+- `mobile:assets` regenerates Android, iOS, and PWA icons/splash assets from `assets/logo.svg`
+- `mobile:android` builds the web app and syncs it into the Android project
+- `mobile:ios` builds the web app and syncs it into the iOS project
+- `cap:open:android` opens the Android project in Android Studio
+- `cap:open:ios` opens the iOS project in Xcode
+
+Notes:
+
+- Android packaging can be driven from Windows with Android Studio installed.
+- iPhone packaging still requires macOS and Xcode for the final build/signing step.
+- The Capacitor config lives in `capacitor.config.ts`.
+
 ## Netlify Deployment
 
 This repo already includes:

@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { Button, Container } from "react-bootstrap";
 import { AppToastProvider } from "../common/AppToastProvider";
+import InstallPrompt from "../common/InstallPrompt";
+import MobileReminderSync from "../common/MobileReminderSync";
 import { Outlet } from "react-router-dom";
 import { useAuth } from "../common/useAuth";
 import { CURRENT_RELEASE, getReleaseNotesSeenKey } from "../../lib/releaseNotes";
@@ -51,6 +53,7 @@ export default function AppLayout() {
 
   return (
     <AppToastProvider>
+      <MobileReminderSync />
       <div className={`app-shell${showDesktopSidebar ? " app-shell--sidebar-open" : " app-shell--sidebar-collapsed"}`}>
         <Topbar onMenuClick={() => setShowMobileSidebar(true)} />
         <Sidebar
@@ -62,6 +65,7 @@ export default function AppLayout() {
 
         <main className="page-content">
           <Container fluid className="py-3 py-md-4">
+            <InstallPrompt />
             <div className="desktop-topbar d-none d-lg-flex align-items-center justify-content-end">
               {user && (
                 <div className="desktop-user-banner">

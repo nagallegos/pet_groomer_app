@@ -8,6 +8,7 @@ import {
 } from "react";
 import { mockAppointments, mockOwners, mockPets } from "../../data/mockData";
 import { getApiBaseUrl, setBackendAvailable } from "../../lib/crmApi";
+import { buildSessionAuthHeaders } from "../../lib/sessionAuth";
 import type { Appointment, ClientRequest, Owner, Pet } from "../../types/models";
 
 interface BootstrapPayload {
@@ -34,7 +35,10 @@ interface AppDataContextValue {
 const AppDataContext = createContext<AppDataContextValue | null>(null);
 
 async function loadBootstrapData(): Promise<BootstrapPayload> {
-  const response = await fetch(`${getApiBaseUrl()}/bootstrap`);
+  const response = await fetch(`${getApiBaseUrl()}/bootstrap`, {
+    credentials: "include",
+    headers: buildSessionAuthHeaders(),
+  });
   if (!response.ok) {
     throw new Error(`Bootstrap request failed with status ${response.status}`);
   }

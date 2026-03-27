@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppDataProvider } from "./components/common/AppDataProvider";
 import { AuthProvider } from "./components/common/AuthProvider";
+import { MobileRemindersProvider } from "./components/common/MobileRemindersProvider";
 import PageLoader from "./components/common/PageLoader";
 import RequireAuth from "./components/common/RequireAuth";
 import { ThemeProvider } from "./components/common/ThemeProvider";
@@ -48,9 +49,10 @@ const App = () => {
   return (
     <AuthProvider>
       <ThemeProvider>
-        <BrowserRouter>
-          <Suspense fallback={<RouteFallback />}>
-            <Routes>
+        <MobileRemindersProvider>
+          <BrowserRouter>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/forgot-password" element={<RequestPasswordResetPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -91,9 +93,10 @@ const App = () => {
                   </Route>
                 </Route>
               </Route>
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </MobileRemindersProvider>
       </ThemeProvider>
     </AuthProvider>
   );

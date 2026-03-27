@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, Form, Modal } from "react-bootstrap";
 import { useAppToast } from "../common/AppToastProvider";
+import { useMobileReminders } from "../common/MobileRemindersProvider";
 import { useAuth } from "../common/useAuth";
 
 interface UserSettingsModalProps {
@@ -13,6 +14,13 @@ export default function UserSettingsModal({
   onHide,
 }: UserSettingsModalProps) {
   const { user, updateProfile, changePassword, sendPasswordResetEmail } = useAuth();
+  const {
+    settings: reminderSettings,
+    isSupported: supportsMobileReminders,
+    permissionState,
+    requestPermission,
+    saveSettings,
+  } = useMobileReminders();
   const roleLabel =
     user?.role === "admin"
       ? "Administrator"
@@ -25,6 +33,8 @@ export default function UserSettingsModal({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [notifyByEmail, setNotifyByEmail] = useState(true);
+  const [mobileRemindersEnabled, setMobileRemindersEnabled] = useState(false);
+  const [reminderLeadMinutes, setReminderLeadMinutes] = useState("1440");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -44,9 +54,11 @@ export default function UserSettingsModal({
     setEmail(user.email);
     setPhone(user.phone ?? "");
     setNotifyByEmail(user.notifyByEmail);
+    setMobileRemindersEnabled(reminderSettings.enabled);
+    setReminderLeadMinutes(String(reminderSettings.leadMinutes));
     setSaveError(null);
     setPasswordError(null);
-  }, [show, user]);
+  }, [show, user, reminderSettings.enabled, reminderSettings.leadMinutes]);
 
   if (!user) {
     return null;
@@ -58,6 +70,15 @@ export default function UserSettingsModal({
     setSaveError(null);
 
     try {
+      if (mobileRemindersEnabled && supportsMobileReminders && permissionState !== "granted") {
+        const nextPermissionState = await requestPermission();
+        if (nextPermissionState !== "granted") {
+          setSaveError("Notification permission is required to enable mobile appointment reminders.");
+          setIsSaving(false);
+          return;
+        }
+      }
+
       await updateProfile({
         firstName,
         lastName,
@@ -65,6 +86,10 @@ export default function UserSettingsModal({
         phone,
         notifyByEmail,
         notifyByText: false,
+      });
+      await saveSettings({
+        enabled: mobileRemindersEnabled,
+        leadMinutes: Number(reminderLeadMinutes),
       });
       showToast({
         title: "Settings Updated",
@@ -209,6 +234,43 @@ export default function UserSettingsModal({
                 Turn this off if you want to keep the account active but stop notification emails.
               </div>
             </div>
+
+            {supportsMobileReminders && (
+              <div className="settings-preferences-card mt-3">
+                <div className="fw-semibold mb-2">Mobile Appointment Reminders</div>
+                <div className="settings-form-stack">
+                  <Form.Check
+                    type="switch"
+                    id="notify-by-mobile-reminder"
+                    label="Send local reminders on this device"
+                    checked={mobileRemindersEnabled}
+                    onChange={(event) => setMobileRemindersEnabled(event.target.checked)}
+                  />
+                  <Form.Group>
+                    <Form.Label>Reminder Timing</Form.Label>
+                    <Form.Select
+                      value={reminderLeadMinutes}
+                      onChange={(event) => setReminderLeadMinutes(event.target.value)}
+                      disabled={!mobileRemindersEnabled}
+                    >
+                      <option value="1">1 minute before (testing)</option>
+                      <option value="15">15 minutes before</option>
+                      <option value="60">1 hour before</option>
+                      <option value="180">3 hours before</option>
+                      <option value="1440">1 day before</option>
+                    </Form.Select>
+                  </Form.Group>
+                </div>
+                <div className="text-muted small mt-2">
+                  These reminders stay on this phone and only fire for upcoming scheduled or confirmed appointments.
+                </div>
+                {mobileRemindersEnabled && permissionState !== "granted" && (
+                  <Alert variant="warning" className="mt-3 mb-0">
+                    Notification permission still needs to be approved on this device.
+                  </Alert>
+                )}
+              </div>
+            )}
 
             <div className="mt-3">
               <Button variant="outline-secondary" onClick={() => setShowPasswordModal(true)}>

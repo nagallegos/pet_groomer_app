@@ -10,9 +10,22 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "mobile:assets": "npx @capacitor/assets generate --assetPath assets --iconBackgroundColor \"#f7efff\" --iconBackgroundColorDark \"#16111f\" --splashBackgroundColor \"#f7efff\" --splashBackgroundColorDark \"#16111f\" && node ./scripts/sync-generated-pwa-assets.mjs",
+    "cap:copy": "npm run build && cap copy",
+    "cap:sync": "npm run build && cap sync",
+    "cap:doctor": "cap doctor",
+    "cap:open:android": "cap open android",
+    "cap:open:ios": "cap open ios",
+    "mobile:android": "npm run build && cap sync android",
+    "mobile:ios": "npm run build && cap sync ios"
   },
   "dependencies": {
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/cli": "^8.2.0",
+    "@capacitor/core": "^8.2.0",
+    "@capacitor/ios": "^8.2.0",
+    "@capacitor/local-notifications": "^8.0.2",
     "bootstrap": "^5.3.8",
     "date-fns": "^4.1.0",
     "react": "^19.2.0",
@@ -23,6 +36,7 @@
     "react-router-dom": "^7.13.1"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",

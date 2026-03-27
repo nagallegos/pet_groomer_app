@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Barks app icon">
+  <defs>
+    <linearGradient id="bg" x1="160" y1="112" x2="864" y2="912" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f9f0ff" />
+      <stop offset="1" stop-color="#eadbff" />
+    </linearGradient>
+    <linearGradient id="panel" x1="236" y1="224" x2="790" y2="824" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b693ef" />
+      <stop offset="1" stop-color="#7b56b6" />
+    </linearGradient>
+    <linearGradient id="shine" x1="300" y1="220" x2="708" y2="700" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.92" />
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.18" />
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)" />
+  <circle cx="512" cy="512" r="356" fill="#ffffff" fill-opacity="0.52" />
+  <rect x="236" y="224" width="552" height="576" rx="188" fill="url(#panel)" />
+  <path d="M332 320c0-67 54-121 121-121h118c140 0 253 113 253 253S711 705 571 705H453c-67 0-121-54-121-121V320Z" fill="url(#shine)" />
+  <path d="M447 274c45 0 82 37 82 82v18h64c91 0 164 73 164 164s-73 164-164 164H447c-45 0-82-37-82-82V356c0-45 37-82 82-82Z" fill="#fff8ff" />
+  <path d="M447 336c0-20 16-36 36-36h96c64 0 116 52 116 116s-52 116-116 116h-96v-196Z" fill="#8a64c4" />
+  <path d="M483 576h118c53 0 96-43 96-96s-43-96-96-96h-118c-20 0-36 16-36 36v220c0 20 16 36 36 36h110c56 0 102-46 102-102 0-38-21-72-52-89" fill="none" stroke="#5d3d91" stroke-linecap="round" stroke-linejoin="round" stroke-width="44" />
+  <circle cx="696" cy="344" r="34" fill="#ffd6e9" />
+  <circle cx="344" cy="740" r="26" fill="#ffffff" fill-opacity="0.56" />
+  <circle cx="732" cy="708" r="18" fill="#ffffff" fill-opacity="0.46" />
+</svg>

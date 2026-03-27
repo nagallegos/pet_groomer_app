@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { getApiBaseUrl, type AppUserRole } from "../../lib/crmApi";
+import { buildSessionAuthHeaders, storeSessionToken } from "../../lib/sessionAuth";
 import { AuthContext } from "./authContext";
 
 export interface AppUser {
@@ -46,7 +47,10 @@ async function authRequest(path: string, method: string, body?: unknown) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
     credentials: "include",
-    headers: body ? { "Content-Type": "application/json" } : undefined,
+    headers: {
+      ...buildSessionAuthHeaders(),
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -104,10 +108,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       login: async (email, password) => {
         const payload = await authRequest("/auth/login", "POST", { email, password });
+        storeSessionToken(payload.sessionToken);
         setUser(payload.user);
       },
       logout: async () => {
         await authRequest("/auth/logout", "POST");
+        storeSessionToken(null);
         setUser(null);
       },
       updateProfile: async (input) => {

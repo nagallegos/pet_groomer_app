@@ -59,6 +59,44 @@ function json(statusCode, body, extraHeaders = {}) {
   };
 }
 
+function getCorsHeaders(event) {
+  const requestOrigin = event.headers?.origin ?? event.headers?.Origin ?? "";
+  const allowedOrigins = new Set([
+    "http://localhost",
+    "https://localhost",
+    "http://10.0.2.2:8888",
+    "http://127.0.0.1:8888",
+    process.env.PUBLIC_APP_URL ?? "",
+    process.env.URL ?? "",
+  ]);
+
+  const allowOrigin = allowedOrigins.has(requestOrigin)
+    ? requestOrigin
+    : requestOrigin.startsWith("http://localhost:")
+      ? requestOrigin
+      : requestOrigin.startsWith("https://localhost:")
+        ? requestOrigin
+        : "http://localhost";
+
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, X-Session-Token",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    Vary: "Origin",
+  };
+}
+
+function withCors(event, response) {
+  return {
+    ...response,
+    headers: {
+      ...response.headers,
+      ...getCorsHeaders(event),
+    },
+  };
+}
+
 function badRequest(message) {
   return json(400, { error: message });
 }
@@ -176,6 +214,21 @@ function parseCookies(event) {
     cookies[rawKey] = decodeURIComponent(rest.join("=") || "");
     return cookies;
   }, {});
+}
+
+function getSessionToken(event) {
+  const cookies = parseCookies(event);
+  if (cookies[SESSION_COOKIE]) {
+    return cookies[SESSION_COOKIE];
+  }
+
+  const authorizationHeader = event.headers?.authorization ?? event.headers?.Authorization ?? "";
+  if (typeof authorizationHeader === "string" && authorizationHeader.startsWith("Bearer ")) {
+    return authorizationHeader.slice("Bearer ".length).trim();
+  }
+
+  const sessionHeader = event.headers?.["x-session-token"] ?? event.headers?.["X-Session-Token"] ?? "";
+  return typeof sessionHeader === "string" ? sessionHeader.trim() : "";
 }
 
 function hashPassword(password, salt = randomBytes(16).toString("hex")) {
@@ -1826,8 +1879,7 @@ async function incrementFailedLoginAttempt(user) {
 }
 
 async function getCurrentUser(event) {
-  const cookies = parseCookies(event);
-  const token = cookies[SESSION_COOKIE];
+  const token = getSessionToken(event);
   if (!token) {
     return null;
   }
@@ -3459,15 +3511,18 @@ async function handleRequest(event) {
     await resetFailedLoginState(user.id);
     return json(
       200,
-      { user: mapAppUser({ ...user, failed_login_attempts: 0, locked_at: null }) },
+      {
+        user: mapAppUser({ ...user, failed_login_attempts: 0, locked_at: null }),
+        sessionToken: session.token,
+      },
       { "Set-Cookie": buildSessionCookie(session.token, session.expiresAt) },
     );
   }
 
   if (path === "/auth/logout" && method === "POST") {
-    const cookies = parseCookies(event);
-    if (cookies[SESSION_COOKIE]) {
-      await deleteSession(cookies[SESSION_COOKIE]);
+    const token = getSessionToken(event);
+    if (token) {
+      await deleteSession(token);
     }
     return json(200, { ok: true }, { "Set-Cookie": clearSessionCookie() });
   }
@@ -3992,10 +4047,10 @@ async function handleRequest(event) {
 export async function handler(event) {
   try {
     await ensureSchema();
-    return await handleRequest(event);
+    return withCors(event, await handleRequest(event));
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown server error.";
-    return badRequest(message);
+    return withCors(event, badRequest(message));
   }
 }
