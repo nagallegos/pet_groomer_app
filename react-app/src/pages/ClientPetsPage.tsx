@@ -6,6 +6,7 @@ import PageLoader from "../components/common/PageLoader";
 import { useAuth } from "../components/common/useAuth";
 import useInitialLoading from "../hooks/useInitialLoading";
 import { getNotePostedByLabel } from "../lib/noteUtils";
+import { getCompactBreedLabel, getDetailedBreedLabel } from "../lib/petBreeds";
 import { formatPetAge, toDateInputValue } from "../lib/petAge";
 
 export default function ClientPetsPage() {
@@ -66,7 +67,7 @@ export default function ClientPetsPage() {
                 <Accordion.Header>
                   <div>
                     <div className="fw-semibold">{pet.name}</div>
-                    <div className="text-muted small">{pet.breed} • {pet.species}</div>
+                    <div className="text-muted small">{getCompactBreedLabel(pet)} • {pet.species}</div>
                   </div>
                 </Accordion.Header>
                 <Accordion.Body>
@@ -74,7 +75,7 @@ export default function ClientPetsPage() {
                     <div className="client-detail-grid">
                       <div>
                         <div className="text-muted small">Breed</div>
-                        <div>{pet.breed}</div>
+                        <div>{getDetailedBreedLabel(pet)}</div>
                       </div>
                       <div>
                         <div className="text-muted small">Color</div>

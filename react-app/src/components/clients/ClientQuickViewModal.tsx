@@ -16,6 +16,7 @@ import {
   type OwnerUpsertInput,
 } from "../../lib/crmApi";
 import { getNotePostedByLabel } from "../../lib/noteUtils";
+import { getCompactBreedLabel } from "../../lib/petBreeds";
 import { useAppToast } from "../common/AppToastProvider";
 import ClientContactActions from "../common/ClientContactActions";
 import ConfirmDeleteModal from "../common/ConfirmDeleteModal";
@@ -538,7 +539,7 @@ export default function ClientQuickViewModal({
                       <ListGroup.Item key={pet.id}>
                         <div className="d-flex justify-content-between align-items-center gap-3">
                           <div>
-                            <strong>{pet.name}</strong> — {pet.species}, {pet.breed}
+                            <strong>{pet.name}</strong> — {pet.species}, {getCompactBreedLabel(pet)}
                           </div>
                           <Button
                             size="sm"

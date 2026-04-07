@@ -1,4 +1,5 @@
 import { Button, Col, ListGroup, Row } from "react-bootstrap";
+import { getCompactBreedLabel } from "../../lib/petBreeds";
 import type { Owner, Pet } from "../../types/models";
 import PetCard from "./PetCard";
 
@@ -47,7 +48,7 @@ export default function PetGrid({
                   >
                     <span className="pet-list-primary">{pet.name}</span>
                     <span className="pet-list-secondary">
-                      {pet.breed}
+                      {getCompactBreedLabel(pet)}
                       {owner
                         ? ` • ${owner.firstName} ${owner.lastName}`
                         : ""}

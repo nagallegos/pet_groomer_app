@@ -8,6 +8,12 @@ import {
   updatePetNote,
   type PetUpsertInput,
 } from "../../lib/crmApi";
+import {
+  getPetBreedList,
+  MAX_PET_BREEDS,
+  normalizeBreedList,
+  serializeBreedList,
+} from "../../lib/petBreeds";
 import { formatPetAge, toDateInputValue } from "../../lib/petAge";
 import type { NoteVisibility, Owner, Pet, Species } from "../../types/models";
 
@@ -38,7 +44,7 @@ export default function PetFormModal({
   const [ownerId, setOwnerId] = useState("");
   const [name, setName] = useState("");
   const [species, setSpecies] = useState<Species>("dog");
-  const [breed, setBreed] = useState("");
+  const [breeds, setBreeds] = useState<string[]>([""]);
   const [weightLbs, setWeightLbs] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [isBirthDateEstimated, setIsBirthDateEstimated] = useState(false);
@@ -66,7 +72,7 @@ export default function PetFormModal({
     setOwnerId(lockedOwnerId ?? initialPet?.ownerId ?? activeOwners[0]?.id ?? "");
     setName(initialPet?.name ?? "");
     setSpecies(initialPet?.species ?? "dog");
-    setBreed(initialPet?.breed ?? "");
+    setBreeds(getPetBreedList(initialPet ?? { breed: "" }).length > 0 ? getPetBreedList(initialPet ?? { breed: "" }) : [""]);
     setWeightLbs(initialPet?.weightLbs?.toString() ?? "");
     setBirthDate(toDateInputValue(initialPet?.birthDate));
     setIsBirthDateEstimated(initialPet?.isBirthDateEstimated ?? false);
@@ -148,16 +154,38 @@ export default function PetFormModal({
     setShowNoteModal(false);
   };
 
+  const updateBreed = (index: number, value: string) => {
+    setBreeds((current) => current.map((breed, breedIndex) => (breedIndex === index ? value : breed)));
+  };
+
+  const addBreed = () => {
+    setBreeds((current) => [...current, ""]);
+  };
+
+  const removeBreed = (index: number) => {
+    setBreeds((current) => {
+      const next = current.filter((_, breedIndex) => breedIndex !== index);
+      return next.length > 0 ? next : [""];
+    });
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsSaving(true);
     setSaveError(null);
 
+    const normalizedBreeds = normalizeBreedList(breeds);
+    if (normalizedBreeds.length === 0) {
+      setSaveError("Please add at least one breed.");
+      setIsSaving(false);
+      return;
+    }
+
     const payload: PetUpsertInput = {
       ownerId,
       name,
       species,
-      breed,
+      breed: serializeBreedList(normalizedBreeds),
       weightLbs: weightLbs ? Number(weightLbs) : undefined,
       birthDate: birthDate ? new Date(birthDate).toISOString() : undefined,
       isBirthDateEstimated,
@@ -285,12 +313,41 @@ export default function PetFormModal({
           </Form.Group>
 
           <Form.Group className="mb-3">
-            <Form.Label>Breed</Form.Label>
-            <Form.Control
-              value={breed}
-              onChange={(e) => setBreed(e.target.value)}
-              required
-            />
+            <div className="d-flex justify-content-between align-items-center gap-2 mb-2">
+              <Form.Label className="mb-0">Breeds</Form.Label>
+              <Button
+                type="button"
+                variant="outline-secondary"
+                size="sm"
+                onClick={addBreed}
+              >
+                Add Breed
+              </Button>
+            </div>
+            <div className="d-grid gap-2">
+              {breeds.map((breed, index) => (
+                <div key={`breed-${index}`} className="d-flex gap-2 align-items-start">
+                  <Form.Control
+                    value={breed}
+                    onChange={(e) => updateBreed(index, e.target.value)}
+                    placeholder={`Breed ${index + 1}`}
+                    required={index === 0}
+                  />
+                  {breeds.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="outline-danger"
+                      onClick={() => removeBreed(index)}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <Form.Text muted>
+              Add as many breeds as needed. Compact views show up to {MAX_PET_BREEDS} breeds, then switch to mix.
+            </Form.Text>
           </Form.Group>
 
           <div className="row g-3">

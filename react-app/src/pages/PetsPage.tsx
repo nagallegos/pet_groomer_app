@@ -8,6 +8,7 @@ import PetFormModal from "../components/pets/PetFormModal";
 import PetGrid from "../components/pets/PetGrid";
 import PetQuickViewModal from "../components/pets/PetQuickViewModal";
 import useInitialLoading from "../hooks/useInitialLoading";
+import { getCompactBreedLabel, getDetailedBreedLabel } from "../lib/petBreeds";
 import type { Owner, Pet } from "../types/models";
 
 type SortField = "name" | "breed" | "species" | "owner";
@@ -59,7 +60,7 @@ export default function PetsPage() {
 
       return (
         pet.name.toLowerCase().includes(normalizedActiveSearchTerm) ||
-        pet.breed.toLowerCase().includes(normalizedActiveSearchTerm) ||
+        getDetailedBreedLabel(pet).toLowerCase().includes(normalizedActiveSearchTerm) ||
         pet.species.toLowerCase().includes(normalizedActiveSearchTerm) ||
         ownerName.includes(normalizedActiveSearchTerm)
       );
@@ -112,10 +113,10 @@ export default function PetsPage() {
         }
 
         const sourceValue =
-          sortField === "name"
-            ? pet.name
+            sortField === "name"
+              ? pet.name
             : sortField === "breed"
-              ? pet.breed
+              ? getDetailedBreedLabel(pet)
               : sortField === "species"
                 ? pet.species
                 : `${owner?.firstName ?? ""} ${owner?.lastName ?? ""}`.trim();
@@ -150,7 +151,7 @@ export default function PetsPage() {
 
         return (
           pet.name.toLowerCase().includes(normalizedSearchInput) ||
-          pet.breed.toLowerCase().includes(normalizedSearchInput) ||
+          getDetailedBreedLabel(pet).toLowerCase().includes(normalizedSearchInput) ||
           pet.species.toLowerCase().includes(normalizedSearchInput) ||
           ownerName.includes(normalizedSearchInput)
         );
@@ -250,7 +251,7 @@ export default function PetsPage() {
                         >
                           <span className="fw-semibold">{pet.name}</span>
                           <span className="text-muted small">
-                            {pet.breed}
+                            {getCompactBreedLabel(pet)}
                             {owner ? ` | ${owner.firstName} ${owner.lastName}` : ""}
                           </span>
                         </button>

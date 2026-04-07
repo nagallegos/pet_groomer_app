@@ -27,6 +27,7 @@ import {
   type AppointmentUpsertInput,
 } from "../../lib/crmApi";
 import { getNotePostedByLabel } from "../../lib/noteUtils";
+import { getDetailedBreedLabel } from "../../lib/petBreeds";
 import { useAppToast } from "../common/AppToastProvider";
 import ClientContactActions from "../common/ClientContactActions";
 import ConfirmDeleteModal from "../common/ConfirmDeleteModal";
@@ -620,7 +621,7 @@ export default function AppointmentDetailsModal({
 
           <div className="mb-4">
             <div>
-              <strong>Breed:</strong> {pet.breed}
+              <strong>Breed:</strong> {getDetailedBreedLabel(pet)}
             </div>
             <div>
               <strong>Preferred Contact:</strong> {owner.preferredContactMethod}

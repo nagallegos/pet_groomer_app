@@ -37,6 +37,7 @@ import {
   type OwnerUpsertInput,
 } from "../lib/crmApi";
 import { getNotePostedByLabel } from "../lib/noteUtils";
+import { getCompactBreedLabel } from "../lib/petBreeds";
 import type { Appointment, ContactMethod, NoteVisibility, Owner, Pet } from "../types/models";
 
 type ClientNoteEntityType = "client" | "pet" | "appointment";
@@ -663,7 +664,7 @@ export default function ClientDetailsPage() {
                     <ListGroup.Item key={pet.id}>
                       <div className="d-flex justify-content-between align-items-start gap-3">
                         <div>
-                          <strong>{pet.name}</strong> - {pet.species}, {pet.breed}
+                          <strong>{pet.name}</strong> - {pet.species}, {getCompactBreedLabel(pet)}
                         </div>
                         <div className="pet-row-actions">
                           {isEditMode ? (

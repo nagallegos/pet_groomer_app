@@ -1,4 +1,5 @@
 import { Badge, Button, Card } from "react-bootstrap";
+import { getCompactBreedLabel } from "../../lib/petBreeds";
 import { formatPetAge } from "../../lib/petAge";
 import type { Owner, Pet } from "../../types/models";
 
@@ -23,7 +24,7 @@ export default function PetCard({ pet, owner, onClick }: PetCardProps) {
           <Badge bg={pet.species === "dog" ? "primary" : "secondary"}>{pet.species}</Badge>
         </div>
 
-        <Card.Text className="mb-1">{pet.breed}</Card.Text>
+        <Card.Text className="mb-1">{getCompactBreedLabel(pet)}</Card.Text>
         <Card.Text className="text-muted small mb-3">
           {formatPetAge(pet, "?")} • {pet.weightLbs ?? "?"} lbs
         </Card.Text>

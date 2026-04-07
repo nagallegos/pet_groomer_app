@@ -10,6 +10,7 @@ import {
   isBackendConfigured,
   saveAppointment,
 } from "../../lib/crmApi";
+import { getCompactBreedLabel } from "../../lib/petBreeds";
 import type { Appointment, NoteVisibility, Owner, Pet } from "../../types/models";
 
 interface DraftAppointmentNote {
@@ -312,7 +313,7 @@ export default function AppointmentFormModal({
               <option value="">Select a pet</option>
               {availablePets.map((pet) => (
                 <option key={pet.id} value={pet.id}>
-                  {pet.name} — {pet.breed}
+                  {pet.name} — {getCompactBreedLabel(pet)}
                 </option>
               ))}
             </Form.Select>

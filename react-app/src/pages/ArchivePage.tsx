@@ -8,6 +8,7 @@ import PageLoader from "../components/common/PageLoader";
 import { useAppToast } from "../components/common/AppToastProvider";
 import useInitialLoading from "../hooks/useInitialLoading";
 import { formatAppointmentServices } from "../lib/appointmentServices";
+import { getCompactBreedLabel, getDetailedBreedLabel } from "../lib/petBreeds";
 import {
   deleteAppointment,
   deleteOwner,
@@ -167,7 +168,7 @@ export default function ArchivePage() {
           if (!normalizedSearchTerm) return true;
           return [
             pet.name,
-            pet.breed,
+            getDetailedBreedLabel(pet),
             pet.species,
             owner ? `${owner.firstName} ${owner.lastName}` : "",
           ]
@@ -182,13 +183,13 @@ export default function ArchivePage() {
             sortValue === "owner"
               ? `${aOwner?.lastName ?? ""} ${aOwner?.firstName ?? ""}`.trim()
               : sortValue === "breed"
-                ? a.breed
+                ? getDetailedBreedLabel(a)
                 : a.name;
           const bValue =
             sortValue === "owner"
               ? `${bOwner?.lastName ?? ""} ${bOwner?.firstName ?? ""}`.trim()
               : sortValue === "breed"
-                ? b.breed
+                ? getDetailedBreedLabel(b)
                 : b.name;
           const direction = sortDirection === "asc" ? 1 : -1;
           return aValue.localeCompare(bValue, undefined, { sensitivity: "base" }) * direction;
@@ -271,12 +272,12 @@ export default function ArchivePage() {
         label =
           groupValue === "species"
             ? pet.species.charAt(0).toUpperCase() + pet.species.slice(1)
-            : groupValue === "owner"
-              ? `${owner?.firstName ?? ""} ${owner?.lastName ?? ""}`.trim() || "Unknown Owner"
-              : (sortValue === "owner"
-                  ? owner?.lastName ?? ""
+              : groupValue === "owner"
+                ? `${owner?.firstName ?? ""} ${owner?.lastName ?? ""}`.trim() || "Unknown Owner"
+                : (sortValue === "owner"
+                    ? owner?.lastName ?? ""
                   : sortValue === "breed"
-                    ? pet.breed
+                    ? getDetailedBreedLabel(pet)
                     : pet.name)
                   .charAt(0)
                   .toUpperCase() || "#";
@@ -340,7 +341,7 @@ export default function ArchivePage() {
         <>
           <div className="fw-semibold">{pet.name}</div>
           <div className="small text-muted">
-            {pet.species} | {pet.breed}
+            {pet.species} | {getCompactBreedLabel(pet)}
             {owner ? ` | ${owner.firstName} ${owner.lastName}` : ""}
           </div>
         </>
@@ -817,7 +818,7 @@ export default function ArchivePage() {
             <div className="d-grid gap-2">
               <div className="fw-semibold">{(selectedItem as Pet).name}</div>
               <div className="text-muted small">
-                {(selectedItem as Pet).species} - {(selectedItem as Pet).breed}
+                {(selectedItem as Pet).species} - {getDetailedBreedLabel(selectedItem as Pet)}
               </div>
               <div className="text-muted small">
                 Owner: {owners.find((owner) => owner.id === (selectedItem as Pet).ownerId)?.firstName ?? "Unknown"}{" "}
